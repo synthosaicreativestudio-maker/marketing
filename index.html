@@ -29,16 +29,18 @@
         .shell{
             width:100%;max-width:760px;
             border-radius:18px;padding:28px;
-            display:flex;flex-direction:column;gap:28px;align-items:flex-start
+            display:flex;flex-direction:column;gap:28px;align-items:flex-start;
+            position:relative
         }
         .header{
-            display:flex;align-items:center;gap:16px;align-self:flex-start
+            display:flex;justify-content:space-between;align-items:flex-start;width:100%
         }
         .logo{
             width:96px;height:96px;border-radius:12px;overflow:hidden;
             filter:drop-shadow(0 0 12px rgba(212,175,55,0.4)) drop-shadow(0 0 24px rgba(212,175,55,0.2));
             animation:pulse-glow 3s ease-in-out infinite;
-            flex-shrink:0;align-self:flex-start;margin-top:4px
+            flex-shrink:0;
+            margin-left:auto
         }
         @keyframes pulse-glow {
             0%, 100% { filter:drop-shadow(0 0 12px rgba(212,175,55,0.4)) drop-shadow(0 0 24px rgba(212,175,55,0.2)); }
@@ -48,16 +50,16 @@
             width:100%;height:100%;object-fit:cover
         }
         .brand-text{
-            text-align:left;display:flex;flex-direction:column;gap:8px;transform:translateY(-5%)
+            text-align:left;display:flex;flex-direction:column;gap:8px;flex:1
         }
         h1{font-family:'Playfair Display',serif;margin:0;font-size:28px;color:#fff;text-align:left}
         p.lead{margin:8px 0 0 0;color:var(--muted);font-size:14px;text-align:left;white-space:nowrap}
         .card{
-            width:50%;
+            width:360px;
             background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
             padding:22px;border-radius:14px;border:1px solid rgba(255,255,255,0.03);
             box-shadow:0 20px 50px rgba(2,6,23,0.6);backdrop-filter: blur(6px);
-            align-self:stretch
+            align-self:flex-start
         }
         label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px;text-align:left}
         input[type=text],input[type=tel]{padding:14px;border-radius:10px;border:none;background:rgba(255,255,255,0.03);color:#fff;font-size:15px;box-sizing:border-box}
@@ -69,7 +71,14 @@
         .cta{display:flex;align-items:center;gap:12px}
         .muted-small{font-size:12px;color:rgba(255,255,255,0.6)}
         /* responsive */
-        @media (max-width:720px){.shell{padding:20px}.header{flex-direction:column;gap:12px;align-items:flex-start}.brand-text{text-align:left}#code_input,#phone_input{width:100%;max-width:280px}.card{width:100%}}
+        @media (max-width:720px){
+            .shell{padding:20px}
+            .header{flex-direction:column;gap:12px;align-items:flex-start}
+            .brand-text{text-align:left}
+            .logo{margin-left:0;align-self:flex-end}
+            #code_input,#phone_input{width:100%;max-width:280px}
+            .card{width:100%;max-width:320px}
+        }
     /* menu screen */
     .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
     .menu-btn{padding:12px;border-radius:10px;background:linear-gradient(90deg,#0b1226, #081428);border:1px solid rgba(212,175,55,0.08);color:var(--gold);cursor:pointer;font-weight:600}
