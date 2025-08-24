@@ -439,7 +439,7 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
             keyboard = [[InlineKeyboardButton('Повторить авторизацию', web_app=WebAppInfo(url=web_app_url))]]
             await update.message.reply_text(
-                f'❌ Не найдено пользователя с такими данными.\nОсталось попыток: {attempts_left}',
+                f'❌ Неверные данные или аккаунт неактивен.\nОсталось попыток: {attempts_left}',
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 

@@ -49,32 +49,38 @@ class GoogleSheetsClient:
         return None
 
     def find_user_by_credentials(self, code: str, phone: str) -> int | None:
-        """Finds a user by partner code and phone, returns the row number if found."""
+        """Finds a user by partner code and phone, returns the row number if found and status is 'Активен'."""
         if not self.sheet: return None
         try:
             logger.info(f'Searching for code={code}, phone={phone}')
             all_codes = self.sheet.col_values(1)
             all_phones = self.sheet.col_values(3)
+            all_statuses = self.sheet.col_values(4)  # Получаем статусы из колонки D
             
-            logger.info(f'Found {len(all_codes)} codes and {len(all_phones)} phones')
+            logger.info(f'Found {len(all_codes)} codes, {len(all_phones)} phones, {len(all_statuses)} statuses')
             
             # Начинаем с индекса 1 (пропускаем заголовок)
             for i in range(1, len(all_codes)):
                 if i < len(all_phones) and all_codes[i]:
                     sheet_code = str(all_codes[i]).strip()
                     sheet_phone = str(all_phones[i]).strip() if i < len(all_phones) else ''
+                    sheet_status = str(all_statuses[i]).strip() if i < len(all_statuses) else ''
                     
                     # Очищаем телефон от всех символов кроме цифр
                     cleaned_sheet_phone = ''.join(filter(str.isdigit, sheet_phone))
                     cleaned_input_phone = ''.join(filter(str.isdigit, phone))
                     
-                    logger.info(f'Row {i+1}: code="{sheet_code}" vs "{code}", phone="{cleaned_sheet_phone}" vs "{cleaned_input_phone}"')
+                    logger.info(f'Row {i+1}: code="{sheet_code}" vs "{code}", phone="{cleaned_sheet_phone}" vs "{cleaned_input_phone}", status="{sheet_status}"')
                     
                     if sheet_code == code and cleaned_sheet_phone == cleaned_input_phone:
-                        logger.info(f'MATCH FOUND at row {i+1}')
-                        return i + 1  # Return the 1-based row index
+                        if sheet_status == 'Активен':
+                            logger.info(f'MATCH FOUND at row {i+1} with active status')
+                            return i + 1  # Return the 1-based row index
+                        else:
+                            logger.warning(f'User found at row {i+1} but status is "{sheet_status}", not "Активен"')
+                            return None  # Пользователь найден, но неактивен
                         
-            logger.warning(f'No match found for code={code}, phone={phone}')
+            logger.warning(f'No active user found for code={code}, phone={phone}')
         except Exception as e:
             logger.error(f"Error finding user by credentials: {e}")
         return None
