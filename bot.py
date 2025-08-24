@@ -222,16 +222,15 @@ def is_admin(user_id: int) -> bool:
     return str(user_id) in admin_list
 
 async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    if 'is_authorized' in context.user_data:
-        return context.user_data['is_authorized']
-
+    # Не используем кэш в context.user_data, всегда проверяем актуальные данные
+    
     # Используем глобальный кэш авторизованных ID
     authorized_ids = get_authorized_ids()
     if authorized_ids is None:
-        # Если нет доступа к sheets, возвращаем False и кэшируем
-        context.user_data['is_authorized'] = False
+        # Если нет доступа к sheets, возвращаем False
         return False
     is_auth = str(user_id) in authorized_ids
+    # Обновляем кэш в контексте
     context.user_data['is_authorized'] = is_auth
     return is_auth
 
@@ -445,11 +444,22 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not await is_user_authorized(user.id, context):
-        await update.message.reply_text('Эта команда доступна только авторизованным пользователям.')
-        return
-    context.user_data.pop('conversation_history', None)
-    await update.message.reply_text('История диалога сброшена. Можно начинать новый диалог.')
+    
+    # Очищаем все данные пользователя, включая кэш авторизации
+    context.user_data.clear()
+    refresh_authorized_cache()  # Принудительно обновляем кэш авторизованных пользователей
+    
+    logger.info(f'/new_chat от {user.id} - кэш очищен')
+    
+    # Проверяем авторизацию заново
+    if await is_user_authorized(user.id, context):
+        await update.message.reply_text('История диалога сброшена. Вы авторизованы и можете продолжить работу.')
+    else:
+        await update.message.reply_text('История диалога сброшена. Для работы требуется авторизация.')
+        # Показываем кнопку авторизации
+        web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+        keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
+        await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
