@@ -167,25 +167,32 @@
 
         tg.onEvent('mainButtonClicked', function(){
             console.log('Main button clicked - starting authorization');
-            tg.MainButton.showProgress(true);
-            tg.MainButton.disable();
-            
-            // Немедленно устанавливаем таймаут на случай зависания
-            const emergencyTimeout = setTimeout(() => {
-                console.log('Emergency timeout triggered');
-                tg.MainButton.showProgress(false);
-                tg.MainButton.enable();
-                tg.showAlert('Таймаут авторизации. Попробуйте ещё раз.');
-            }, 5000); // 5 секунд
-            
-            try {
+            try{
+                tg.MainButton.showProgress(true);
+                tg.MainButton.disable();
+
+                // Установим запасной таймаут на случай, если отправка займёт слишком много времени
+                const emergencyTimeout = setTimeout(() => {
+                    console.log('Emergency timeout triggered');
+                    try{ tg.MainButton.showProgress(false); tg.MainButton.enable(); }catch(e){}
+                    tg.showAlert('Таймаут авторизации. Попробуйте ещё раз.');
+                }, 15000); // 15 секунд
+
+                // sendData выполняется синхронно по API, нет callback — поэтому даём пользователю быстрый фидбек
                 sendData();
+
+                // После отправки показываем подтверждение и закрываем WebApp, очистив таймаут
+                try{
+                    tg.MainButton.showProgress(false);
+                    tg.MainButton.enable();
+                }catch(e){}
                 clearTimeout(emergencyTimeout);
-            } catch (error) {
-                console.error('Error in sendData:', error);
-                clearTimeout(emergencyTimeout);
-                tg.MainButton.showProgress(false);
-                tg.MainButton.enable();
+                try{ tg.showAlert('Данные отправлены.'); }catch(e){}
+                // Закрываем WebApp, чтобы пользователь вернулся в чат
+                try{ tg.close(); }catch(e){}
+            }catch (error) {
+                console.error('Error in mainButtonClicked handler:', error);
+                try{ tg.MainButton.showProgress(false); tg.MainButton.enable(); }catch(e){}
                 tg.showAlert('Ошибка при отправке данных.');
             }
         });

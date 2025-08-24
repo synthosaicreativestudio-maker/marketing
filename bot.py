@@ -226,7 +226,7 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
     # Не используем кэш в context.user_data, всегда проверяем актуальные данные
     
     # Используем глобальный кэш авторизованных ID
-    authorized_ids = get_authorized_ids()
+    authorized_ids = await asyncio.to_thread(get_authorized_ids)
     logger.info(f'Checking authorization for user {user_id}. Authorized IDs: {authorized_ids}')
     if authorized_ids is None:
         # Если нет доступа к sheets, возвращаем False
@@ -375,7 +375,8 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 code = context.user_data.get('partner_code', '')
                 phone = context.user_data.get('phone', '')
                 fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
-                tickets_client.upsert_ticket(telegram_id=telegram_id, code=code, phone=phone, fio=fio, text=f"Запрос: {section}", sender_type='user', handled=False)
+                # offload blocking upsert to thread
+                await asyncio.to_thread(tickets_client.upsert_ticket, telegram_id, code, phone, fio, f"Запрос: {section}", 'в работе', 'user', False)
         except Exception as e:
             logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
         await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
@@ -425,7 +426,8 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Perform authorization check with logging
     try:
         logger.info(f'Looking up user credentials in Google Sheets...')
-        row = sheets_client.find_user_by_credentials(code, phone)
+        # gspread is blocking; run lookup in a thread
+        row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone)
         logger.info(f'Credentials lookup result: row={row}')
     except Exception as e:
         logger.error(f'Error during credentials lookup: {e}')
@@ -434,7 +436,8 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if row:
         try:
             logger.info(f'Updating auth status for user {user.id} in row {row}')
-            sheets_client.update_user_auth_status(row, update.effective_user.id)
+            # update may block; offload to thread
+            await asyncio.to_thread(sheets_client.update_user_auth_status, row, update.effective_user.id)
             
             context.user_data['is_authorized'] = True
             context.user_data['partner_code'] = code
@@ -520,14 +523,15 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not tickets_client or not tickets_client.sheet:
             await update.message.reply_text('Tickets sheet не доступен.')
             return
-        row = tickets_client.find_row_by_code(code)
+        # offload blocking ops to thread
+        row = await asyncio.to_thread(tickets_client.find_row_by_code, code)
         if not row:
             await update.message.reply_text(f'Тикет с кодом {code} не найден.')
             return
-        # Append to ticket cell as specialist
-        # We will read telegram_id from the row to forward the message
-        telegram_id = tickets_client.sheet.cell(row, 4).value
-        tickets_client.upsert_ticket(telegram_id=str(telegram_id), code=code, phone='', fio='', text=reply_text, sender_type='specialist', handled=False)
+        # read telegram_id in thread
+        telegram_id = await asyncio.to_thread(lambda r: tickets_client.sheet.cell(r, 4).value, row)
+        # upsert ticket in thread
+        await asyncio.to_thread(tickets_client.upsert_ticket, str(telegram_id), code, '', '', reply_text, 'в работе', 'specialist', False)
         # Forward message to user (if telegram_id present)
         if telegram_id:
             try:
@@ -556,7 +560,8 @@ async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         row = None
         if key.isdigit():
             row = int(key)
-        success = tickets_client.set_ticket_status(row=row, code=(None if row else key), status=status)
+        # offload set_ticket_status to thread
+        success = await asyncio.to_thread(tickets_client.set_ticket_status, row, (None if row else key), status)
         if success:
             await update.message.reply_text(f'Статус для {key} обновлен на "{status}"')
         else:
@@ -575,38 +580,18 @@ async def fix_telegram_id_command(update: Update, context: ContextTypes.DEFAULT_
         return
     
     try:
-        # Ищем пользователя по статусу "авторизован" в колонке D
-        all_statuses = sheets_client.sheet.col_values(4)
-        found_rows = []
-        
-        for i, status in enumerate(all_statuses[1:], start=2):  # пропускаем заголовок
-            if status and str(status).strip() == 'авторизован':
-                found_rows.append(i)
-        
-        if not found_rows:
-            await update.message.reply_text('Не найдено авторизованных пользователей.')
+        # Run worker in thread
+        updated_count = await asyncio.to_thread(_fix_telegram_id_worker, user.id)
+        if updated_count == 0:
+            await update.message.reply_text('Не найдено авторизованных пользователей или обновлений не требовалось.')
             return
-        
-        # Обновляем Telegram ID для всех найденных строк
-        updated_count = 0
-        for row in found_rows:
-            current_id = sheets_client.sheet.cell(row, 5).value
-            if current_id != str(user.id):
-                sheets_client.sheet.update_cell(row, 5, str(user.id))
-                updated_count += 1
-                logger.info(f'Updated Telegram ID from "{current_id}" to "{user.id}" in row {row}')
-        
         await update.message.reply_text(
             f'🔧 Обновлено {updated_count} записей.\n'
             f'🆔 Ваш Telegram ID: {user.id}\n'
             f'✅ Проверьте авторизацию командой /check_auth'
         )
-        
-        # Очищаем кэш после обновления
-        AUTH_CACHE['ids'] = set()
-        AUTH_CACHE['ts'] = 0
-        refresh_authorized_cache()
-        
+        # refresh cache in thread
+        await asyncio.to_thread(refresh_authorized_cache)
     except Exception as e:
         logger.error(f'Ошибка в fix_telegram_id: {e}')
         await update.message.reply_text('Ошибка при обновлении Telegram ID.')
@@ -630,9 +615,11 @@ async def check_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     sheets_info = "❌ Недоступно"
     if sheets_client and sheets_client.sheet:
         try:
-            # Получаем примеры данных из колонок D и E
-            auth_statuses = sheets_client.sheet.col_values(4)[:10]  # Первые 10 статусов
-            telegram_ids = sheets_client.sheet.col_values(5)[:10]   # Первые 10 ID
+            def _read_sample():
+                auth_statuses = sheets_client.sheet.col_values(4)[:10]
+                telegram_ids = sheets_client.sheet.col_values(5)[:10]
+                return auth_statuses, telegram_ids
+            auth_statuses, telegram_ids = await asyncio.to_thread(_read_sample)
             sheets_info = f"✅ Подключено\nСтатусы (D): {auth_statuses}\nTelegram ID (E): {telegram_ids}"
         except Exception as e:
             sheets_info = f"⚠️ Ошибка чтения: {e}"
@@ -689,6 +676,28 @@ def _get_ticket_row_by_code_or_telegram(code: str | None, telegram_id: str | Non
     return None
 
 
+def _fix_telegram_id_worker(new_id: int) -> int:
+    """Worker to run in thread: find rows with status 'авторизован' and update column 5 with new_id."""
+    try:
+        all_statuses = sheets_client.sheet.col_values(4)
+        found_rows = []
+        for i, status in enumerate(all_statuses[1:], start=2):  # skip header
+            if status and str(status).strip() == 'авторизован':
+                found_rows.append(i)
+        updated_count = 0
+        for row in found_rows:
+            current_id = sheets_client.sheet.cell(row, 5).value
+            if current_id != str(new_id):
+                sheets_client.sheet.update_cell(row, 5, str(new_id))
+                updated_count += 1
+        # clear cache trigger
+        AUTH_CACHE['ids'] = set()
+        AUTH_CACHE['ts'] = 0
+        return updated_count
+    except Exception:
+        return 0
+
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -711,11 +720,17 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         return
     # Read telegram_id from sheet
     try:
-        telegram_id = tickets_client.sheet.cell(row, 4).value
+        telegram_id = None
+        if tickets_client and tickets_client.sheet:
+            telegram_id = await asyncio.to_thread(lambda r: tickets_client.sheet.cell(r, 4).value, row)
     except Exception:
         telegram_id = None
     if action == 'transfer':
-        ok = tickets_client.set_ticket_status(row=row, status='в работе')
+        try:
+            ok = await asyncio.to_thread(tickets_client.set_ticket_status, row, None, 'в работе')
+        except Exception as e:
+            logger.error(f'Error setting ticket status to in progress: {e}')
+            ok = False
         if ok:
             await query.edit_message_reply_markup(None)
             await query.edit_message_text('Тикет помечен как "в работе" и направлен специалистам.')
@@ -743,7 +758,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await query.edit_message_text('Не удалось изменить статус (ошибка записи).')
     elif action == 'done':
-        ok = tickets_client.set_ticket_status(row=row, status='выполнено')
+        try:
+            ok = await asyncio.to_thread(tickets_client.set_ticket_status, row, None, 'выполнено')
+        except Exception as e:
+            logger.error(f'Error setting ticket status to done: {e}')
+            ok = False
         if ok:
             await query.edit_message_reply_markup(None)
             await query.edit_message_text('Тикет помечен как выполнено.')
@@ -911,7 +930,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 code = context.user_data.get('partner_code', '')
                 phone = context.user_data.get('phone', '')
                 fio = f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
-                tickets_client.upsert_ticket(telegram_id=str(telegram_id), code=code, phone=phone, fio=fio, text=assistant_msg, sender_type='assistant', handled=False)
+                # offload ticket upsert to avoid blocking
+                await asyncio.to_thread(tickets_client.upsert_ticket, str(telegram_id), code, phone, fio, assistant_msg, 'в работе', 'assistant', False)
         except Exception as e:
             logger.error(f'Не удалось записать ответ ассистента в tickets: {e}')
     
