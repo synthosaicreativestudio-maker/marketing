@@ -52,7 +52,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         url = f"{web_app_base.rstrip('/')}#{fragment}"
         section_rows.append([InlineKeyboardButton(section, web_app=WebAppInfo(url=url))])
     keyboard = [[main_button]] + section_rows
-    await update.message.reply_text('Нажмите кнопку ниже, чтобы открыть мини‑приложение:', reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text('Нажмите кнопку ниже, чтобы открыть личный кабинет:', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -192,7 +192,7 @@ def _send_message_in_thread(assistant_id: str, thread_id: str, text: str) -> str
         # 5. Найти последний ответ ассистента
         for msg in reversed(messages.data):
             if msg.role == "assistant":
-                return msg.content[0].text if msg.content and hasattr(msg.content[0], 'text') else str(msg.content)
+                return msg.content[0].text.value if msg.content and hasattr(msg.content[0], 'text') and hasattr(msg.content[0].text, 'value') else str(msg.content)
         return None
     except Exception as e:
         logger.error(f'Ошибка при отправке сообщения в thread: {e}')
@@ -337,7 +337,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             one_time_keyboard=False
         )
         await update.message.reply_text(
-            'Вы уже авторизованы и готовы к работе!\nНажмите кнопку ниже, чтобы открыть мини‑приложение.',
+            'Вы уже авторизованы и готовы к работе!\nНажмите кнопку ниже, чтобы открыть личный кабинет.',
             reply_markup=persistent_keyboard
         )
         return
@@ -419,8 +419,8 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         web_app_base = os.getenv('WEB_APP_MENU_URL', os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/'))
         menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
         await update.message.reply_text(
-            '✅ Авторизация прошла успешно! Откройте мини‑приложение для выбора раздела:',
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Открыть меню', web_app=WebAppInfo(url=menu_url))]])
+            '✅ Авторизация прошла успешно! Откройте личный кабинет для выбора раздела',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]])
         )
     else:
         # Неудачная попытка
@@ -642,7 +642,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([InlineKeyboardButton(section, web_app=WebAppInfo(url=url))])
         keyboard.append([InlineKeyboardButton('Открыть миниапп', web_app=WebAppInfo(url=web_app_base))])
         # Send inline WebApp menu; the persistent ReplyKeyboardMarkup remains available on client
-        await update.message.reply_text('Откройте мини‑приложение для работы с разделом:', reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.message.reply_text('Откройте личный кабинет для выбора раздела', reply_markup=InlineKeyboardMarkup(keyboard))
         return
     # Простая реализация: отправляем запрос в OpenAI и отдаем ответ
     if not openai.api_key:
@@ -802,6 +802,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         assistant_msg = extract_text(assistant_msg)
         if not assistant_msg or not isinstance(assistant_msg, str):
             assistant_msg = 'Ошибка: не удалось получить текст ответа.'
+        
+        # Replace unwanted text patterns
+        assistant_msg = assistant_msg.replace('annotations value', 'Вера')
         if buttons:
             # Send message with inline action buttons; persistent keyboard remains available to the user
             await update.message.reply_text(assistant_msg, reply_markup=InlineKeyboardMarkup(buttons))
