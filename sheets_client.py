@@ -168,6 +168,22 @@ class GoogleSheetsClient:
                 return False
             self.sheet.update_cell(row, 6, status)
             self.sheet.update_cell(row, 7, ts)
+            
+            # Применяем форматирование цвета
+            try:
+                if status.lower() in ('выполнено', 'completed', 'done'):
+                    color = {'red': 0, 'green': 0.8, 'blue': 0}  # Зеленый
+                elif status.lower() in ('в работе', 'work', 'open', 'in progress'):
+                    color = {'red': 0.8, 'green': 0, 'blue': 0}  # Красный
+                else:
+                    color = {'red': 1, 'green': 1, 'blue': 1}  # Белый
+                
+                fmt_range = f'F{row}'
+                self.sheet.format(fmt_range, {'backgroundColor': color})
+                logger.info(f'Применено форматирование для статуса "{status}" в строке {row}')
+            except Exception as e:
+                logger.warning(f'Не удалось применить форматирование: {e}')
+            
             return True
         except Exception as e:
             logger.error(f"Error setting ticket status for row={row} code={code}: {e}")
@@ -246,20 +262,33 @@ class GoogleSheetsClient:
 
             # Форматирование статуса (красный для 'в работе', зелёный для 'выполнено')
             try:
-                if status.lower() in ('в работе', 'work', 'open'):
-                    color = {'red': 1, 'green': 0.0, 'blue': 0}
-                else:
-                    color = {'red': 0, 'green': 1, 'blue': 0}
                 # Определяем строку (если мы добавили новую, ищем её снова)
-                if not cell:
+                target_row = None
+                if cell:
+                    target_row = cell.row
+                else:
                     # попробуем найти по telegram_id
                     try:
-                        cell = self.sheet.find(str(telegram_id), in_column=4)
+                        found_cell = self.sheet.find(str(telegram_id), in_column=4)
+                        if found_cell:
+                            target_row = found_cell.row
                     except Exception:
-                        cell = None
-                if cell:
-                    fmt_range = f'F{cell.row}'
+                        pass
+                
+                if target_row:
+                    # Получаем актуальный статус из ячейки
+                    current_status = self.sheet.cell(target_row, 6).value or ''
+                    
+                    if current_status.lower() in ('выполнено', 'completed', 'done'):
+                        color = {'red': 0, 'green': 0.8, 'blue': 0}  # Зеленый для выполнено
+                    elif current_status.lower() in ('в работе', 'work', 'open', 'in progress'):
+                        color = {'red': 0.8, 'green': 0, 'blue': 0}  # Красный для в работе
+                    else:
+                        color = {'red': 1, 'green': 1, 'blue': 1}  # Белый для других статусов
+                    
+                    fmt_range = f'F{target_row}'
                     self.sheet.format(fmt_range, {'backgroundColor': color})
+                    logger.info(f'Применено форматирование для статуса "{current_status}" в строке {target_row}')
             except Exception as e:
                 logger.warning(f'Не удалось применить форматирование статуса: {e}')
 

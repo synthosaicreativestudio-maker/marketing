@@ -17,6 +17,7 @@ import openai
 import time
 import asyncio
 import math
+import fcntl
 from openai import OpenAI
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -606,7 +607,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             for aid in admin_ids:
                 if aid and aid not in notified:
                     try:
-                        await context.bot.send_message(chat_id=int(aid), text=f'Тикет {row} переведён в работу. Код строки: {row}.')
+                        await context.bot.send_message(chat_id=int(aid), text=f'Ваш вопрос переведен специалисту.')
                         notified.add(aid)
                     except Exception as e:
                         logger.debug(f'Не удалось уведомить admin {aid}: {e}')
@@ -636,6 +637,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    message_id = update.message.message_id
+    logger.info(f'Processing message {message_id} from user {user.id}: {update.message.text[:50]}...')
+    
     from telegram import ReplyKeyboardMarkup, KeyboardButton
     persistent_keyboard = ReplyKeyboardMarkup(
         [[KeyboardButton('Личный кабинет')]],
@@ -659,20 +663,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send inline WebApp menu; the persistent ReplyKeyboardMarkup remains available on client
         await update.message.reply_text('Откройте личный кабинет для выбора раздела', reply_markup=InlineKeyboardMarkup(keyboard))
         return
-    # Простая реализация: отправляем запрос в OpenAI и отдаем ответ
+    # Простая реализация: отправляем запрос только в OpenAI Assistant
     if not openai.api_key:
         await update.message.reply_text('OpenAI ключ не настроен. Обратитесь к администратору.', reply_markup=persistent_keyboard)
         return
-    # Ограничиваем историю: берем последние N сообщений (включая system)
-    MAX_HISTORY = int(os.getenv('MAX_HISTORY', '8'))
-    system_prompt = os.getenv('OPENAI_SYSTEM_PROMPT', 'Ты — полезный ассистент.')
-    history = context.user_data.get('conversation_history', [{'role': 'system', 'content': system_prompt}])
-    # добавить запрос пользователя
-    history.append({'role': 'user', 'content': text})
-    # урезаем историю (оставляя system в начале)
-    user_assistant = [m for m in history if m['role'] != 'system']
-    user_assistant = user_assistant[-(MAX_HISTORY-1):]
-    history = [{'role': 'system', 'content': system_prompt}] + user_assistant
+    
+    assistant_id = os.getenv('OPENAI_ASSISTANT_ID')
+    if not assistant_id:
+        await update.message.reply_text('OpenAI Assistant не настроен. Обратитесь к администратору.', reply_markup=persistent_keyboard)
+        return
 
     # Делать вызов OpenAI с семафором и retry/backoff
     async with OPENAI_SEMAPHORE:
@@ -681,9 +680,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         backoff_base = float(os.getenv('OPENAI_BACKOFF_BASE', '0.8'))
         while True:
             try:
-                assistant_id = os.getenv('OPENAI_ASSISTANT_ID')
                 assistant_msg = None
-                # Always use tickets_client for ticket logging (Обращения sheet)
+                # Используем только OpenAI Assistant API
                 if assistant_id and tickets_client and tickets_client.sheet:
                     code = context.user_data.get('partner_code', '')
                     telegram_id = str(update.effective_user.id)
@@ -698,75 +696,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             except Exception as e:
                                 logger.debug(f'Не удалось сохранить thread_id в таблицу: {e}')
                     if thread_id:
+                        logger.info(f'Sending message to OpenAI Assistant thread {thread_id}: {text[:100]}...')
                         assistant_msg = _send_message_in_thread(assistant_id=assistant_id, thread_id=thread_id, text=text)
+                        logger.info(f'Received response from Assistant: {assistant_msg[:100] if assistant_msg else "None"}...')
+                
                 if not assistant_msg:
-                    if assistant_id:
-                        try:
-                            payload = {'input': text}
-                            resp = openai_client._client.request('POST', f'/v1/assistants/{assistant_id}/responses', json=payload)
-                            data = resp.json()
-                            def _extract(d):
-                                if not d: return None
-                                if isinstance(d, str): return d
-                                if isinstance(d, dict):
-                                    if 'output_text' in d and d['output_text']:
-                                        return d['output_text']
-                                    if 'output' in d and isinstance(d['output'], dict):
-                                        items = d['output'].get('items', [])
-                                        parts = []
-                                        for it in items:
-                                            if isinstance(it, dict):
-                                                if it.get('text'):
-                                                    parts.append(it.get('text'))
-                                                elif it.get('content') and isinstance(it.get('content'), dict) and it.get('content').get('text'):
-                                                    parts.append(it.get('content').get('text'))
-                                        if parts:
-                                            return '\n'.join(parts)
-                                    for v in d.values():
-                                        t = _extract(v)
-                                        if t:
-                                            return t
-                                if isinstance(d, list):
-                                    for el in d:
-                                        t = _extract(el)
-                                        if t:
-                                            return t
-                                return None
-                            assistant_msg = _extract(data)
-                        except Exception:
-                            assistant_msg = None
-                    if not assistant_msg:
-                        resp = openai_client.chat.completions.create(
-                            model=os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),
-                            messages=history,
-                            max_tokens=500
-                        )
-                        assistant_msg = resp.choices[0].message.content.strip()
+                    await update.message.reply_text('Ошибка получения ответа от ассистента. Попробуйте позже.', reply_markup=persistent_keyboard)
+                    return
+                    
                 break
             except Exception as e:
                 retry += 1
                 err_str = str(e)
-                logger.warning(f'OpenAI request failed (attempt {retry}): {err_str}')
-                if 'model_not_found' in err_str or 'does not exist' in err_str or 'assistant' in err_str:
-                    logger.error('Assistant not found or inaccessible; will fallback to chat completions for this request.')
-                    assistant_id = None
+                logger.warning(f'OpenAI Assistant request failed (attempt {retry}): {err_str}')
                 if retry > max_retry:
-                    logger.exception(f'OpenAI failed after {retry} attempts; last error: {err_str}')
-                    try:
-                        if hasattr(e, 'response') and getattr(e.response, 'text', None):
-                            logger.error(f'OpenAI response body: {e.response.text}')
-                    except Exception:
-                        pass
-                    await update.message.reply_text('Ошибка при обращении к ассистенту. Попробуйте позже.')
+                    logger.exception(f'OpenAI Assistant failed after {retry} attempts; last error: {err_str}')
+                    await update.message.reply_text('Ошибка при обращении к ассистенту. Попробуйте позже.', reply_markup=persistent_keyboard)
                     return
                 wait = backoff_base * (2 ** (retry-1))
                 await asyncio.sleep(wait)
         if not locals().get('assistant_msg'):
-            logger.error('OpenAI вернул пустой ответ')
-            await update.message.reply_text('Ассистент не ответил. Попробуйте ещё раз.')
+            logger.error('OpenAI Assistant не вернул ответ')
+            await update.message.reply_text('Ассистент не ответил. Попробуйте ещё раз.', reply_markup=persistent_keyboard)
             return
-        history.append({'role': 'assistant', 'content': assistant_msg})
-        context.user_data['conversation_history'] = history
+        
+        # OpenAI Assistant управляет своей историей, не нужно сохранять в context.user_data
         buttons = None
         try:
             code = context.user_data.get('partner_code', '')
@@ -778,7 +732,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception:
                     row = None
             if row:
-                buttons = [[InlineKeyboardButton('Перевести специалисту', callback_data=f't:transfer:{row}'), InlineKeyboardButton('Выполнено', callback_data=f't:done:{row}')]]
+                # Создаем кнопку для личного кабинета
+                web_app_base = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+                menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
+                buttons = [
+                    [InlineKeyboardButton('Перевести специалисту', callback_data=f't:transfer:{row}'), InlineKeyboardButton('Выполнено', callback_data=f't:done:{row}')],
+                    [InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]
+                ]
         except Exception:
             buttons = None
         def extract_text(obj):
@@ -820,6 +780,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Replace unwanted text patterns
         assistant_msg = assistant_msg.replace('annotations value', 'Вера')
+        logger.info(f'Sending response to user. Has buttons: {buttons is not None}. Message: {assistant_msg[:100]}...')
         if buttons:
             # Send message with inline action buttons; persistent keyboard remains available to the user
             await update.message.reply_text(assistant_msg, reply_markup=InlineKeyboardMarkup(buttons))
@@ -835,72 +796,84 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 tickets_client.upsert_ticket(telegram_id=str(telegram_id), code=code, phone=phone, fio=fio, text=assistant_msg, sender_type='assistant', handled=False)
         except Exception as e:
             logger.error(f'Не удалось записать ответ ассистента в tickets: {e}')
-        try:
-            if tickets_client and tickets_client.sheet:
-                telegram_id = update.effective_user.id
-                code = context.user_data.get('partner_code', '')
-                phone = context.user_data.get('phone', '')
-                fio = f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
-                tickets_client.upsert_ticket(telegram_id=str(telegram_id), code=code, phone=phone, fio=fio, text=text, status='в работе')
-        except Exception as e:
-            logger.error(f'Не удалось записать ticket: {e}')
+    
+    logger.info(f'Completed processing message {message_id} from user {user.id}')
 
 # Запуск
 def main():
-    token = os.getenv('TELEGRAM_TOKEN')
-    if not token:
-        logger.error('TELEGRAM_TOKEN не задан в .env')
+    # Prevent multiple instances
+    lock_file = 'bot.lock'
+    try:
+        lock_fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        logger.info('Successfully acquired lock, starting bot...')
+    except (OSError, IOError) as e:
+        logger.error(f'Another bot instance is already running or cannot acquire lock: {e}')
         return
-    if not check_openai_connection():
-        logger.error('OpenAI не доступен — прерывание старта бота')
-        return
-    app = Application.builder().token(token).build()
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('new_chat', new_chat))
-    app.add_handler(CommandHandler('reply', reply_command))
-    app.add_handler(CommandHandler('setstatus', setstatus_command))
-    app.add_handler(CommandHandler('push', push_command))
-    app.add_handler(CallbackQueryHandler(handle_callback_query))
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(CommandHandler('menu', menu_command))
-    app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
-    logger.info('Бот запущен...')
-    # Global error handler to catch exceptions produced inside the Application's network loop.
-    # The library logs exceptions if no error handler is registered; that leads to noisy 409 logs.
-    async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-        err = getattr(context, 'error', None)
-        try:
-            if isinstance(err, telegram.error.Conflict):
-                # Conflict means another client is currently calling getUpdates for the same token.
-                logger.warning(f'GetUpdates conflict (caught in error handler): {err} — sleeping briefly and will let polling retry.')
-                # Small sleep to avoid busy-looping; the outer polling loop will handle longer backoff.
-                await asyncio.sleep(5)
-                return
-        except Exception:
-            # If something unexpected happens while handling the error, log it and continue.
-            logger.exception('Error in global error handler')
-        # For all other errors, log full traceback so maintainers can inspect.
-        logger.exception(f'Unhandled exception in update handling: {err}')
+    
+    try:
+        token = os.getenv('TELEGRAM_TOKEN')
+        if not token:
+            logger.error('TELEGRAM_TOKEN не задан в .env')
+            return
+        if not check_openai_connection():
+            logger.error('OpenAI не доступен — прерывание старта бота')
+            return
+        app = Application.builder().token(token).build()
+        app.add_handler(CommandHandler('start', start))
+        app.add_handler(CommandHandler('new_chat', new_chat))
+        app.add_handler(CommandHandler('reply', reply_command))
+        app.add_handler(CommandHandler('setstatus', setstatus_command))
+        app.add_handler(CommandHandler('push', push_command))
+        app.add_handler(CallbackQueryHandler(handle_callback_query))
+        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        app.add_handler(CommandHandler('menu', menu_command))
+        app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
+        logger.info('Бот запущен...')
+        # Global error handler to catch exceptions produced inside the Application's network loop.
+        # The library logs exceptions if no error handler is registered; that leads to noisy 409 logs.
+        async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+            err = getattr(context, 'error', None)
+            try:
+                if isinstance(err, telegram.error.Conflict):
+                    # Conflict means another client is currently calling getUpdates for the same token.
+                    logger.warning(f'GetUpdates conflict (caught in error handler): {err} — sleeping briefly and will let polling retry.')
+                    # Small sleep to avoid busy-looping; the outer polling loop will handle longer backoff.
+                    await asyncio.sleep(5)
+                    return
+            except Exception:
+                # If something unexpected happens while handling the error, log it and continue.
+                logger.exception('Error in global error handler')
+            # For all other errors, log full traceback so maintainers can inspect.
+            logger.exception(f'Unhandled exception in update handling: {err}')
 
-    # Register the handler so the Application doesn't print uncaught exceptions for every getUpdates conflict.
-    app.add_error_handler(_global_error_handler)
+        # Register the handler so the Application doesn't print uncaught exceptions for every getUpdates conflict.
+        app.add_error_handler(_global_error_handler)
 
-    # Run polling with drop_pending_updates to clear any pending updates and reduce chance of immediate conflicts.
-    # Keep an outer retry/backoff to cope with remote clients that may briefly hold getUpdates.
-    retry_delay = 3
-    while True:
+        # Run polling with drop_pending_updates to clear any pending updates and reduce chance of immediate conflicts.
+        # Keep an outer retry/backoff to cope with remote clients that may briefly hold getUpdates.
+        retry_delay = 3
+        while True:
+            try:
+                app.run_polling(drop_pending_updates=True)
+                break
+            except telegram.error.Conflict as e:
+                logger.error(f'GetUpdates conflict detected (outer loop): {e}. Retrying in {retry_delay}s...')
+                time.sleep(retry_delay)
+                retry_delay = min(60, retry_delay * 2)
+                continue
+            except Exception as e:
+                logger.exception(f'Unexpected error in polling loop: {e}')
+                break
+    finally:
+        # Cleanup lock file
         try:
-            app.run_polling(drop_pending_updates=True)
-            break
-        except telegram.error.Conflict as e:
-            logger.error(f'GetUpdates conflict detected (outer loop): {e}. Retrying in {retry_delay}s...')
-            time.sleep(retry_delay)
-            retry_delay = min(60, retry_delay * 2)
-            continue
+            os.close(lock_fd)
+            os.unlink(lock_file)
+            logger.info('Lock file cleaned up')
         except Exception as e:
-            logger.exception(f'Unexpected error in polling loop: {e}')
-            break
+            logger.warning(f'Failed to cleanup lock file: {e}')
 
 if __name__ == '__main__':
     main()
