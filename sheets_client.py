@@ -52,15 +52,29 @@ class GoogleSheetsClient:
         """Finds a user by partner code and phone, returns the row number if found."""
         if not self.sheet: return None
         try:
+            logger.info(f'Searching for code={code}, phone={phone}')
             all_codes = self.sheet.col_values(1)
             all_phones = self.sheet.col_values(3)
+            
+            logger.info(f'Found {len(all_codes)} codes and {len(all_phones)} phones')
+            
+            # Начинаем с индекса 1 (пропускаем заголовок)
             for i in range(1, len(all_codes)):
                 if i < len(all_phones) and all_codes[i]:
-                    sheet_code = str(all_codes[i])
-                    sheet_phone = str(all_phones[i])
-                    cleaned_sheet_phone = sheet_phone.replace(' ', '').replace('(', '').replace(')', '').replace('-', '')
-                    if sheet_code == code and cleaned_sheet_phone == phone:
+                    sheet_code = str(all_codes[i]).strip()
+                    sheet_phone = str(all_phones[i]).strip() if i < len(all_phones) else ''
+                    
+                    # Очищаем телефон от всех символов кроме цифр
+                    cleaned_sheet_phone = ''.join(filter(str.isdigit, sheet_phone))
+                    cleaned_input_phone = ''.join(filter(str.isdigit, phone))
+                    
+                    logger.info(f'Row {i+1}: code="{sheet_code}" vs "{code}", phone="{cleaned_sheet_phone}" vs "{cleaned_input_phone}"')
+                    
+                    if sheet_code == code and cleaned_sheet_phone == cleaned_input_phone:
+                        logger.info(f'MATCH FOUND at row {i+1}')
                         return i + 1  # Return the 1-based row index
+                        
+            logger.warning(f'No match found for code={code}, phone={phone}')
         except Exception as e:
             logger.error(f"Error finding user by credentials: {e}")
         return None
