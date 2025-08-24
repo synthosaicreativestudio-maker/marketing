@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Авторизация — Marketing</title>
+    <meta name="theme-color" content="#0b1226">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230b1226'/%3E%3Ccircle cx='50' cy='40' r='22' fill='%23d4af37'/%3E%3C/text%3E%3C/svg%3E">
+    <style>
+        :root{
+            --bg: #071028;
+            --card: rgba(255,255,255,0.03);
+            --muted: rgba(255,255,255,0.65);
+            --gold: linear-gradient(90deg, #d4af37, #f6e7a0);
+            --accent: #d4af37;
+        }
+        html,body{height:100%;margin:0}
+        body{
+            background: radial-gradient(1200px 600px at 10% 10%, rgba(212,175,55,0.08), transparent),
+                        linear-gradient(180deg, #081428 0%, #041226 100%);
+            color:#fff;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+            display:flex;align-items:center;justify-content:center;padding:32px;
+        }
+        .shell{
+            width:100%;max-width:760px;
+            border-radius:18px;padding:28px;
+            display:flex;flex-direction:column;gap:28px;align-items:flex-start
+        }
+        .header{
+            display:flex;align-items:center;gap:16px;align-self:flex-start
+        }
+        .logo{
+            width:96px;height:96px;border-radius:12px;overflow:hidden;
+            filter:drop-shadow(0 0 12px rgba(212,175,55,0.4)) drop-shadow(0 0 24px rgba(212,175,55,0.2));
+            animation:pulse-glow 3s ease-in-out infinite;
+            flex-shrink:0;align-self:flex-start;margin-top:4px
+        }
+        @keyframes pulse-glow {
+            0%, 100% { filter:drop-shadow(0 0 12px rgba(212,175,55,0.4)) drop-shadow(0 0 24px rgba(212,175,55,0.2)); }
+            50% { filter:drop-shadow(0 0 18px rgba(212,175,55,0.6)) drop-shadow(0 0 36px rgba(212,175,55,0.3)); }
+        }
+        .logo img{
+            width:100%;height:100%;object-fit:cover
+        }
+        .brand-text{
+            text-align:left;display:flex;flex-direction:column;gap:8px;transform:translateY(-5%)
+        }
+        h1{font-family:'Playfair Display',serif;margin:0;font-size:28px;color:#fff;text-align:left}
+        p.lead{margin:8px 0 0 0;color:var(--muted);font-size:14px;text-align:left;white-space:nowrap}
+        .card{
+            width:50%;
+            background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+            padding:22px;border-radius:14px;border:1px solid rgba(255,255,255,0.03);
+            box-shadow:0 20px 50px rgba(2,6,23,0.6);backdrop-filter: blur(6px);
+            align-self:stretch
+        }
+        label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px;text-align:left}
+        input[type=text],input[type=tel]{padding:14px;border-radius:10px;border:none;background:rgba(255,255,255,0.03);color:#fff;font-size:15px;box-sizing:border-box}
+        #code_input{width:220px}
+        #phone_input{width:220px}
+        .input-container{display:flex;flex-direction:column;align-items:flex-start;margin-bottom:12px}
+        .footer-note{margin-top:12px;font-size:12px;color:rgba(255,255,255,0.5)}
+        .divider{height:1px;background:linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);margin:18px 0;border-radius:2px}
+        .cta{display:flex;align-items:center;gap:12px}
+        .muted-small{font-size:12px;color:rgba(255,255,255,0.6)}
+        /* responsive */
+        @media (max-width:720px){.shell{padding:20px}.header{flex-direction:column;gap:12px;align-items:flex-start}.brand-text{text-align:left}#code_input,#phone_input{width:100%;max-width:280px}.card{width:100%}}
+    /* menu screen */
+    .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+    .menu-btn{padding:12px;border-radius:10px;background:linear-gradient(90deg,#0b1226, #081428);border:1px solid rgba(212,175,55,0.08);color:var(--gold);cursor:pointer;font-weight:600}
+    .menu-title{font-size:18px;margin:0 0 8px 0}
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="header">
+            <div class="logo">
+                <img src="logo_marketing.png" alt="Marketing Logo">
+            </div>
+            <div class="brand-text">
+                <h1>Marketing</h1>
+                <p class="lead">Панель авторизации партнёра</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="input-container">
+                <label for="code_input">Код партнёра</label>
+                <input type="text" id="code_input" placeholder="Введите ваш код">
+            </div>
+
+            <div class="input-container">
+                <label for="phone_input">Телефон партнёра (из КОСМОС)</label>
+                <input type="tel" id="phone_input" placeholder="8 XXX XXX XX XX">
+            </div>
+
+            <div class="divider"></div>
+            <div style="display:flex;justify-content:flex-start;align-items:center;width:50%">
+                <div style="color:#d4af37;font-size:12px;font-weight:600">Produced by SYNTHOS AI®</div>
+            </div>
+
+            <!-- Menu screen (second mini-app) - hidden by default -->
+            <div id="menu_screen" style="display:none">
+                <h3 class="menu-title">Меню мини‑приложения</h3>
+                <div class="menu-grid" id="menu_grid"></div>
+                <div style="margin-top:12px"><small class="muted-small">Нажмите раздел, чтобы отправить запрос в бота.</small></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.ready();
+
+        const codeInput = document.getElementById('code_input');
+        const phoneInput = document.getElementById('phone_input');
+    const menuScreen = document.getElementById('menu_screen');
+    const menuGrid = document.getElementById('menu_grid');
+
+        // Phone mask (keeps behaviour)
+        function formatPhone(raw){
+            const v = raw.replace(/\D/g,'');
+            if(!v) return '';
+            let result = '8 (';
+            for(let i=1;i<v.length && i<11;i++){
+                if(i===4) result += ') ';
+                if(i===7||i===9) result += '-';
+                result += v[i];
+            }
+            return result;
+        }
+
+        phoneInput.addEventListener('input', e => {
+            e.target.value = formatPhone(e.target.value);
+            updateMainButtonState();
+        });
+        codeInput.addEventListener('input', updateMainButtonState);
+
+        function updateMainButtonState(){
+            const phoneDigits = phoneInput.value.replace(/\D/g,'');
+            if(codeInput.value.trim() !== '' && phoneDigits.length === 11){
+                tg.MainButton.setText('Подтвердить данные');
+                tg.MainButton.show();
+            } else {
+                tg.MainButton.hide();
+            }
+        }
+
+        tg.onEvent('mainButtonClicked', function(){
+            tg.MainButton.showProgress(true);
+            tg.MainButton.disable();
+            sendData();
+        });
+
+        function sendData(){
+            const code = codeInput.value.trim();
+            const phone = phoneInput.value.replace(/\D/g,'');
+            if(!code || phone.length !== 11){
+                tg.showAlert('Пожалуйста, заполните корректно все поля.');
+                tg.MainButton.showProgress(false);
+                tg.MainButton.enable();
+                return;
+            }
+            tg.sendData(JSON.stringify({code, phone}));
+        }
+
+        // --- Second mini-app: menu screen ---
+        const SECTIONS = [
+            'Агрегаторы',
+            'Контент',
+            'Финансы',
+            'Технические проблемы',
+            'Дизайн и материалы',
+            'Регламенты и обучение',
+            'Акции и мероприятия',
+            'Аналитика',
+            'Связаться со специалистом'
+        ];
+
+        function renderMenu(selectedSection){
+            // hide auth inputs and main button
+            document.querySelector('.card > .divider').style.display = 'none';
+            // hide inputs
+            codeInput.style.display = 'none';
+            phoneInput.style.display = 'none';
+            // show menu
+            menuGrid.innerHTML = '';
+            SECTIONS.forEach(s => {
+                const btn = document.createElement('button');
+                btn.className = 'menu-btn';
+                btn.textContent = s;
+                if(selectedSection && selectedSection === s){
+                    btn.style.outline = '2px solid rgba(212,175,55,0.25)';
+                }
+                btn.onclick = () => {
+                    try{
+                        tg.sendData(JSON.stringify({type:'menu_selection', section: s}));
+                        // give visual feedback
+                        btn.textContent = 'Отправлено ✓';
+                        setTimeout(()=>tg.close(), 700);
+                    }catch(e){
+                        tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
+                    }
+                };
+                const wrap = document.createElement('div');
+                wrap.appendChild(btn);
+                menuGrid.appendChild(wrap);
+            });
+            menuScreen.style.display = 'block';
+            // hide main button if present
+            try{ tg.MainButton.hide(); }catch(e){}
+        }
+
+        // If URL contains ?view=menu2 or ?section=... (or the same in the URL fragment), open the menu screen directly.
+        const params = new URLSearchParams(window.location.search);
+        let view = params.get('view');
+        let sectionParam = params.get('section');
+
+        // Telegram clients sometimes strip query parameters when opening Web Apps.
+        // Support fragment-style deep links as well: #view=menu2 or #section=...
+        if((!view || !sectionParam) && window.location.hash){
+            // Remove leading '#' and optional leading '/'
+            const rawHash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+            const hashClean = rawHash.replace(/^\/?/, '');
+            const hashParams = new URLSearchParams(hashClean);
+            if(!view) view = hashParams.get('view');
+            if(!sectionParam) sectionParam = hashParams.get('section');
+        }
+
+        if(view === 'menu2' || sectionParam){
+            renderMenu(sectionParam ? decodeURIComponent(sectionParam) : null);
+        }
+    </script>
+
+</body>
+</html><!-- Force update -->
