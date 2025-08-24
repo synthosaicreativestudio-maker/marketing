@@ -227,10 +227,13 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
     
     # Используем глобальный кэш авторизованных ID
     authorized_ids = get_authorized_ids()
+    logger.info(f'Checking authorization for user {user_id}. Authorized IDs: {authorized_ids}')
     if authorized_ids is None:
         # Если нет доступа к sheets, возвращаем False
+        logger.warning(f'No access to sheets for user {user_id}')
         return False
     is_auth = str(user_id) in authorized_ids
+    logger.info(f'User {user_id} authorization result: {is_auth}')
     # Обновляем кэш в контексте
     context.user_data['is_authorized'] = is_auth
     return is_auth
@@ -529,6 +532,75 @@ async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Ошибка при обновлении статуса.')
 
 
+async def fix_telegram_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для исправления Telegram ID в таблице"""
+    user = update.effective_user
+    
+    if not sheets_client or not sheets_client.sheet:
+        await update.message.reply_text('База недоступна.')
+        return
+    
+    try:
+        # Ищем пользователя по статусу "авторизован" в колонке D
+        all_statuses = sheets_client.sheet.col_values(4)
+        found_rows = []
+        
+        for i, status in enumerate(all_statuses[1:], start=2):  # пропускаем заголовок
+            if status and str(status).strip() == 'авторизован':
+                found_rows.append(i)
+        
+        if not found_rows:
+            await update.message.reply_text('Не найдено авторизованных пользователей.')
+            return
+        
+        # Обновляем Telegram ID для всех найденных строк
+        updated_count = 0
+        for row in found_rows:
+            current_id = sheets_client.sheet.cell(row, 5).value
+            if current_id != str(user.id):
+                sheets_client.sheet.update_cell(row, 5, str(user.id))
+                updated_count += 1
+                logger.info(f'Updated Telegram ID from "{current_id}" to "{user.id}" in row {row}')
+        
+        await update.message.reply_text(
+            f'🔧 Обновлено {updated_count} записей.\n'
+            f'🆔 Ваш Telegram ID: {user.id}\n'
+            f'✅ Проверьте авторизацию командой /check_auth'
+        )
+        
+        # Очищаем кэш после обновления
+        AUTH_CACHE['ids'] = set()
+        AUTH_CACHE['ts'] = 0
+        refresh_authorized_cache()
+        
+    except Exception as e:
+        logger.error(f'Ошибка в fix_telegram_id: {e}')
+        await update.message.reply_text('Ошибка при обновлении Telegram ID.')
+
+
+async def check_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для проверки авторизации пользователя"""
+    user = update.effective_user
+    
+    # Очищаем кэш авторизаций
+    AUTH_CACHE['ids'] = set()
+    AUTH_CACHE['ts'] = 0
+    refresh_authorized_cache()
+    
+    # Проверяем авторизацию
+    is_auth = await is_user_authorized(user.id, context)
+    
+    authorized_ids = get_authorized_ids()
+    
+    await update.message.reply_text(
+        f'🔍 Проверка авторизации:\n'
+        f'🆔 Ваш ID: {user.id}\n'
+        f'✅ Авторизован: {"Да" if is_auth else "Нет"}\n'
+        f'📊 Количество авторизованных: {len(authorized_ids) if authorized_ids else 0}\n'
+        f'📊 Авторизованные ID: {list(authorized_ids)[:5] if authorized_ids else []}{"..." if authorized_ids and len(authorized_ids) > 5 else ""}'
+    )
+
+
 async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда для очистки кэша авторизаций и принудительного обновления"""
     user = update.effective_user
@@ -825,6 +897,8 @@ def main():
         app.add_handler(CommandHandler('reply', reply_command))
         app.add_handler(CommandHandler('setstatus', setstatus_command))
         app.add_handler(CommandHandler('push', push_command))
+        app.add_handler(CommandHandler('check_auth', check_auth_command))
+        app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
         app.add_handler(CallbackQueryHandler(handle_callback_query))
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

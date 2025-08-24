@@ -49,15 +49,15 @@ class GoogleSheetsClient:
         return None
 
     def find_user_by_credentials(self, code: str, phone: str) -> int | None:
-        """Finds a user by partner code and phone, returns the row number if found and status is 'Активен'."""
+        """Finds a user by partner code and phone, returns the row number if found and status is 'Активен' in column F."""
         if not self.sheet: return None
         try:
             logger.info(f'Searching for code={code}, phone={phone}')
-            all_codes = self.sheet.col_values(1)
-            all_phones = self.sheet.col_values(3)
-            all_statuses = self.sheet.col_values(4)  # Получаем статусы из колонки D
+            all_codes = self.sheet.col_values(1)  # Колонка A
+            all_phones = self.sheet.col_values(3)  # Колонка C  
+            all_statuses = self.sheet.col_values(6)  # Колонка F - статус партнера
             
-            logger.info(f'Found {len(all_codes)} codes, {len(all_phones)} phones, {len(all_statuses)} statuses')
+            logger.info(f'Found {len(all_codes)} codes, {len(all_phones)} phones, {len(all_statuses)} statuses from column F')
             
             # Начинаем с индекса 1 (пропускаем заголовок)
             for i in range(1, len(all_codes)):
@@ -70,17 +70,17 @@ class GoogleSheetsClient:
                     cleaned_sheet_phone = ''.join(filter(str.isdigit, sheet_phone))
                     cleaned_input_phone = ''.join(filter(str.isdigit, phone))
                     
-                    logger.info(f'Row {i+1}: code="{sheet_code}" vs "{code}", phone="{cleaned_sheet_phone}" vs "{cleaned_input_phone}", status="{sheet_status}"')
+                    logger.info(f'Row {i+1}: code="{sheet_code}" vs "{code}", phone="{cleaned_sheet_phone}" vs "{cleaned_input_phone}", status_F="{sheet_status}"')
                     
                     if sheet_code == code and cleaned_sheet_phone == cleaned_input_phone:
                         if sheet_status == 'Активен':
-                            logger.info(f'MATCH FOUND at row {i+1} with active status')
+                            logger.info(f'MATCH FOUND at row {i+1} with active status in column F')
                             return i + 1  # Return the 1-based row index
                         else:
-                            logger.warning(f'User found at row {i+1} but status is "{sheet_status}", not "Активен"')
+                            logger.warning(f'User found at row {i+1} but status in column F is "{sheet_status}", not "Активен"')
                             return None  # Пользователь найден, но неактивен
                         
-            logger.warning(f'No active user found for code={code}, phone={phone}')
+            logger.warning(f'No active user found for code={code}, phone={phone} (status must be "Активен" in column F)')
         except Exception as e:
             logger.error(f"Error finding user by credentials: {e}")
         return None
@@ -89,11 +89,12 @@ class GoogleSheetsClient:
         """Updates the auth status and Telegram ID for a user in a specific row."""
         if not self.sheet: return
         try:
+            # Обновляем колонку D (статус авторизации) и колонку E (Telegram ID)
             cells_to_update = [self.sheet.cell(row_to_update, 4), self.sheet.cell(row_to_update, 5)]
             cells_to_update[0].value = "авторизован"
-            cells_to_update[1].value = user_id
+            cells_to_update[1].value = str(user_id)  # Записываем реальный Telegram ID
             self.sheet.update_cells(cells_to_update)
-            logger.info(f"Successfully updated auth status for user {user_id} in row {row_to_update}.")
+            logger.info(f"Successfully updated auth status and Telegram ID {user_id} for row {row_to_update}.")
         except Exception as e:
             logger.error(f"Error updating user auth status for row {row_to_update}: {e}")
 
