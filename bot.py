@@ -282,7 +282,7 @@ def clear_failed_attempts(user_id: int):
     if user_id in FAILED_AUTH_CACHE:
         FAILED_AUTH_CACHE[user_id]['attempts'] = 0
 AUTH_CACHE = {'ids': set(), 'ts': 0}
-AUTH_TTL = int(os.getenv('AUTH_TTL', '300'))  # seconds
+AUTH_TTL = 30  # Сократил с 300 до 30 секунд для быстрого обновления
 
 def get_authorized_ids():
     """Возвращает множество строк с авторизованными Telegram ID или None, если Sheets недоступен."""
@@ -529,22 +529,27 @@ async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin command: trigger autopush_index() and report result."""
+    """Команда для очистки кэша авторизаций и принудительного обновления"""
     user = update.effective_user
-    # Only explicit admins allowed
-    if not is_admin(user.id):
-        await update.message.reply_text('Команда /push доступна только администраторам.')
-        return
-    try:
-        await update.message.reply_text('Запускаю автопуш всех изменений...')
-        ok = autopush_index()
-        if ok:
-            await update.message.reply_text('Autopush выполнен успешно.')
-        else:
-            await update.message.reply_text('Autopush завершился с ошибкой — проверьте логи на сервере.')
-    except Exception as e:
-        logger.exception(f'Ошибка при выполнении /push: {e}')
-        await update.message.reply_text(f'Ошибка при выполнении автопуша: {e}')
+    
+    # Очищаем глобальный кэш авторизаций
+    AUTH_CACHE['ids'] = set()
+    AUTH_CACHE['ts'] = 0
+    
+    # Принудительно обновляем кэш
+    refresh_authorized_cache()
+    
+    logger.info(f'/push от {user.id} - кэш авторизаций очищен и обновлен')
+    
+    # Проверяем авторизацию заново
+    if await is_user_authorized(user.id, context):
+        await update.message.reply_text('Кэш очищен. Вы авторизованы.')
+    else:
+        await update.message.reply_text('Кэш очищен. Требуется авторизация.')
+        # Показываем кнопку авторизации
+        web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+        keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
+        await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 def _get_ticket_row_by_code_or_telegram(code: str | None, telegram_id: str | None) -> int | None:
