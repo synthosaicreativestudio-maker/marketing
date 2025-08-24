@@ -31,25 +31,32 @@
             border-radius:18px;padding:28px;
             display:flex;flex-direction:column;gap:28px;align-items:flex-start;
             position:relative;
-            margin-top:-160px;
+            margin-top:-80px;
             margin-left:-5%
         }
         .header{
-            display:flex;justify-content:space-between;align-items:flex-start;width:100%
+            display:flex;justify-content:flex-start;align-items:flex-start;width:100%;
+            position:relative;
         }
         .logo{
             width:96px;height:96px;border-radius:12px;overflow:hidden;
-            flex-shrink:0;
-            margin-left:auto
+            position:absolute;
+            right:0;
+            top:50%;
+            transform:translateY(-50%);
+            z-index:10;
         }
 
         .logo img{
             width:100%;height:100%;object-fit:cover
         }
         .brand-text{
-            text-align:left;display:flex;flex-direction:column;gap:8px;flex:1;
-            margin-top:-120px;
-            align-self:center
+            text-align:left;display:flex;flex-direction:column;gap:8px;
+            margin-top:0;
+            align-self:flex-start;
+            position:relative;
+            z-index:1;
+            padding-right:110px;
         }
         h1{font-family:'Playfair Display',serif;margin:0;font-size:28px;color:#fff;text-align:left}
         p.lead{margin:8px 0 0 0;color:var(--muted);font-size:9px;text-align:left;white-space:nowrap}
@@ -73,8 +80,8 @@
         @media (max-width:720px){
             .shell{padding:20px;margin-top:-80px;margin-left:-3%}
             .header{flex-direction:column;gap:12px;align-items:flex-start}
-            .brand-text{text-align:left;margin-top:-60px;align-self:flex-start}
-            .logo{margin-left:0;align-self:flex-end}
+            .brand-text{text-align:left;margin-top:0;align-self:flex-start}
+            .logo{position:relative;right:auto;top:auto;margin-left:auto;align-self:flex-end}
             #code_input,#phone_input{width:100%;max-width:200px}
             .card{width:100%;max-width:240px;padding:12px}
         }
