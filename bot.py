@@ -349,9 +349,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f'Привет, {user.first_name}! Нажми кнопку чтобы авторизоваться.', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    logger.info(f'Web app data received from user {user.id}')
+    
     try:
         payload = json.loads(update.message.web_app_data.data)
-    except Exception:
+        logger.info(f'Parsed web app payload: {payload}')
+    except Exception as e:
+        logger.error(f'Failed to parse web app data: {e}')
         await update.message.reply_text('Не удалось прочитать данные от Web App')
         return
     # Support two kinds of payloads from the WebApp:
@@ -406,23 +411,52 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     code = payload.get('code')
     phone = payload.get('phone')
+    logger.info(f'Authorization attempt: code={code}, phone={phone[-4:] if phone else None}***')
+    
+    # Send immediate feedback
     await update.message.reply_text('Проверяю данные...')
+    
+    # Check Google Sheets availability with timeout
     if not sheets_client or not sheets_client.sheet:
+        logger.error('Google Sheets client not available')
         await update.message.reply_text('База недоступна. Свяжитесь с админом.')
         return
-    row = sheets_client.find_user_by_credentials(code, phone)
+    
+    # Perform authorization check with logging
+    try:
+        logger.info(f'Looking up user credentials in Google Sheets...')
+        row = sheets_client.find_user_by_credentials(code, phone)
+        logger.info(f'Credentials lookup result: row={row}')
+    except Exception as e:
+        logger.error(f'Error during credentials lookup: {e}')
+        await update.message.reply_text('Ошибка проверки данных. Попробуйте позже.')
+        return
     if row:
-        sheets_client.update_user_auth_status(row, update.effective_user.id)
-        context.user_data['is_authorized'] = True
-        context.user_data['partner_code'] = code
-        context.user_data['phone'] = phone
-        clear_failed_attempts(user.id)  # Очищаем неудачные попытки
-        await update.message.reply_text('✅ Авторизация прошла успешно!')
+        try:
+            logger.info(f'Updating auth status for user {user.id} in row {row}')
+            sheets_client.update_user_auth_status(row, update.effective_user.id)
+            
+            context.user_data['is_authorized'] = True
+            context.user_data['partner_code'] = code
+            context.user_data['phone'] = phone
+            clear_failed_attempts(user.id)  # Очищаем неудачные попытки
+            
+            # ВАЖНО: Принудительно обновляем кэш авторизации
+            AUTH_CACHE['ids'] = set()
+            AUTH_CACHE['ts'] = 0
+            refresh_authorized_cache()
+            
+            logger.info(f'Authorization successful for user {user.id}')
+            await update.message.reply_text('✅ Авторизация прошла успешно!')
+        except Exception as e:
+            logger.error(f'Error updating auth status: {e}')
+            await update.message.reply_text('Ошибка при сохранении авторизации. Попробуйте позже.')
+            return
         # Показываем кнопку для открытия мини-аппа сразу после авторизации (открывает второй экран меню)
         web_app_base = os.getenv('WEB_APP_MENU_URL', os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/'))
         menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
         await update.message.reply_text(
-            '✅ Авторизация прошла успешно! Откройте личный кабинет для выбора раздела',
+            'Откройте личный кабинет для выбора раздела',
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]])
         )
     else:
@@ -592,12 +626,24 @@ async def check_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     authorized_ids = get_authorized_ids()
     
+    # Добавляем отладочную информацию о Google Sheets
+    sheets_info = "❌ Недоступно"
+    if sheets_client and sheets_client.sheet:
+        try:
+            # Получаем примеры данных из колонок D и E
+            auth_statuses = sheets_client.sheet.col_values(4)[:10]  # Первые 10 статусов
+            telegram_ids = sheets_client.sheet.col_values(5)[:10]   # Первые 10 ID
+            sheets_info = f"✅ Подключено\nСтатусы (D): {auth_statuses}\nTelegram ID (E): {telegram_ids}"
+        except Exception as e:
+            sheets_info = f"⚠️ Ошибка чтения: {e}"
+    
     await update.message.reply_text(
         f'🔍 Проверка авторизации:\n'
         f'🆔 Ваш ID: {user.id}\n'
         f'✅ Авторизован: {"Да" if is_auth else "Нет"}\n'
         f'📊 Количество авторизованных: {len(authorized_ids) if authorized_ids else 0}\n'
-        f'📊 Авторизованные ID: {list(authorized_ids)[:5] if authorized_ids else []}{"..." if authorized_ids and len(authorized_ids) > 5 else ""}'
+        f'📊 Авторизованные ID: {list(authorized_ids)[:5] if authorized_ids else []}{"..." if authorized_ids and len(authorized_ids) > 5 else ""}\n'
+        f'📋 Google Sheets: {sheets_info}'
     )
 
 

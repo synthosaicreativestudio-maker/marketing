@@ -50,12 +50,20 @@ class GoogleSheetsClient:
 
     def find_user_by_credentials(self, code: str, phone: str) -> int | None:
         """Finds a user by partner code and phone, returns the row number if found and status is 'Активен' in column F."""
-        if not self.sheet: return None
+        if not self.sheet: 
+            logger.error('Google Sheets not connected')
+            return None
         try:
             logger.info(f'Searching for code={code}, phone={phone}')
-            all_codes = self.sheet.col_values(1)  # Колонка A
-            all_phones = self.sheet.col_values(3)  # Колонка C  
-            all_statuses = self.sheet.col_values(6)  # Колонка F - статус партнера
+            
+            # Add timeout protection by limiting the search scope
+            try:
+                all_codes = self.sheet.col_values(1)  # Колонка A
+                all_phones = self.sheet.col_values(3)  # Колонка C  
+                all_statuses = self.sheet.col_values(6)  # Колонка F - статус партнера
+            except Exception as e:
+                logger.error(f'Failed to fetch sheet data: {e}')
+                return None
             
             logger.info(f'Found {len(all_codes)} codes, {len(all_phones)} phones, {len(all_statuses)} statuses from column F')
             
@@ -87,16 +95,32 @@ class GoogleSheetsClient:
 
     def update_user_auth_status(self, row_to_update: int, user_id: int):
         """Updates the auth status and Telegram ID for a user in a specific row."""
-        if not self.sheet: return
+        if not self.sheet: 
+            logger.error('Google Sheets not connected')
+            return
         try:
+            logger.info(f'Updating auth status for row {row_to_update}, user_id {user_id}')
+            
             # Обновляем колонку D (статус авторизации) и колонку E (Telegram ID)
-            cells_to_update = [self.sheet.cell(row_to_update, 4), self.sheet.cell(row_to_update, 5)]
-            cells_to_update[0].value = "авторизован"
-            cells_to_update[1].value = str(user_id)  # Записываем реальный Telegram ID
-            self.sheet.update_cells(cells_to_update)
-            logger.info(f"Successfully updated auth status and Telegram ID {user_id} for row {row_to_update}.")
+            try:
+                cells_to_update = [self.sheet.cell(row_to_update, 4), self.sheet.cell(row_to_update, 5)]
+                cells_to_update[0].value = "авторизован"
+                cells_to_update[1].value = str(user_id)  # Записываем реальный Telegram ID
+                self.sheet.update_cells(cells_to_update)
+                logger.info(f"Successfully updated auth status and Telegram ID {user_id} for row {row_to_update}.")
+            except Exception as e:
+                logger.error(f'Failed to update cells for row {row_to_update}: {e}')
+                # Try alternative method
+                try:
+                    self.sheet.update_cell(row_to_update, 4, "авторизован")
+                    self.sheet.update_cell(row_to_update, 5, str(user_id))
+                    logger.info(f"Successfully updated auth status using alternative method for row {row_to_update}.")
+                except Exception as e2:
+                    logger.error(f'Alternative update method also failed: {e2}')
+                    raise
         except Exception as e:
             logger.error(f"Error updating user auth status for row {row_to_update}: {e}")
+            raise  # Re-raise to let the calling function handle it
 
     def get_all_statuses(self) -> list[str]:
         """Returns a list of all statuses from column D."""

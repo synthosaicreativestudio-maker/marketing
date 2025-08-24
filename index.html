@@ -166,20 +166,44 @@
         }
 
         tg.onEvent('mainButtonClicked', function(){
+            console.log('Main button clicked - starting authorization');
             tg.MainButton.showProgress(true);
             tg.MainButton.disable();
-            sendData();
+            
+            // Немедленно устанавливаем таймаут на случай зависания
+            const emergencyTimeout = setTimeout(() => {
+                console.log('Emergency timeout triggered');
+                tg.MainButton.showProgress(false);
+                tg.MainButton.enable();
+                tg.showAlert('Таймаут авторизации. Попробуйте ещё раз.');
+            }, 5000); // 5 секунд
+            
+            try {
+                sendData();
+                clearTimeout(emergencyTimeout);
+            } catch (error) {
+                console.error('Error in sendData:', error);
+                clearTimeout(emergencyTimeout);
+                tg.MainButton.showProgress(false);
+                tg.MainButton.enable();
+                tg.showAlert('Ошибка при отправке данных.');
+            }
         });
 
         function sendData(){
+            console.log('Sending data to bot');
             const code = codeInput.value.trim();
             const phone = phoneInput.value.replace(/\D/g,'');
+            
             if(!code || phone.length !== 11){
+                console.log('Validation failed:', {code: !!code, phoneLength: phone.length});
                 tg.showAlert('Пожалуйста, заполните корректно все поля.');
                 tg.MainButton.showProgress(false);
                 tg.MainButton.enable();
                 return;
             }
+            
+            console.log('Sending to bot:', {code, phone: phone.substring(0,3) + '***'});
             tg.sendData(JSON.stringify({code, phone}));
         }
 
