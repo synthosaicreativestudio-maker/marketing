@@ -162,6 +162,10 @@ tickets_client = None
 if TICKETS_SHEET_URL and os.path.exists('credentials.json'):
     try:
         tickets_client = GoogleSheetsClient(credentials_path='credentials.json', sheet_url=TICKETS_SHEET_URL, worksheet_name=TICKETS_WORKSHEET)
+        # Устанавливаем фиксированную ширину для колонки с обращениями (колонка E = 100 пикселей)
+        if tickets_client and tickets_client.sheet:
+            tickets_client.set_tickets_column_width(100)
+            logger.info('Установлена фиксированная ширина 100px для колонки обращений')
     except Exception as e:
         logger.error(f'Ошибка инициализации tickets GoogleSheetsClient: {e}')
 else:
@@ -898,6 +902,43 @@ async def fix_telegram_id_command(update: Update, context: ContextTypes.DEFAULT_
         logger.error(f'Ошибка в fix_telegram_id: {e}')
         await update.message.reply_text('Ошибка при обновлении Telegram ID.')
 
+async def set_column_width_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для установки ширины колонки обращений (колонка E)"""
+    user = update.effective_user
+    
+    if not is_admin(user.id):
+        await update.message.reply_text('Недостаточно прав для выполнения этой команды.')
+        return
+    
+    args = context.args
+    if len(args) != 1:
+        await update.message.reply_text('Использование: /set_column_width <ширина_в_пикселях>')
+        return
+    
+    try:
+        width = int(args[0])
+        if width < 50 or width > 500:
+            await update.message.reply_text('Ширина должна быть от 50 до 500 пикселей.')
+            return
+    except ValueError:
+        await update.message.reply_text('Некорректное число. Укажите ширину в пикселях.')
+        return
+    
+    try:
+        if not tickets_client or not tickets_client.sheet:
+            await update.message.reply_text('Таблица обращений недоступна.')
+            return
+        
+        success = await asyncio.to_thread(tickets_client.set_tickets_column_width, width)
+        if success:
+            await update.message.reply_text(f'✅ Ширина колонки обращений установлена на {width} пикселей')
+        else:
+            await update.message.reply_text('❗️ Ошибка при установке ширины колонки')
+        
+    except Exception as e:
+        logger.error(f'Ошибка в /set_column_width: {e}')
+        await update.message.reply_text('Ошибка при установке ширины колонки.')
+
 async def check_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда для проверки авторизации пользователя"""
     user = update.effective_user
@@ -991,6 +1032,7 @@ def main():
                 app.add_handler(CommandHandler('push', push_command))
                 app.add_handler(CommandHandler('check_auth', check_auth_command))
                 app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
+                app.add_handler(CommandHandler('set_column_width', set_column_width_command))
                 app.add_handler(CallbackQueryHandler(handle_callback_query))
                 app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
                 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

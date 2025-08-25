@@ -365,3 +365,43 @@ class GoogleSheetsClient:
 
         except Exception as e:
             logger.error(f'Error upserting ticket for {telegram_id}: {e}')
+    
+    def set_tickets_column_width(self, width_pixels: int = 100):
+        """Устанавливает фиксированную ширину для колонки E (обращения) в пикселях."""
+        if not self.sheet:
+            logger.error('Sheet not connected')
+            return False
+        try:
+            from gspread.utils import rowcol_to_a1
+            import requests
+            
+            # Получаем ID таблицы и листа
+            spreadsheet_id = self.sheet.spreadsheet.id
+            sheet_id = self.sheet.id
+            
+            # Запрос на установку ширины колонки E (4-й индекс, т.к. счет с 0)
+            batch_update_request = {
+                'requests': [{
+                    'updateDimensionProperties': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'dimension': 'COLUMNS',
+                            'startIndex': 4,  # Колонка E (счет с 0)
+                            'endIndex': 5     # До колонки E включительно
+                        },
+                        'properties': {
+                            'pixelSize': width_pixels
+                        },
+                        'fields': 'pixelSize'
+                    }
+                }]
+            }
+            
+            # Отправляем batch update через gspread API
+            self.sheet.spreadsheet.batch_update(batch_update_request)
+            logger.info(f'Установлена ширина {width_pixels} пикселей для колонки E (обращения)')
+            return True
+            
+        except Exception as e:
+            logger.error(f'Ошибка при установке ширины колонки: {e}')
+            return False
