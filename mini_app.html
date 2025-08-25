@@ -44,6 +44,15 @@
             'Связаться со специалистом'
         ];
 
+        // Разделы с подпунктами (открывают отдельные миниаппы)
+        const SECTION_WEBAPPS = {
+            'Агрегаторы': 'https://synthosaicreativestudio-maker.github.io/marketing/agregatory.html',
+            'Контент': 'https://synthosaicreativestudio-maker.github.io/marketing/content.html',
+            'Финансы': 'https://synthosaicreativestudio-maker.github.io/marketing/finance.html',
+            'Технические проблемы': 'https://synthosaicreativestudio-maker.github.io/marketing/tech.html',
+            'Дизайн и материалы': 'https://synthosaicreativestudio-maker.github.io/marketing/design.html'
+        };
+
         const menuGrid = document.getElementById('menu_grid');
         function renderMenu(){
             menuGrid.innerHTML = '';
@@ -53,11 +62,22 @@
                 btn.textContent = section;
                 
                 btn.onclick = () => {
-                    try{
-                        tg.sendData(JSON.stringify({type: 'menu_selection', section: section}));
-                        btn.textContent = 'Отправлено ✓';
-                        setTimeout(()=>tg.close(), 700);
-                    }catch(e){ tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.'); }
+                    // Проверяем, есть ли для этого раздела отдельный миниапп
+                    if (SECTION_WEBAPPS[section]) {
+                        // Для разделов с подпунктами отправляем специальный тип данных для прямого открытия миниаппа
+                        try{
+                            tg.sendData(JSON.stringify({type: 'direct_webapp', section: section, webapp_url: SECTION_WEBAPPS[section]}));
+                            btn.textContent = 'Открываем...';
+                            setTimeout(()=>tg.close(), 300);
+                        }catch(e){ tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.'); }
+                    } else {
+                        // Для разделов без подпунктов отправляем данные
+                        try{
+                            tg.sendData(JSON.stringify({type: 'menu_selection', section: section}));
+                            btn.textContent = 'Отправлено ✓';
+                            setTimeout(()=>tg.close(), 700);
+                        }catch(e){ tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.'); }
+                    }
                 };
                 
                 menuGrid.appendChild(btn);

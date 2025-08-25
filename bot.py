@@ -551,6 +551,9 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data_type == 'back_to_main':
         logger.info(f'Routing back to main menu')
         await handle_back_to_main(update, context)
+    elif data_type == 'direct_webapp':
+        logger.info(f'Routing to direct webapp handler')
+        await handle_direct_webapp(update, context, payload)
     else:
         logger.info(f'Routing to authorization handler')
         await handle_authorization(update, context, payload)
@@ -660,6 +663,24 @@ async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE
     menu_url = get_web_app_url('MENU')
     keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
     await update.message.reply_text('Возвращаюсь в главное меню:', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def handle_direct_webapp(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
+    """Обрабатывает прямое открытие мини-приложения без промежуточных кнопок."""
+    user = update.effective_user
+    section = payload.get('section')
+    webapp_url = payload.get('webapp_url')
+    
+    if not await is_user_authorized(user.id, context):
+        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+        return
+    
+    if not section or not webapp_url:
+        await update.message.reply_text('❗️ Ошибка: не указан раздел или URL мини-приложения.')
+        return
+    
+    # Открываем мини-приложение напрямую
+    keyboard = [[InlineKeyboardButton(f'📝 Открыть {section}', web_app=WebAppInfo(url=webapp_url))]]
+    await update.message.reply_text(f'💼 Открываю раздел: {section}', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает данные авторизации от пользователя."""
