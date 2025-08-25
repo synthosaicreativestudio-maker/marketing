@@ -486,6 +486,16 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
         # Никакой дополнительной валидации не требуется
         return True, ""
     
+    elif data_type == 'direct_webapp':
+        # Проверяем данные для прямого открытия мини-приложения
+        section = payload.get('section')
+        webapp_url = payload.get('webapp_url')
+        if not section or not isinstance(section, str):
+            return False, "Не указан раздел"
+        if not webapp_url or not isinstance(webapp_url, str):
+            return False, "Не указан URL мини-приложения"
+        return True, ""
+    
     else:
         # Проверяем данные авторизации
         code = payload.get('code')
