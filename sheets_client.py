@@ -19,14 +19,32 @@ class GoogleSheetsClient:
             creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, scope)
             client = gspread.authorize(creds)
             
+            logger.info(f"Connecting to sheet: {sheet_url}")
+            logger.info(f"Looking for worksheet: {worksheet_name}")
+            
             # Если имя листа не указано или не найдено, берем первый лист
             try:
                 if worksheet_name:
                     sheet = client.open_by_url(sheet_url).worksheet(worksheet_name)
+                    logger.info(f"Successfully connected to worksheet: {worksheet_name}")
                 else:
                     sheet = client.open_by_url(sheet_url).get_worksheet(0)
-            except Exception:
+                    logger.info("Connected to first worksheet (index 0)")
+            except Exception as e:
+                logger.warning(f"Failed to connect to worksheet '{worksheet_name}', trying first worksheet: {e}")
                 sheet = client.open_by_url(sheet_url).get_worksheet(0)
+                logger.info("Connected to first worksheet (index 0) as fallback")
+            
+            # Проверяем размер таблицы
+            try:
+                row_count = len(sheet.get_all_values())
+                logger.info(f"Sheet has {row_count} rows")
+                if row_count > 0:
+                    first_row = sheet.row_values(1)
+                    logger.info(f"First row (headers): {first_row}")
+            except Exception as e:
+                logger.warning(f"Could not get sheet info: {e}")
+            
             logger.info("Successfully connected to Google Sheets.")
             return sheet
         except FileNotFoundError:
@@ -37,19 +55,24 @@ class GoogleSheetsClient:
             return None
 
     def find_user_by_id(self, user_id: int) -> tuple[int, str] | None:
-        """Finds a user by their Telegram ID in column E and returns their row and status."""
+        """Finds a user by their Telegram ID in column E and returns their row and status from column D."""
         if not self.sheet: return None
         try:
             cell = self.sheet.find(str(user_id), in_column=5)
             if cell:
                 status = self.sheet.cell(cell.row, 4).value
-                return (cell.row, status)
+                # Проверяем, что статус именно "авторизован"
+                if str(status).strip() == "авторизован":
+                    return (cell.row, status)
+                else:
+                    logger.info(f"User {user_id} found but not authorized (status: {status})")
+                    return None
         except Exception as e:
             logger.error(f"Error finding user by ID {user_id}: {e}")
         return None
 
     def find_user_by_credentials(self, code: str, phone: str) -> int | None:
-        """Finds a user by partner code and phone, returns the row number if found and status is 'Активен' in column F."""
+        """Finds a user by partner code and phone, returns the row number if found."""
         if not self.sheet: 
             logger.error('Google Sheets not connected')
             return None
@@ -60,35 +83,29 @@ class GoogleSheetsClient:
             try:
                 all_codes = self.sheet.col_values(1)  # Колонка A
                 all_phones = self.sheet.col_values(3)  # Колонка C  
-                all_statuses = self.sheet.col_values(6)  # Колонка F - статус партнера
             except Exception as e:
                 logger.error(f'Failed to fetch sheet data: {e}')
                 return None
             
-            logger.info(f'Found {len(all_codes)} codes, {len(all_phones)} phones, {len(all_statuses)} statuses from column F')
+            logger.info(f'Found {len(all_codes)} codes, {len(all_phones)} phones')
             
             # Начинаем с индекса 1 (пропускаем заголовок)
             for i in range(1, len(all_codes)):
                 if i < len(all_phones) and all_codes[i]:
                     sheet_code = str(all_codes[i]).strip()
                     sheet_phone = str(all_phones[i]).strip() if i < len(all_phones) else ''
-                    sheet_status = str(all_statuses[i]).strip() if i < len(all_statuses) else ''
                     
                     # Очищаем телефон от всех символов кроме цифр
                     cleaned_sheet_phone = ''.join(filter(str.isdigit, sheet_phone))
                     cleaned_input_phone = ''.join(filter(str.isdigit, phone))
                     
-                    logger.info(f'Row {i+1}: code="{sheet_code}" vs "{code}", phone="{cleaned_sheet_phone}" vs "{cleaned_input_phone}", status_F="{sheet_status}"')
+                    logger.info(f'Row {i+1}: code="{sheet_code}" vs "{code}", phone="{cleaned_sheet_phone}" vs "{cleaned_input_phone}"')
                     
                     if sheet_code == code and cleaned_sheet_phone == cleaned_input_phone:
-                        if sheet_status == 'Активен':
-                            logger.info(f'MATCH FOUND at row {i+1} with active status in column F')
-                            return i + 1  # Return the 1-based row index
-                        else:
-                            logger.warning(f'User found at row {i+1} but status in column F is "{sheet_status}", not "Активен"')
-                            return None  # Пользователь найден, но неактивен
+                        logger.info(f'MATCH FOUND at row {i+1}')
+                        return i + 1  # Return the 1-based row index
                         
-            logger.warning(f'No active user found for code={code}, phone={phone} (status must be "Активен" in column F)')
+            logger.warning(f'No user found for code={code}, phone={phone}')
         except Exception as e:
             logger.error(f"Error finding user by credentials: {e}")
         return None
@@ -132,11 +149,29 @@ class GoogleSheetsClient:
             return []
 
     def get_all_authorized_user_ids(self) -> set[str]:
-        """Returns a set of unique, non-empty Telegram IDs from column E."""
+        """Returns a set of unique, non-empty Telegram IDs from column E for users with 'авторизован' status in column D."""
         if not self.sheet: return set()
         try:
-            all_ids = self.sheet.col_values(5)
-            return set(filter(None, all_ids[1:]))
+            all_statuses = self.sheet.col_values(4)  # Колонка D - статусы авторизации
+            all_ids = self.sheet.col_values(5)       # Колонка E - Telegram ID
+            
+            logger.info(f"DEBUG: Found {len(all_statuses)} statuses and {len(all_ids)} IDs")
+            logger.info(f"DEBUG: Statuses (col D): {all_statuses[:5]}...")  # Первые 5 статусов
+            logger.info(f"DEBUG: IDs (col E): {all_ids[:5]}...")           # Первые 5 ID
+            
+            authorized_ids = set()
+            for i in range(1, min(len(all_statuses), len(all_ids))):  # Пропускаем заголовок
+                status = str(all_statuses[i]).strip() if i < len(all_statuses) else ""
+                user_id = str(all_ids[i]).strip() if i < len(all_ids) else ""
+                
+                logger.info(f"DEBUG: Row {i+1}: status='{status}', id='{user_id}'")
+                
+                if (status == "авторизован" and user_id):
+                    authorized_ids.add(user_id)
+                    logger.info(f"DEBUG: Added authorized user {user_id} from row {i+1}")
+            
+            logger.info(f"DEBUG: Total authorized users found: {len(authorized_ids)}")
+            return authorized_ids
         except Exception as e:
             logger.error(f"Error getting all authorized user IDs: {e}")
             return set()

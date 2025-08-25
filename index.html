@@ -187,8 +187,9 @@
                     tg.MainButton.enable();
                 }catch(e){}
                 clearTimeout(emergencyTimeout);
-                try{ tg.showAlert('Данные отправлены.'); }catch(e){}
-                // Закрываем WebApp, чтобы пользователь вернулся в чат
+                // НЕ показываем всплывающее окно - бот ответит в чате
+                // try{ tg.showAlert('Данные отправлены. Проверьте чат с ботом.'); }catch(e){}
+                // Закрываем WebApp сразу после отправки данных
                 try{ tg.close(); }catch(e){}
             }catch (error) {
                 console.error('Error in mainButtonClicked handler:', error);

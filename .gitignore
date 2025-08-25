@@ -5,3 +5,41 @@ bot.log
 
 # Игнорируем системные папки Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# Системные файлы
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Временные файлы
+*.tmp
+*.temp
+*.lock
+*.pid
+
+# IDE файлы
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Логи и отладочные файлы
+*.log
+debug.log
+
+# Файлы блокировки
+bot.lock

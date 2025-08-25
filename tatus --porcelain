@@ -1,0 +1,5 @@
+[33ma36e527[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Исправлены ошибки архитектуры и логики взаимодействия: разделены функции, упрощена система кэширования, добавлена валидация данных
+[33m42e83da[m chore: update from assistant
+[33mab05c66[m Исправлено зависание авторизации - добавлена защита от таймаутов
+[33m7c91bff[m Fix authorization logic and Telegram ID handling - Fixed status check to column F (partner status) instead of column D - Added detailed logging for authorization debugging - Added /check_auth command for authorization diagnostics - Added /fix_telegram_id command to update missing Telegram IDs - Improved Telegram ID writing as string type
+[33m50eedfe[m Update logo positioning and add partner status validation - Logo positioned to right of text with 50x50px size and 25px margin - Added partner status check: only 'Активен' users can authorize - Updated error messages for inactive accounts

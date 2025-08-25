@@ -1,24 +1,19 @@
 # -*- coding: utf-8 -*-
 
 """
-Упрощённая и чистая версия бота.
-- Загружает настройки из .env
-- Проверяет подключение к OpenAI при старте
-- Работает с Google Sheets через sheets_client.py
-- Реализованы /start, обработка WebAppData, /new_chat и handle_message
-
-Примечание: этот файл заменяет повреждённую версию. Если у вас есть кастомная логика — скажите, добавлю.
+Улучшенная версия бота с исправленной архитектурой.
+- Централизованная конфигурация
+- Единый кэш авторизации
+- Кроссплатформенная блокировка процессов
+- Оптимизированная работа с OpenAI
+- Улучшенная обработка ошибок
 """
 
 import logging
 import os
 import json
-import openai
 import time
 import asyncio
-import math
-import fcntl
-from openai import OpenAI
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 import telegram
@@ -26,24 +21,19 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 from sheets_client import GoogleSheetsClient
 from urllib.parse import urlencode
 
-# Загрузка .env. Если TELEGRAM_TOKEN не задан, попробуем загрузить `bot.env` (у вас был такой файл).
+# Импорты новых модулей
+from config import SECTIONS, get_web_app_url, get_ticket_status
+from auth_cache import auth_cache
+from openai_client import openai_client
+from process_lock import ProcessLock
+
+# Загрузка .env. Если TELEGRAM_TOKEN не задан, попробуем загрузить `bot.env`
 import subprocess
-SECTIONS = [
-    'Агрегаторы',
-    'Контент',
-    'Финансы',
-    'Технические проблемы',
-    'Дизайн и материалы',
-    'Регламенты и обучение',
-    'Акции и мероприятия',
-    'Аналитика',
-    'Связаться со специалистом'
-]
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Send a single Web App inline button that opens the mini‑app immediately.
     # Many Telegram clients open inline web_app buttons more reliably than reply keyboard buttons.
-    web_app_base = os.getenv('WEB_APP_MENU_URL', os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/'))
+    web_app_base = get_web_app_url('MENU')
     main_button = InlineKeyboardButton('Открыть миниапп', web_app=WebAppInfo(url=web_app_base))
     # Optional: attach a secondary row with per-section deep-links (clients may show them as normal links)
     section_rows = []
@@ -82,122 +72,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# OpenAI
-openai.api_key = os.getenv('OPENAI_API_KEY')
-# Инициализируем клиент для новой версии openai-python
-try:
-    openai_client = OpenAI(api_key=openai.api_key)
-except Exception:
-    # fallback: инициализация без явного ключа (будет читать из env)
-    openai_client = OpenAI()
-
-def check_openai_connection() -> bool:
-    if not openai.api_key:
-        logger.error('OPENAI_API_KEY не задан в .env')
-        return False
-    try:
-        # Try a lightweight chat completion to verify connectivity
-        try:
-            resp = openai_client.chat.completions.create(
-                model=os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),
-                messages=[{'role': 'system', 'content': 'ping'}],
-                max_tokens=1
-            )
-            logger.info('OpenAI доступен (chat completions)')
-            return True
-        except Exception:
-            # Fallback: try listing models (may work with low privileges)
-            try:
-                resp = openai_client._client.request('GET', '/v1/models')
-                if getattr(resp, 'status_code', None) == 200 or getattr(resp, 'status', None) == 200:
-                    logger.info('OpenAI доступен (models list)')
-                    return True
-            except Exception as e:
-                logger.warning(f'OpenAI lightweight check fallback failed: {e}')
-            raise
-    except Exception as e:
-        logger.error(f'OpenAI connection error: {e}')
-        return False
 
 
-def autopush_index() -> bool:
-    """
-    Автоматически коммитит и пушит все изменения в текущем git-репозитории.
-    Возвращает True при успешном пуше, иначе False. Не бросает исключения наружу.
-    """
-    import subprocess
-    import os
-    repo_path = os.path.dirname(os.path.abspath(__file__))
-    # If repository has no .git, skip
-    if not os.path.exists(os.path.join(repo_path, '.git')):
-        logger.info('.git не найден в репозитории, пропускаю autopush.')
-        return False
-    try:
-        # Add all changes
-        subprocess.run(['git', '-C', repo_path, 'add', '.'], check=True)
-        try:
-            subprocess.run(['git', '-C', repo_path, 'commit', '-m', 'Автоматический коммит изменений'], check=True)
-        except subprocess.CalledProcessError:
-            # nothing to commit
-            logger.info('Нет изменений для коммита.')
-            return True  # No changes is also success
-        subprocess.run(['git', '-C', repo_path, 'push'], check=True)
-        logger.info('autopush завершён успешно.')
-        return True
-    except Exception as e:
-        logger.error(f'Ошибка autopush: {e}')
-        return False
 
 
-def _create_or_get_thread(assistant_id: str, code: str | None = None, telegram_id: str | None = None) -> str | None:
-    """Создаёт новый thread через OpenAI API и возвращает thread_id."""
-    try:
-        thread = openai_client.beta.threads.create()
-        return thread.id
-    except Exception as e:
-        logger.error(f'Не удалось создать thread: {e}')
-        return None
 
 
-import time
-def _send_message_in_thread(assistant_id: str, thread_id: str, text: str) -> str | None:
-    """Добавляет сообщение, запускает ассистента, ждёт run, возвращает ответ ассистента."""
-    if not assistant_id or not thread_id:
-        return None
-    try:
-        # 1. Добавить сообщение пользователя
-        openai_client.beta.threads.messages.create(
-            thread_id=thread_id,
-            role="user",
-            content=text
-        )
-        # 2. Запустить ассистента
-        run = openai_client.beta.threads.runs.create(
-            thread_id=thread_id,
-            assistant_id=assistant_id
-        )
-        # 3. Ждать завершения run (polling)
-        for _ in range(60):
-            run_status = openai_client.beta.threads.runs.retrieve(
-                thread_id=thread_id,
-                run_id=run.id
-            )
-            if run_status.status == "completed":
-                break
-            elif run_status.status in ("failed", "cancelled", "expired"):
-                logger.error(f'Run завершился с ошибкой: {run_status.status}')
-                return None
-            time.sleep(1)
-        # 4. Получить все сообщения в thread
-        messages = openai_client.beta.threads.messages.list(thread_id=thread_id)
-        # 5. Найти последний ответ ассистента
-        for msg in reversed(messages.data):
-            if msg.role == "assistant":
-                return msg.content[0].text.value if msg.content and hasattr(msg.content[0], 'text') and hasattr(msg.content[0].text, 'value') else str(msg.content)
-        return None
-    except Exception as e:
-        logger.error(f'Ошибка при отправке сообщения в thread: {e}')
-        return None
+
+
+
 
 # Google Sheets клиент
 SHEET_URL = os.getenv('SHEET_URL')
@@ -213,9 +96,6 @@ if SHEET_URL and os.path.exists('credentials.json'):
         logger.error(f'Ошибка инициализации GoogleSheetsClient: {e}')
 else:
     logger.info('SHEET_URL не задан или credentials.json отсутствует — Google Sheets отключён')
-# Параметры производительности
-MAX_OPENAI_CONCURRENT = int(os.getenv('MAX_OPENAI_CONCURRENT', '3'))
-OPENAI_SEMAPHORE = asyncio.Semaphore(MAX_OPENAI_CONCURRENT)
 # Утилиты
 def is_admin(user_id: int) -> bool:
     admin_ids = os.getenv('ADMIN_TELEGRAM_ID', '')
@@ -223,15 +103,12 @@ def is_admin(user_id: int) -> bool:
     return str(user_id) in admin_list
 
 async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Проверяет авторизацию пользователя. Использует кэш для оптимизации."""
-    # Проверяем кэш в контексте пользователя
-    if 'is_authorized' in context.user_data:
-        cached_auth = context.user_data['is_authorized']
-        # Если кэш не устарел (5 минут), используем его
-        if 'auth_timestamp' in context.user_data:
-            if time.time() - context.user_data['auth_timestamp'] < 300:  # 5 минут
-                logger.info(f'Using cached authorization for user {user_id}: {cached_auth}')
-                return cached_auth
+    """Проверяет авторизацию пользователя. Использует единый кэш для оптимизации."""
+    # Сначала проверяем кэш
+    cached_auth = auth_cache.is_user_authorized(user_id)
+    if cached_auth is not None:
+        logger.info(f'Using cached authorization for user {user_id}: {cached_auth}')
+        return cached_auth
     
     # Получаем актуальные данные из Google Sheets
     try:
@@ -242,9 +119,8 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
         
         is_auth = str(user_id) in authorized_ids
         
-        # Обновляем кэш в контексте
-        context.user_data['is_authorized'] = is_auth
-        context.user_data['auth_timestamp'] = time.time()
+        # Обновляем кэш
+        auth_cache.set_user_authorized(user_id, is_auth)
         
         logger.info(f'User {user_id} authorization result: {is_auth}')
         return is_auth
@@ -254,79 +130,30 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
         return False
 
 
-## --- СИСТЕМА БЛОКИРОВКИ АВТОРИЗАЦИИ ---
-FAILED_AUTH_CACHE = {}  # {user_id: {'attempts': count, 'blocked_until': timestamp, 'block_count': total_blocks}}
-MAX_AUTH_ATTEMPTS = 5
-BLOCK_DURATIONS = [86400, 432000, 2592000]  # 1 день, 5 дней, 30 дней в секундах
-
-def is_user_blocked(user_id: int) -> tuple[bool, int]:
-    """Проверяет заблокирован ли пользователь. Возвращает (заблокирован, секунд до разблокировки)"""
-    if user_id not in FAILED_AUTH_CACHE:
-        return False, 0
-    
-    user_data = FAILED_AUTH_CACHE[user_id]
-    blocked_until = user_data.get('blocked_until', 0)
-    
-    if blocked_until > time.time():
-        return True, int(blocked_until - time.time())
-    
-    # Разблокирован - сбрасываем попытки
-    if blocked_until > 0:
-        user_data['attempts'] = 0
-        user_data['blocked_until'] = 0
-    
-    return False, 0
-
-def add_failed_attempt(user_id: int) -> tuple[bool, int]:
-    """Добавляет неудачную попытку. Возвращает (заблокирован, секунд блокировки)"""
-    if user_id not in FAILED_AUTH_CACHE:
-        FAILED_AUTH_CACHE[user_id] = {'attempts': 0, 'blocked_until': 0, 'block_count': 0}
-    
-    user_data = FAILED_AUTH_CACHE[user_id]
-    user_data['attempts'] += 1
-    
-    if user_data['attempts'] >= MAX_AUTH_ATTEMPTS:
-        # Блокируем пользователя
-        block_count = min(user_data['block_count'], len(BLOCK_DURATIONS) - 1)
-        block_duration = BLOCK_DURATIONS[block_count]
-        user_data['blocked_until'] = time.time() + block_duration
-        user_data['block_count'] += 1
-        user_data['attempts'] = 0
-        return True, block_duration
-    
-    return False, 0
-
-def clear_failed_attempts(user_id: int):
-    """Очищает неудачные попытки при успешной авторизации"""
-    if user_id in FAILED_AUTH_CACHE:
-        FAILED_AUTH_CACHE[user_id]['attempts'] = 0
-AUTH_CACHE = {'ids': set(), 'ts': 0}
-AUTH_TTL = 30  # Сократил с 300 до 30 секунд для быстрого обновления
-
+# Функции для работы с кэшем авторизации
 def get_authorized_ids():
     """Возвращает множество строк с авторизованными Telegram ID или None, если Sheets недоступен."""
-    now = time.time()
-    if AUTH_CACHE['ids'] and (now - AUTH_CACHE['ts'] < AUTH_TTL):
-        return AUTH_CACHE['ids']
-    # иначе обновляем
+    cached_ids = auth_cache.get_authorized_ids()
+    if cached_ids is not None:
+        return cached_ids
+    
+    # Обновляем кэш
     try:
         if not sheets_client or not sheets_client.sheet:
             return None
         ids = sheets_client.get_all_authorized_user_ids()
-        AUTH_CACHE['ids'] = set(str(i) for i in ids if i)
-        AUTH_CACHE['ts'] = now
-        return AUTH_CACHE['ids']
+        auth_cache.set_authorized_ids(set(str(i) for i in ids if i))
+        return auth_cache.get_authorized_ids()
     except Exception as e:
         logger.error(f'Не удалось получить список авторизованных ID: {e}')
         return None
 
 def refresh_authorized_cache():
+    """Обновляет кэш авторизованных пользователей"""
     try:
         if sheets_client and sheets_client.sheet:
             ids = sheets_client.get_all_authorized_user_ids()
-            AUTH_CACHE['ids'] = set(str(i) for i in ids if i)
-            AUTH_CACHE['ts'] = time.time()
-            logger.info(f'Кэш авторизованных пользователей обновлён: {len(AUTH_CACHE["ids"])} записей')
+            auth_cache.set_authorized_ids(set(str(i) for i in ids if i))
     except Exception as e:
         logger.error(f'Ошибка при обновлении кэша авторизаций: {e}')
 
@@ -340,58 +167,7 @@ if TICKETS_SHEET_URL and os.path.exists('credentials.json'):
 else:
     logger.info('TICKETS_SHEET_URL не задан или credentials.json отсутствует — таблица обращений отключена')
 
-def get_or_create_thread(assistant_id: str, user_data: dict) -> str | None:
-    """Получает существующий thread_id или создает новый. Возвращает thread_id или None при ошибке."""
-    try:
-        # Пытаемся найти существующий thread
-        code = user_data.get('partner_code', '')
-        telegram_id = user_data.get('telegram_id', '')
-        
-        if tickets_client and tickets_client.sheet:
-            # Ищем по коду партнера
-            if code:
-                thread_id = tickets_client.get_thread_id(code=code)
-                if thread_id:
-                    logger.info(f'Found existing thread {thread_id} for code {code}')
-                    return thread_id
-            
-            # Ищем по telegram_id
-            if telegram_id:
-                thread_id = tickets_client.get_thread_id(row=None, code=None)
-                if thread_id:
-                    logger.info(f'Found existing thread {thread_id} for telegram_id {telegram_id}')
-                    return thread_id
-        
-        # Создаем новый thread
-        thread_id = _create_or_get_thread(assistant_id=assistant_id, code=code, telegram_id=telegram_id)
-        if thread_id:
-            logger.info(f'Created new thread {thread_id}')
-            
-            # Сохраняем thread_id в таблицу
-            try:
-                if tickets_client and tickets_client.sheet:
-                    if code:
-                        row = tickets_client.find_row_by_code(code)
-                        if row:
-                            tickets_client.set_thread_id(row=row, code=None, thread_id=thread_id)
-                    elif telegram_id:
-                        # Ищем строку по telegram_id
-                        try:
-                            cell = tickets_client.sheet.find(str(telegram_id), in_column=4)
-                            if cell:
-                                tickets_client.set_thread_id(row=cell.row, code=None, thread_id=thread_id)
-                        except Exception:
-                            pass
-            except Exception as e:
-                logger.warning(f'Failed to save thread_id to sheet: {e}')
-            
-            return thread_id
-        
-        return None
-        
-    except Exception as e:
-        logger.error(f'Error in get_or_create_thread: {e}')
-        return None
+
 
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -488,68 +264,62 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Если пользователь нажал на persistent кнопку
     if text.strip().lower() == 'личный кабинет':
-        # Build Web App buttons so the user opens the mini‑app directly (deep link to a section)
-        web_app_base = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
-        keyboard = []
-        for section in SECTIONS:
-            params = urlencode({'section': section})
-            url = f"{web_app_base.rstrip('/')}?{params}"
-            keyboard.append([InlineKeyboardButton(section, web_app=WebAppInfo(url=url))])
-        keyboard.append([InlineKeyboardButton('Открыть миниапп', web_app=WebAppInfo(url=web_app_base))])
-        # Send inline WebApp menu; the persistent ReplyKeyboardMarkup remains available on client
-        await update.message.reply_text('Откройте личный кабинет для выбора раздела', reply_markup=InlineKeyboardMarkup(keyboard))
-        return
+            # Build Web App buttons so the user opens the mini‑app directly (deep link to a section)
+            web_app_base = get_web_app_url('MAIN')
+            keyboard = []
+            for section in SECTIONS:
+                params = urlencode({'section': section})
+                url = f"{web_app_base.rstrip('/')}?{params}"
+                keyboard.append([InlineKeyboardButton(section, web_app=WebAppInfo(url=url))])
+            keyboard.append([InlineKeyboardButton('Открыть миниапп', web_app=WebAppInfo(url=web_app_base))])
+            # Send inline WebApp menu; the persistent ReplyKeyboardMarkup remains available on client
+            await update.message.reply_text('Откройте личный кабинет для выбора раздела', reply_markup=InlineKeyboardMarkup(keyboard))
+            return
     
     # Проверяем настройки OpenAI
-    if not openai.api_key:
-        await update.message.reply_text('OpenAI ключ не настроен. Обратитесь к администратору.', reply_markup=persistent_keyboard)
-        return
-    
-    assistant_id = os.getenv('OPENAI_ASSISTANT_ID')
-    if not assistant_id:
-        await update.message.reply_text('OpenAI Assistant не настроен. Обратитесь к администратору.', reply_markup=persistent_keyboard)
+    if not openai_client.is_available():
+        await update.message.reply_text('OpenAI недоступен. Обратитесь к администратору.', reply_markup=persistent_keyboard)
         return
 
-    # Делаем вызов OpenAI с семафором и retry/backoff
-    async with OPENAI_SEMAPHORE:
-        retry = 0
-        max_retry = int(os.getenv('OPENAI_MAX_RETRY', '2'))
-        backoff_base = float(os.getenv('OPENAI_BACKOFF_BASE', '0.8'))
-        
-        while True:
-            try:
-                # Получаем или создаем thread_id
-                user_data = {
-                    'partner_code': context.user_data.get('partner_code', ''),
-                    'telegram_id': str(update.effective_user.id)
-                }
-                
-                thread_id = get_or_create_thread(assistant_id=assistant_id, user_data=user_data)
-                if not thread_id:
-                    await update.message.reply_text('Ошибка создания или получения thread_id. Попробуйте позже.', reply_markup=persistent_keyboard)
-                    return
-                
-                # Отправляем сообщение в OpenAI Assistant
-                logger.info(f'Sending message to OpenAI Assistant thread {thread_id}: {text[:100]}...')
-                assistant_msg = _send_message_in_thread(assistant_id=assistant_id, thread_id=thread_id, text=text)
-                logger.info(f'Received response from Assistant: {assistant_msg[:100] if assistant_msg else "None"}...')
-                
-                if not assistant_msg:
-                    await update.message.reply_text('Ошибка получения ответа от ассистента. Попробуйте позже.', reply_markup=persistent_keyboard)
-                    return
-                
-                break
-                
-            except Exception as e:
-                retry += 1
-                err_str = str(e)
-                logger.warning(f'OpenAI Assistant request failed (attempt {retry}): {err_str}')
-                if retry > max_retry:
-                    logger.exception(f'OpenAI Assistant failed after {retry} attempts; last error: {err_str}')
-                    await update.message.reply_text('Ошибка при обращении к ассистенту. Попробуйте позже.', reply_markup=persistent_keyboard)
-                    return
-                wait = backoff_base * (2 ** (retry-1))
-                await asyncio.sleep(wait)
+    # Делаем вызов OpenAI с retry/backoff
+    retry = 0
+    max_retry = openai_client.get_max_retry()
+    backoff_base = openai_client.get_backoff_base()
+    
+    while True:
+        try:
+            # Получаем или создаем thread_id
+            user_data = {
+                'partner_code': context.user_data.get('partner_code', ''),
+                'telegram_id': str(update.effective_user.id)
+            }
+            
+            thread_id = await openai_client.get_or_create_thread(user_data)
+            if not thread_id:
+                await update.message.reply_text('Ошибка создания thread. Попробуйте позже.', reply_markup=persistent_keyboard)
+                return
+            
+            # Отправляем сообщение в OpenAI Assistant
+            logger.info(f'Sending message to OpenAI Assistant thread {thread_id}: {text[:100]}...')
+            assistant_msg = await openai_client.send_message(thread_id, text)
+            logger.info(f'Received response from Assistant: {assistant_msg[:100] if assistant_msg else "None"}...')
+            
+            if not assistant_msg:
+                await update.message.reply_text('Ошибка получения ответа от ассистента. Попробуйте позже.', reply_markup=persistent_keyboard)
+                return
+            
+            break
+            
+        except Exception as e:
+            retry += 1
+            err_str = str(e)
+            logger.warning(f'OpenAI Assistant request failed (attempt {retry}): {err_str}')
+            if retry > max_retry:
+                logger.exception(f'OpenAI Assistant failed after {retry} attempts; last error: {err_str}')
+                await update.message.reply_text('Ошибка при обращении к ассистенту. Попробуйте позже.', reply_markup=persistent_keyboard)
+                return
+            wait = backoff_base * (2 ** (retry-1))
+            await asyncio.sleep(wait)
         
         # Создаем кнопки для управления тикетом
         buttons = None
@@ -567,7 +337,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if row:
                 # Создаем кнопки для управления тикетом
-                web_app_base = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+                web_app_base = get_web_app_url('MAIN')
                 menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
                 buttons = [
                     [InlineKeyboardButton('Перевести специалисту', callback_data=f't:transfer:{row}'), InlineKeyboardButton('Выполнено', callback_data=f't:done:{row}')],
@@ -651,7 +421,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await is_user_authorized(user.id, context):
         # Persistent меню с кнопкой /menu
         from telegram import ReplyKeyboardMarkup, KeyboardButton
-        web_app_base = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+        web_app_base = get_web_app_url('MAIN')
         kb_button = KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=web_app_base))
         persistent_keyboard = ReplyKeyboardMarkup(
             [[kb_button]],
@@ -663,7 +433,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=persistent_keyboard
         )
         return
-    web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+    web_app_url = get_web_app_url('MAIN')
     keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
     await update.message.reply_text(f'Привет, {user.first_name}! Нажми кнопку чтобы авторизоваться.', reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -769,7 +539,7 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
     user = update.effective_user
     
     # Проверяем блокировку
-    is_blocked, seconds_left = is_user_blocked(user.id)
+    is_blocked, seconds_left = auth_cache.is_user_blocked(user.id)
     if is_blocked:
         hours = seconds_left // 3600
         minutes = (seconds_left % 3600) // 60
@@ -823,13 +593,13 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data['phone'] = phone
             context.user_data['auth_timestamp'] = time.time()
             
-            clear_failed_attempts(user.id)
+            auth_cache.clear_failed_attempts(user.id)
             
             logger.info(f'Authorization successful for user {user.id}')
             await update.message.reply_text('✅ Авторизация прошла успешно!')
             
             # Показываем кнопку для открытия личного кабинета
-            web_app_base = os.getenv('WEB_APP_MENU_URL', os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/'))
+            web_app_base = get_web_app_url('MENU')
             menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
             await update.message.reply_text(
                 'Откройте личный кабинет для выбора раздела',
@@ -842,8 +612,8 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             return
     else:
         # Неудачная попытка авторизации
-        is_blocked, block_duration = add_failed_attempt(user.id)
-        attempts_left = MAX_AUTH_ATTEMPTS - (FAILED_AUTH_CACHE[user.id]['attempts'] if user.id in FAILED_AUTH_CACHE else 0)
+        is_blocked, block_duration = auth_cache.add_failed_attempt(user.id)
+        attempts_left = auth_cache.get_attempts_left(user.id)
         
         if is_blocked:
             hours = block_duration // 3600
@@ -854,7 +624,7 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
                 time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
             await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Авторизация заблокирована на {time_text}.')
         else:
-            web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+            web_app_url = get_web_app_url('MAIN')
             keyboard = [[InlineKeyboardButton('Повторить авторизацию', web_app=WebAppInfo(url=web_app_url))]]
             await update.message.reply_text(
                 f'❌ Неверные данные или аккаунт неактивен.\nОсталось попыток: {attempts_left}',
@@ -875,7 +645,7 @@ async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text('История диалога сброшена. Для работы требуется авторизация.')
         # Показываем кнопку авторизации
-        web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+        web_app_url = get_web_app_url('MAIN')
         keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
         await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -1019,7 +789,7 @@ async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text('Кэш очищен. Требуется авторизация.')
         # Показываем кнопку авторизации
-        web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+        web_app_url = get_web_app_url('MAIN')
         keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
         await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -1046,78 +816,65 @@ def main():
     # Prevent multiple instances
     lock_file = 'bot.lock'
     try:
-        lock_fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
-        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        logger.info('Successfully acquired lock, starting bot...')
-    except (OSError, IOError) as e:
-        logger.error(f'Another bot instance is already running or cannot acquire lock: {e}')
-        return
-    
-    try:
-        token = os.getenv('TELEGRAM_TOKEN')
-        if not token:
-            logger.error('TELEGRAM_TOKEN не задан в .env')
-            return
-        if not check_openai_connection():
-            logger.error('OpenAI не доступен — прерывание старта бота')
-            return
-        app = Application.builder().token(token).build()
-        app.add_handler(CommandHandler('start', start))
-        app.add_handler(CommandHandler('new_chat', new_chat))
-        app.add_handler(CommandHandler('reply', reply_command))
-        app.add_handler(CommandHandler('setstatus', setstatus_command))
-        app.add_handler(CommandHandler('push', push_command))
-        app.add_handler(CommandHandler('check_auth', check_auth_command))
-        app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
-        app.add_handler(CallbackQueryHandler(handle_callback_query))
-        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        app.add_handler(CommandHandler('menu', menu_command))
-        app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
-        logger.info('Бот запущен...')
-        # Global error handler to catch exceptions produced inside the Application's network loop.
-        # The library logs exceptions if no error handler is registered; that leads to noisy 409 logs.
-        async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-            err = getattr(context, 'error', None)
+        with ProcessLock(lock_file) as lock:
+            logger.info('Successfully acquired lock, starting bot...')
+            
             try:
-                if isinstance(err, telegram.error.Conflict):
-                    # Conflict means another client is currently calling getUpdates for the same token.
-                    logger.warning(f'GetUpdates conflict (caught in error handler): {err} — sleeping briefly and will let polling retry.')
-                    # Small sleep to avoid busy-looping; the outer polling loop will handle longer backoff.
-                    await asyncio.sleep(5)
+                token = os.getenv('TELEGRAM_TOKEN')
+                if not token:
+                    logger.error('TELEGRAM_TOKEN не задан в .env')
                     return
-            except Exception:
-                # If something unexpected happens while handling the error, log it and continue.
-                logger.exception('Error in global error handler')
-            # For all other errors, log full traceback so maintainers can inspect.
-            logger.exception(f'Unhandled exception in update handling: {err}')
+                
+                app = Application.builder().token(token).build()
+                app.add_handler(CommandHandler('start', start))
+                app.add_handler(CommandHandler('new_chat', new_chat))
+                app.add_handler(CommandHandler('reply', reply_command))
+                app.add_handler(CommandHandler('setstatus', setstatus_command))
+                app.add_handler(CommandHandler('push', push_command))
+                app.add_handler(CommandHandler('check_auth', check_auth_command))
+                app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
+                app.add_handler(CallbackQueryHandler(handle_callback_query))
+                app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
+                app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+                app.add_handler(CommandHandler('menu', menu_command))
+                app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
+                logger.info('Бот запущен...')
+                
+                # Global error handler
+                async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+                    err = getattr(context, 'error', None)
+                    try:
+                        if isinstance(err, telegram.error.Conflict):
+                            logger.warning(f'GetUpdates conflict (caught in error handler): {err} — sleeping briefly and will let polling retry.')
+                            await asyncio.sleep(5)
+                            return
+                    except Exception:
+                        logger.exception('Error in global error handler')
+                    logger.exception(f'Unhandled exception in update handling: {err}')
 
-        # Register the handler so the Application doesn't print uncaught exceptions for every getUpdates conflict.
-        app.add_error_handler(_global_error_handler)
+                app.add_error_handler(_global_error_handler)
 
-        # Run polling with drop_pending_updates to clear any pending updates and reduce chance of immediate conflicts.
-        # Keep an outer retry/backoff to cope with remote clients that may briefly hold getUpdates.
-        retry_delay = 3
-        while True:
-            try:
-                app.run_polling(drop_pending_updates=True)
-                break
-            except telegram.error.Conflict as e:
-                logger.error(f'GetUpdates conflict detected (outer loop): {e}. Retrying in {retry_delay}s...')
-                time.sleep(retry_delay)
-                retry_delay = min(60, retry_delay * 2)
-                continue
+                # Run polling with retry/backoff
+                retry_delay = 3
+                while True:
+                    try:
+                        app.run_polling(drop_pending_updates=True)
+                        break
+                    except telegram.error.Conflict as e:
+                        logger.error(f'GetUpdates conflict detected (outer loop): {e}. Retrying in {retry_delay}s...')
+                        time.sleep(retry_delay)
+                        retry_delay = min(60, retry_delay * 2)
+                        continue
+                    except Exception as e:
+                        logger.exception(f'Unexpected error in polling loop: {e}')
+                        break
+                        
             except Exception as e:
-                logger.exception(f'Unexpected error in polling loop: {e}')
-                break
-    finally:
-        # Cleanup lock file
-        try:
-            os.close(lock_fd)
-            os.unlink(lock_file)
-            logger.info('Lock file cleaned up')
-        except Exception as e:
-            logger.warning(f'Failed to cleanup lock file: {e}')
+                logger.error(f'Error starting bot: {e}')
+                return
+    except Exception as e:
+        logger.error(f'Error acquiring lock: {e}')
+        return
 
 if __name__ == '__main__':
     main()
