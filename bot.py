@@ -455,7 +455,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def validate_payload(payload: dict) -> tuple[bool, str]:
     """Валидирует входящие данные от веб-приложения. Возвращает (валидно, сообщение об ошибке)."""
-    logger.info(f'Validating payload: {payload}')
+    logger.info(f'DEBUG: Validating payload: {payload}')
     
     if not isinstance(payload, dict):
         logger.warning(f'Payload is not a dict: {type(payload)}')
@@ -463,9 +463,11 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
     
     # Проверяем тип данных
     data_type = payload.get('type')
-    logger.info(f'Payload type: {data_type}')
+    logger.info(f'DEBUG: Payload type detected: "{data_type}"')
+    logger.info(f'DEBUG: All payload keys: {list(payload.keys())}')
     
     if data_type == 'menu_selection':
+        logger.info('DEBUG: Processing menu_selection')
         # Проверяем данные выбора раздела
         section = payload.get('section')
         if not section or not isinstance(section, str):
@@ -475,6 +477,7 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
         return True, ""
     
     elif data_type == 'subsection_selection':
+        logger.info('DEBUG: Processing subsection_selection')
         # Проверяем данные выбора подраздела
         section = payload.get('section')
         subsection = payload.get('subsection')
@@ -487,20 +490,25 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
         return True, ""
     
     elif data_type == 'back_to_main':
+        logger.info('DEBUG: Processing back_to_main')
         # Никакой дополнительной валидации не требуется
         return True, ""
     
     elif data_type == 'direct_webapp':
+        logger.info('DEBUG: Processing direct_webapp')
         # Проверяем данные для прямого открытия мини-приложения
         section = payload.get('section')
         webapp_url = payload.get('webapp_url')
+        logger.info(f'DEBUG: direct_webapp section="{section}", webapp_url="{webapp_url}"')
         if not section or not isinstance(section, str):
             return False, "Не указан раздел"
         if not webapp_url or not isinstance(webapp_url, str):
             return False, "Не указан URL мини-приложения"
+        logger.info('DEBUG: direct_webapp validation passed')
         return True, ""
     
     else:
+        logger.info(f'DEBUG: Processing as authorization data (type="{data_type}")')
         # Проверяем данные авторизации
         code = payload.get('code')
         phone = payload.get('phone')
