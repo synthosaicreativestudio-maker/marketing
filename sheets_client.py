@@ -366,8 +366,8 @@ class GoogleSheetsClient:
         except Exception as e:
             logger.error(f'Error upserting ticket for {telegram_id}: {e}')
     
-    def set_tickets_column_width(self, width_pixels: int = 100):
-        """Устанавливает фиксированную ширину для колонки E (обращения) в пикселях."""
+    def set_tickets_column_width(self, width_pixels: int = 600, row_height_pixels: int = 100):
+        """Устанавливает фиксированную ширину для колонки E (обращения) и высоту строк."""
         if not self.sheet:
             logger.error('Sheet not connected')
             return False
@@ -379,29 +379,47 @@ class GoogleSheetsClient:
             spreadsheet_id = self.sheet.spreadsheet.id
             sheet_id = self.sheet.id
             
-            # Запрос на установку ширины колонки E (4-й индекс, т.к. счет с 0)
+            # Батч запрос для установки ширины колонки и высоты строк
             batch_update_request = {
-                'requests': [{
-                    'updateDimensionProperties': {
-                        'range': {
-                            'sheetId': sheet_id,
-                            'dimension': 'COLUMNS',
-                            'startIndex': 4,  # Колонка E (счет с 0)
-                            'endIndex': 5     # До колонки E включительно
-                        },
-                        'properties': {
-                            'pixelSize': width_pixels
-                        },
-                        'fields': 'pixelSize'
+                'requests': [
+                    # Установка ширины колонки E
+                    {
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': 4,  # Колонка E (счет с 0)
+                                'endIndex': 5     # До колонки E включительно
+                            },
+                            'properties': {
+                                'pixelSize': width_pixels
+                            },
+                            'fields': 'pixelSize'
+                        }
+                    },
+                    # Установка высоты всех строк (начиная с строки 2, пропуская заголовок)
+                    {
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'ROWS',
+                                'startIndex': 1,   # Начинаем со 2-й строки (счет с 0)
+                                'endIndex': 1000   # Охватываем до 1000 строк
+                            },
+                            'properties': {
+                                'pixelSize': row_height_pixels
+                            },
+                            'fields': 'pixelSize'
+                        }
                     }
-                }]
+                ]
             }
             
             # Отправляем batch update через gspread API
             self.sheet.spreadsheet.batch_update(batch_update_request)
-            logger.info(f'Установлена ширина {width_pixels} пикселей для колонки E (обращения)')
+            logger.info(f'Установлена ширина {width_pixels}px для колонки E и высота {row_height_pixels}px для строк')
             return True
             
         except Exception as e:
-            logger.error(f'Ошибка при установке ширины колонки: {e}')
+            logger.error(f'Ошибка при установке размеров: {e}')
             return False
