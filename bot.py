@@ -223,20 +223,35 @@ def is_admin(user_id: int) -> bool:
     return str(user_id) in admin_list
 
 async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    # Не используем кэш в context.user_data, всегда проверяем актуальные данные
+    """Проверяет авторизацию пользователя. Использует кэш для оптимизации."""
+    # Проверяем кэш в контексте пользователя
+    if 'is_authorized' in context.user_data:
+        cached_auth = context.user_data['is_authorized']
+        # Если кэш не устарел (5 минут), используем его
+        if 'auth_timestamp' in context.user_data:
+            if time.time() - context.user_data['auth_timestamp'] < 300:  # 5 минут
+                logger.info(f'Using cached authorization for user {user_id}: {cached_auth}')
+                return cached_auth
     
-    # Используем глобальный кэш авторизованных ID
-    authorized_ids = await asyncio.to_thread(get_authorized_ids)
-    logger.info(f'Checking authorization for user {user_id}. Authorized IDs: {authorized_ids}')
-    if authorized_ids is None:
-        # Если нет доступа к sheets, возвращаем False
-        logger.warning(f'No access to sheets for user {user_id}')
+    # Получаем актуальные данные из Google Sheets
+    try:
+        authorized_ids = await asyncio.to_thread(get_authorized_ids)
+        if authorized_ids is None:
+            logger.warning(f'No access to sheets for user {user_id}')
+            return False
+        
+        is_auth = str(user_id) in authorized_ids
+        
+        # Обновляем кэш в контексте
+        context.user_data['is_authorized'] = is_auth
+        context.user_data['auth_timestamp'] = time.time()
+        
+        logger.info(f'User {user_id} authorization result: {is_auth}')
+        return is_auth
+        
+    except Exception as e:
+        logger.error(f'Error checking authorization for user {user_id}: {e}')
         return False
-    is_auth = str(user_id) in authorized_ids
-    logger.info(f'User {user_id} authorization result: {is_auth}')
-    # Обновляем кэш в контексте
-    context.user_data['is_authorized'] = is_auth
-    return is_auth
 
 
 ## --- СИСТЕМА БЛОКИРОВКИ АВТОРИЗАЦИИ ---
@@ -325,377 +340,58 @@ if TICKETS_SHEET_URL and os.path.exists('credentials.json'):
 else:
     logger.info('TICKETS_SHEET_URL не задан или credentials.json отсутствует — таблица обращений отключена')
 
-# Обработчики
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    logger.info(f'/start от {user.id} ({user.first_name})')
-    if await is_user_authorized(user.id, context):
-        # Persistent меню с кнопкой /menu
-        from telegram import ReplyKeyboardMarkup, KeyboardButton
-        web_app_base = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
-        kb_button = KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=web_app_base))
-        persistent_keyboard = ReplyKeyboardMarkup(
-            [[kb_button]],
-            resize_keyboard=True,
-            one_time_keyboard=False
-        )
-        await update.message.reply_text(
-            'Вы уже авторизованы и готовы к работе!\nНажмите кнопку ниже, чтобы открыть личный кабинет.',
-            reply_markup=persistent_keyboard
-        )
-        return
-    web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
-    keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
-    await update.message.reply_text(f'Привет, {user.first_name}! Нажми кнопку чтобы авторизоваться.', reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    logger.info(f'Web app data received from user {user.id}')
-    
+def get_or_create_thread(assistant_id: str, user_data: dict) -> str | None:
+    """Получает существующий thread_id или создает новый. Возвращает thread_id или None при ошибке."""
     try:
-        payload = json.loads(update.message.web_app_data.data)
-        logger.info(f'Parsed web app payload: {payload}')
-    except Exception as e:
-        logger.error(f'Failed to parse web app data: {e}')
-        await update.message.reply_text('Не удалось прочитать данные от Web App')
-        return
-    # Support two kinds of payloads from the WebApp:
-    # 1) Authorization payload with {code, phone}
-    # 2) Menu selection payload with {type: 'menu_selection', section: '...'}
-    if isinstance(payload, dict) and payload.get('type') == 'menu_selection':
-        section = payload.get('section')
-        user = update.effective_user
-        if not await is_user_authorized(user.id, context):
-            await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
-            return
-        # Log selection as a ticket in the Обращения sheet (if available)
-        try:
-            if tickets_client and tickets_client.sheet:
-                telegram_id = str(user.id)
-                code = context.user_data.get('partner_code', '')
-                phone = context.user_data.get('phone', '')
-                fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
-                # offload blocking upsert to thread
-                await asyncio.to_thread(tickets_client.upsert_ticket, telegram_id, code, phone, fio, f"Запрос: {section}", 'в работе', 'user', False)
-        except Exception as e:
-            logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
-        await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
-        # Optionally notify admins
-        try:
-            admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
-            for aid in admin_ids:
-                try:
-                    await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        return
-
-    # Otherwise treat as authorization payload
-    user = update.effective_user
-    
-    # Проверяем блокировку
-    is_blocked, seconds_left = is_user_blocked(user.id)
-    if is_blocked:
-        hours = seconds_left // 3600
-        minutes = (seconds_left % 3600) // 60
-        if hours > 24:
-            days = hours // 24
-            time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
-        elif hours > 0:
-            time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
-        else:
-            time_text = f"{minutes} минут"
-        await update.message.reply_text(f'❌ Авторизация заблокирована на {time_text}.')
-        return
-    
-    code = payload.get('code')
-    phone = payload.get('phone')
-    logger.info(f'Authorization attempt: code={code}, phone={phone[-4:] if phone else None}***')
-    
-    # Send immediate feedback
-    await update.message.reply_text('Проверяю данные...')
-    
-    # Check Google Sheets availability with timeout
-    if not sheets_client or not sheets_client.sheet:
-        logger.error('Google Sheets client not available')
-        await update.message.reply_text('База недоступна. Свяжитесь с админом.')
-        return
-    
-    # Perform authorization check with logging
-    try:
-        logger.info(f'Looking up user credentials in Google Sheets...')
-        # gspread is blocking; run lookup in a thread
-        row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone)
-        logger.info(f'Credentials lookup result: row={row}')
-    except Exception as e:
-        logger.error(f'Error during credentials lookup: {e}')
-        await update.message.reply_text('Ошибка проверки данных. Попробуйте позже.')
-        return
-    if row:
-        try:
-            logger.info(f'Updating auth status for user {user.id} in row {row}')
-            # update may block; offload to thread
-            await asyncio.to_thread(sheets_client.update_user_auth_status, row, update.effective_user.id)
-            
-            context.user_data['is_authorized'] = True
-            context.user_data['partner_code'] = code
-            context.user_data['phone'] = phone
-            clear_failed_attempts(user.id)  # Очищаем неудачные попытки
-            
-            # ВАЖНО: Принудительно обновляем кэш авторизации
-            AUTH_CACHE['ids'] = set()
-            AUTH_CACHE['ts'] = 0
-            refresh_authorized_cache()
-            
-            logger.info(f'Authorization successful for user {user.id}')
-            await update.message.reply_text('✅ Авторизация прошла успешно!')
-        except Exception as e:
-            logger.error(f'Error updating auth status: {e}')
-            await update.message.reply_text('Ошибка при сохранении авторизации. Попробуйте позже.')
-            return
-        # Показываем кнопку для открытия мини-аппа сразу после авторизации (открывает второй экран меню)
-        web_app_base = os.getenv('WEB_APP_MENU_URL', os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/'))
-        menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
-        await update.message.reply_text(
-            'Откройте личный кабинет для выбора раздела',
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]])
-        )
-    else:
-        # Неудачная попытка
-        is_blocked, block_duration = add_failed_attempt(user.id)
-        attempts_left = MAX_AUTH_ATTEMPTS - (FAILED_AUTH_CACHE[user.id]['attempts'] if user.id in FAILED_AUTH_CACHE else 0)
+        # Пытаемся найти существующий thread
+        code = user_data.get('partner_code', '')
+        telegram_id = user_data.get('telegram_id', '')
         
-        if is_blocked:
-            hours = block_duration // 3600
-            if hours > 24:
-                days = hours // 24
-                time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
-            else:
-                time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
-            await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Авторизация заблокирована на {time_text}.')
-        else:
-            web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
-            keyboard = [[InlineKeyboardButton('Повторить авторизацию', web_app=WebAppInfo(url=web_app_url))]]
-            await update.message.reply_text(
-                f'❌ Неверные данные или аккаунт неактивен.\nОсталось попыток: {attempts_left}',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-
-async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    
-    # Очищаем все данные пользователя, включая кэш авторизации
-    context.user_data.clear()
-    refresh_authorized_cache()  # Принудительно обновляем кэш авторизованных пользователей
-    
-    logger.info(f'/new_chat от {user.id} - кэш очищен')
-    
-    # Проверяем авторизацию заново
-    if await is_user_authorized(user.id, context):
-        await update.message.reply_text('История диалога сброшена. Вы авторизованы и можете продолжить работу.')
-    else:
-        await update.message.reply_text('История диалога сброшена. Для работы требуется авторизация.')
-        # Показываем кнопку авторизации
-        web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
-        keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
-        await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Specialist can reply using: /reply <код> <текст ответа>
-    This will append the specialist's reply to the same ticket cell and forward the message to the user with that code.
-    """
-    user = update.effective_user
-    # Only allow authorized specialists/admins
-    if not await is_user_authorized(user.id, context) and not is_admin(user.id):
-        await update.message.reply_text('Недостаточно прав для выполнения этой команды.')
-        return
-    args = context.args
-    if len(args) < 2:
-        await update.message.reply_text('Использование: /reply <код> <текст ответа>')
-        return
-    code = args[0]
-    reply_text = ' '.join(args[1:])
-    try:
-        # find the ticket row by code and append specialist message
-        if not tickets_client or not tickets_client.sheet:
-            await update.message.reply_text('Tickets sheet не доступен.')
-            return
-        # offload blocking ops to thread
-        row = await asyncio.to_thread(tickets_client.find_row_by_code, code)
-        if not row:
-            await update.message.reply_text(f'Тикет с кодом {code} не найден.')
-            return
-        # read telegram_id in thread
-        telegram_id = await asyncio.to_thread(lambda r: tickets_client.sheet.cell(r, 4).value, row)
-        # upsert ticket in thread
-        await asyncio.to_thread(tickets_client.upsert_ticket, str(telegram_id), code, '', '', reply_text, 'в работе', 'specialist', False)
-        # Forward message to user (if telegram_id present)
-        if telegram_id:
+        if tickets_client and tickets_client.sheet:
+            # Ищем по коду партнера
+            if code:
+                thread_id = tickets_client.get_thread_id(code=code)
+                if thread_id:
+                    logger.info(f'Found existing thread {thread_id} for code {code}')
+                    return thread_id
+            
+            # Ищем по telegram_id
+            if telegram_id:
+                thread_id = tickets_client.get_thread_id(row=None, code=None)
+                if thread_id:
+                    logger.info(f'Found existing thread {thread_id} for telegram_id {telegram_id}')
+                    return thread_id
+        
+        # Создаем новый thread
+        thread_id = _create_or_get_thread(assistant_id=assistant_id, code=code, telegram_id=telegram_id)
+        if thread_id:
+            logger.info(f'Created new thread {thread_id}')
+            
+            # Сохраняем thread_id в таблицу
             try:
-                await context.bot.send_message(chat_id=int(telegram_id), text=f'Ответ специалиста (код {code}):\n{reply_text}')
+                if tickets_client and tickets_client.sheet:
+                    if code:
+                        row = tickets_client.find_row_by_code(code)
+                        if row:
+                            tickets_client.set_thread_id(row=row, code=None, thread_id=thread_id)
+                    elif telegram_id:
+                        # Ищем строку по telegram_id
+                        try:
+                            cell = tickets_client.sheet.find(str(telegram_id), in_column=4)
+                            if cell:
+                                tickets_client.set_thread_id(row=cell.row, code=None, thread_id=thread_id)
+                        except Exception:
+                            pass
             except Exception as e:
-                logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
-        await update.message.reply_text('Ответ добавлен в тикет и отправлен пользователю.')
-    except Exception as e:
-        logger.error(f'Ошибка в /reply: {e}')
-        await update.message.reply_text('Ошибка при добавлении ответа.')
-
-
-async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Allow admin/specialist to set status: /setstatus <код|row> <статус>"""
-    user = update.effective_user
-    if not await is_user_authorized(user.id, context) and not is_admin(user.id):
-        await update.message.reply_text('Недостаточно прав для изменения статуса.')
-        return
-    if len(context.args) < 2:
-        await update.message.reply_text('Использование: /setstatus <код> <статус>')
-        return
-    key = context.args[0]
-    status = ' '.join(context.args[1:])
-    try:
-        # Try interpret key as integer row index
-        row = None
-        if key.isdigit():
-            row = int(key)
-        # offload set_ticket_status to thread
-        success = await asyncio.to_thread(tickets_client.set_ticket_status, row, (None if row else key), status)
-        if success:
-            await update.message.reply_text(f'Статус для {key} обновлен на "{status}"')
-        else:
-            await update.message.reply_text('Не удалось обновить статус (тикет не найден или ошибка).')
-    except Exception as e:
-        logger.error(f'Ошибка в /setstatus: {e}')
-        await update.message.reply_text('Ошибка при обновлении статуса.')
-
-
-async def fix_telegram_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для исправления Telegram ID в таблице"""
-    user = update.effective_user
-    
-    if not sheets_client or not sheets_client.sheet:
-        await update.message.reply_text('База недоступна.')
-        return
-    
-    try:
-        # Run worker in thread
-        updated_count = await asyncio.to_thread(_fix_telegram_id_worker, user.id)
-        if updated_count == 0:
-            await update.message.reply_text('Не найдено авторизованных пользователей или обновлений не требовалось.')
-            return
-        await update.message.reply_text(
-            f'🔧 Обновлено {updated_count} записей.\n'
-            f'🆔 Ваш Telegram ID: {user.id}\n'
-            f'✅ Проверьте авторизацию командой /check_auth'
-        )
-        # refresh cache in thread
-        await asyncio.to_thread(refresh_authorized_cache)
-    except Exception as e:
-        logger.error(f'Ошибка в fix_telegram_id: {e}')
-        await update.message.reply_text('Ошибка при обновлении Telegram ID.')
-
-
-async def check_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для проверки авторизации пользователя"""
-    user = update.effective_user
-    
-    # Очищаем кэш авторизаций
-    AUTH_CACHE['ids'] = set()
-    AUTH_CACHE['ts'] = 0
-    refresh_authorized_cache()
-    
-    # Проверяем авторизацию
-    is_auth = await is_user_authorized(user.id, context)
-    
-    authorized_ids = get_authorized_ids()
-    
-    # Добавляем отладочную информацию о Google Sheets
-    sheets_info = "❌ Недоступно"
-    if sheets_client and sheets_client.sheet:
-        try:
-            def _read_sample():
-                auth_statuses = sheets_client.sheet.col_values(4)[:10]
-                telegram_ids = sheets_client.sheet.col_values(5)[:10]
-                return auth_statuses, telegram_ids
-            auth_statuses, telegram_ids = await asyncio.to_thread(_read_sample)
-            sheets_info = f"✅ Подключено\nСтатусы (D): {auth_statuses}\nTelegram ID (E): {telegram_ids}"
-        except Exception as e:
-            sheets_info = f"⚠️ Ошибка чтения: {e}"
-    
-    await update.message.reply_text(
-        f'🔍 Проверка авторизации:\n'
-        f'🆔 Ваш ID: {user.id}\n'
-        f'✅ Авторизован: {"Да" if is_auth else "Нет"}\n'
-        f'📊 Количество авторизованных: {len(authorized_ids) if authorized_ids else 0}\n'
-        f'📊 Авторизованные ID: {list(authorized_ids)[:5] if authorized_ids else []}{"..." if authorized_ids and len(authorized_ids) > 5 else ""}\n'
-        f'📋 Google Sheets: {sheets_info}'
-    )
-
-
-async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для очистки кэша авторизаций и принудительного обновления"""
-    user = update.effective_user
-    
-    # Очищаем глобальный кэш авторизаций
-    AUTH_CACHE['ids'] = set()
-    AUTH_CACHE['ts'] = 0
-    
-    # Принудительно обновляем кэш
-    refresh_authorized_cache()
-    
-    logger.info(f'/push от {user.id} - кэш авторизаций очищен и обновлен')
-    
-    # Проверяем авторизацию заново
-    if await is_user_authorized(user.id, context):
-        await update.message.reply_text('Кэш очищен. Вы авторизованы.')
-    else:
-        await update.message.reply_text('Кэш очищен. Требуется авторизация.')
-        # Показываем кнопку авторизации
-        web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
-        keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
-        await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-def _get_ticket_row_by_code_or_telegram(code: str | None, telegram_id: str | None) -> int | None:
-    try:
-        if code:
-            row = tickets_client.find_row_by_code(code)
-            if row:
-                return row
-        if telegram_id:
-            try:
-                cell = tickets_client.sheet.find(str(telegram_id), in_column=4)
-                if cell:
-                    return cell.row
-            except Exception:
-                return None
-    except Exception:
+                logger.warning(f'Failed to save thread_id to sheet: {e}')
+            
+            return thread_id
+        
         return None
-    return None
-
-
-def _fix_telegram_id_worker(new_id: int) -> int:
-    """Worker to run in thread: find rows with status 'авторизован' and update column 5 with new_id."""
-    try:
-        all_statuses = sheets_client.sheet.col_values(4)
-        found_rows = []
-        for i, status in enumerate(all_statuses[1:], start=2):  # skip header
-            if status and str(status).strip() == 'авторизован':
-                found_rows.append(i)
-        updated_count = 0
-        for row in found_rows:
-            current_id = sheets_client.sheet.cell(row, 5).value
-            if current_id != str(new_id):
-                sheets_client.sheet.update_cell(row, 5, str(new_id))
-                updated_count += 1
-        # clear cache trigger
-        AUTH_CACHE['ids'] = set()
-        AUTH_CACHE['ts'] = 0
-        return updated_count
-    except Exception:
-        return 0
+        
+    except Exception as e:
+        logger.error(f'Error in get_or_create_thread: {e}')
+        return None
 
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -783,10 +479,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         resize_keyboard=True,
         one_time_keyboard=False
     )
+    
     if not await is_user_authorized(user.id, context):
         await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
         return
+    
     text = update.message.text
+    
     # Если пользователь нажал на persistent кнопку
     if text.strip().lower() == 'личный кабинет':
         # Build Web App buttons so the user opens the mini‑app directly (deep link to a section)
@@ -800,7 +499,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send inline WebApp menu; the persistent ReplyKeyboardMarkup remains available on client
         await update.message.reply_text('Откройте личный кабинет для выбора раздела', reply_markup=InlineKeyboardMarkup(keyboard))
         return
-    # Простая реализация: отправляем запрос только в OpenAI Assistant
+    
+    # Проверяем настройки OpenAI
     if not openai.api_key:
         await update.message.reply_text('OpenAI ключ не настроен. Обратитесь к администратору.', reply_markup=persistent_keyboard)
         return
@@ -810,38 +510,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('OpenAI Assistant не настроен. Обратитесь к администратору.', reply_markup=persistent_keyboard)
         return
 
-    # Делать вызов OpenAI с семафором и retry/backoff
+    # Делаем вызов OpenAI с семафором и retry/backoff
     async with OPENAI_SEMAPHORE:
         retry = 0
         max_retry = int(os.getenv('OPENAI_MAX_RETRY', '2'))
         backoff_base = float(os.getenv('OPENAI_BACKOFF_BASE', '0.8'))
+        
         while True:
             try:
-                assistant_msg = None
-                # Используем только OpenAI Assistant API
-                if assistant_id and tickets_client and tickets_client.sheet:
-                    code = context.user_data.get('partner_code', '')
-                    telegram_id = str(update.effective_user.id)
-                    thread_id = tickets_client.get_thread_id(code=code) if code else tickets_client.get_thread_id(row=None, code=None)
-                    if not thread_id:
-                        thread_id = _create_or_get_thread(assistant_id=assistant_id, code=code or None, telegram_id=telegram_id)
-                        if thread_id:
-                            try:
-                                tickets_client.upsert_ticket(telegram_id=telegram_id, code=code, phone=context.user_data.get('phone',''), fio=f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip(), text=text, status='в работе')
-                                row = tickets_client.find_row_by_code(code) if code else None
-                                tickets_client.set_thread_id(row=row, code=code or None, thread_id=thread_id)
-                            except Exception as e:
-                                logger.debug(f'Не удалось сохранить thread_id в таблицу: {e}')
-                    if thread_id:
-                        logger.info(f'Sending message to OpenAI Assistant thread {thread_id}: {text[:100]}...')
-                        assistant_msg = _send_message_in_thread(assistant_id=assistant_id, thread_id=thread_id, text=text)
-                        logger.info(f'Received response from Assistant: {assistant_msg[:100] if assistant_msg else "None"}...')
+                # Получаем или создаем thread_id
+                user_data = {
+                    'partner_code': context.user_data.get('partner_code', ''),
+                    'telegram_id': str(update.effective_user.id)
+                }
+                
+                thread_id = get_or_create_thread(assistant_id=assistant_id, user_data=user_data)
+                if not thread_id:
+                    await update.message.reply_text('Ошибка создания или получения thread_id. Попробуйте позже.', reply_markup=persistent_keyboard)
+                    return
+                
+                # Отправляем сообщение в OpenAI Assistant
+                logger.info(f'Sending message to OpenAI Assistant thread {thread_id}: {text[:100]}...')
+                assistant_msg = _send_message_in_thread(assistant_id=assistant_id, thread_id=thread_id, text=text)
+                logger.info(f'Received response from Assistant: {assistant_msg[:100] if assistant_msg else "None"}...')
                 
                 if not assistant_msg:
                     await update.message.reply_text('Ошибка получения ответа от ассистента. Попробуйте позже.', reply_markup=persistent_keyboard)
                     return
-                    
+                
                 break
+                
             except Exception as e:
                 retry += 1
                 err_str = str(e)
@@ -852,32 +550,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
                 wait = backoff_base * (2 ** (retry-1))
                 await asyncio.sleep(wait)
-        if not locals().get('assistant_msg'):
-            logger.error('OpenAI Assistant не вернул ответ')
-            await update.message.reply_text('Ассистент не ответил. Попробуйте ещё раз.', reply_markup=persistent_keyboard)
-            return
         
-        # OpenAI Assistant управляет своей историей, не нужно сохранять в context.user_data
+        # Создаем кнопки для управления тикетом
         buttons = None
         try:
             code = context.user_data.get('partner_code', '')
-            row = tickets_client.find_row_by_code(code) if code else None
-            if not row:
+            row = None
+            if code and tickets_client:
+                row = tickets_client.find_row_by_code(code)
+            if not row and tickets_client:
                 try:
                     cell = tickets_client.sheet.find(str(update.effective_user.id), in_column=4)
                     row = cell.row if cell else None
                 except Exception:
                     row = None
+            
             if row:
-                # Создаем кнопку для личного кабинета
+                # Создаем кнопки для управления тикетом
                 web_app_base = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
                 menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
                 buttons = [
                     [InlineKeyboardButton('Перевести специалисту', callback_data=f't:transfer:{row}'), InlineKeyboardButton('Выполнено', callback_data=f't:done:{row}')],
                     [InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]
                 ]
-        except Exception:
+        except Exception as e:
+            logger.warning(f'Failed to create ticket buttons: {e}')
             buttons = None
+        
+        # Извлекаем текст из ответа ассистента
         def extract_text(obj):
             import collections.abc
             if obj is None:
@@ -911,31 +611,435 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if s and s != repr(obj):
                 return s
             return ''
+        
         assistant_msg = extract_text(assistant_msg)
         if not assistant_msg or not isinstance(assistant_msg, str):
             assistant_msg = 'Ошибка: не удалось получить текст ответа.'
         
-        # Replace unwanted text patterns
+        # Заменяем нежелательные паттерны
         assistant_msg = assistant_msg.replace('annotations value', 'Вера')
         logger.info(f'Sending response to user. Has buttons: {buttons is not None}. Message: {assistant_msg[:100]}...')
+        
         if buttons:
             # Send message with inline action buttons; persistent keyboard remains available to the user
             await update.message.reply_text(assistant_msg, reply_markup=InlineKeyboardMarkup(buttons))
         else:
             await update.message.reply_text(assistant_msg, reply_markup=persistent_keyboard)
-        # Always log to Обращения sheet via tickets_client
+        
+        # Логируем ответ ассистента в таблицу обращений
         try:
             if tickets_client and tickets_client.sheet:
                 telegram_id = update.effective_user.id
                 code = context.user_data.get('partner_code', '')
                 phone = context.user_data.get('phone', '')
                 fio = f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
-                # offload ticket upsert to avoid blocking
-                await asyncio.to_thread(tickets_client.upsert_ticket, str(telegram_id), code, phone, fio, assistant_msg, 'в работе', 'assistant', False)
+                
+                await asyncio.to_thread(
+                    tickets_client.upsert_ticket, 
+                    str(telegram_id), code, phone, fio, 
+                    assistant_msg, 'в работе', 'assistant', False
+                )
         except Exception as e:
             logger.error(f'Не удалось записать ответ ассистента в tickets: {e}')
     
     logger.info(f'Completed processing message {message_id} from user {user.id}')
+
+# Обработчики
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    logger.info(f'/start от {user.id} ({user.first_name})')
+    if await is_user_authorized(user.id, context):
+        # Persistent меню с кнопкой /menu
+        from telegram import ReplyKeyboardMarkup, KeyboardButton
+        web_app_base = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+        kb_button = KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=web_app_base))
+        persistent_keyboard = ReplyKeyboardMarkup(
+            [[kb_button]],
+            resize_keyboard=True,
+            one_time_keyboard=False
+        )
+        await update.message.reply_text(
+            'Вы уже авторизованы и готовы к работе!\nНажмите кнопку ниже, чтобы открыть личный кабинет.',
+            reply_markup=persistent_keyboard
+        )
+        return
+    web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+    keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
+    await update.message.reply_text(f'Привет, {user.first_name}! Нажми кнопку чтобы авторизоваться.', reply_markup=InlineKeyboardMarkup(keyboard))
+
+def validate_payload(payload: dict) -> tuple[bool, str]:
+    """Валидирует входящие данные от веб-приложения. Возвращает (валидно, сообщение об ошибке)."""
+    if not isinstance(payload, dict):
+        return False, "Неверный формат данных"
+    
+    # Проверяем тип данных
+    data_type = payload.get('type')
+    
+    if data_type == 'menu_selection':
+        # Проверяем данные выбора раздела
+        section = payload.get('section')
+        if not section or not isinstance(section, str):
+            return False, "Не указан раздел меню"
+        if section not in SECTIONS:
+            return False, f"Неизвестный раздел: {section}"
+        return True, ""
+    
+    else:
+        # Проверяем данные авторизации
+        code = payload.get('code')
+        phone = payload.get('phone')
+        
+        if not code or not isinstance(code, str):
+            return False, "Не указан код партнера"
+        if not phone or not isinstance(phone, str):
+            return False, "Не указан номер телефона"
+        if len(code.strip()) < 3:
+            return False, "Код партнера слишком короткий"
+        if len(phone.strip()) < 10:
+            return False, "Номер телефона слишком короткий"
+        
+        return True, ""
+
+async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает данные от веб-приложения. Определяет тип данных и направляет в соответствующий обработчик."""
+    user = update.effective_user
+    logger.info(f'Web app data received from user {user.id}')
+    
+    try:
+        payload = json.loads(update.message.web_app_data.data)
+        logger.info(f'Parsed web app payload: {payload}')
+    except Exception as e:
+        logger.error(f'Failed to parse web app data: {e}')
+        await update.message.reply_text('Не удалось прочитать данные от Web App')
+        return
+    
+    # Валидируем входящие данные
+    is_valid, error_message = validate_payload(payload)
+    if not is_valid:
+        logger.warning(f'Invalid payload from user {user.id}: {error_message}')
+        await update.message.reply_text(f'❌ Ошибка в данных: {error_message}')
+        return
+    
+    # Определяем тип данных и направляем в соответствующий обработчик
+    if isinstance(payload, dict) and payload.get('type') == 'menu_selection':
+        await handle_menu_selection(update, context, payload)
+    else:
+        await handle_authorization(update, context, payload)
+
+async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
+    """Обрабатывает выбор раздела меню от пользователя."""
+    user = update.effective_user
+    section = payload.get('section')
+    
+    if not await is_user_authorized(user.id, context):
+        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+        return
+    
+    # Логируем выбор раздела как тикет
+    try:
+        if tickets_client and tickets_client.sheet:
+            telegram_id = str(user.id)
+            code = context.user_data.get('partner_code', '')
+            phone = context.user_data.get('phone', '')
+            fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
+            
+            await asyncio.to_thread(
+                tickets_client.upsert_ticket, 
+                telegram_id, code, phone, fio, 
+                f"Запрос: {section}", 'в работе', 'user', False
+            )
+    except Exception as e:
+        logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
+    
+    await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
+    
+    # Уведомляем администраторов
+    try:
+        admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
+        for aid in admin_ids:
+            try:
+                await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
+    """Обрабатывает данные авторизации от пользователя."""
+    user = update.effective_user
+    
+    # Проверяем блокировку
+    is_blocked, seconds_left = is_user_blocked(user.id)
+    if is_blocked:
+        hours = seconds_left // 3600
+        minutes = (seconds_left % 3600) // 60
+        if hours > 24:
+            days = hours // 24
+            time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
+        elif hours > 0:
+            time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
+        else:
+            time_text = f"{minutes} минут"
+        await update.message.reply_text(f'❌ Авторизация заблокирована на {time_text}.')
+        return
+    
+    code = payload.get('code')
+    phone = payload.get('phone')
+    
+    if not code or not phone:
+        await update.message.reply_text('❌ Необходимо указать код партнера и телефон.')
+        return
+    
+    logger.info(f'Authorization attempt: code={code}, phone={phone[-4:] if phone else None}***')
+    
+    # Отправляем подтверждение
+    await update.message.reply_text('Проверяю данные...')
+    
+    # Проверяем доступность Google Sheets
+    if not sheets_client or not sheets_client.sheet:
+        logger.error('Google Sheets client not available')
+        await update.message.reply_text('База недоступна. Свяжитесь с админом.')
+        return
+    
+    # Выполняем проверку авторизации
+    try:
+        logger.info(f'Looking up user credentials in Google Sheets...')
+        row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone)
+        logger.info(f'Credentials lookup result: row={row}')
+    except Exception as e:
+        logger.error(f'Error during credentials lookup: {e}')
+        await update.message.reply_text('Ошибка проверки данных. Попробуйте позже.')
+        return
+    
+    if row:
+        # Успешная авторизация
+        try:
+            logger.info(f'Updating auth status for user {user.id} in row {row}')
+            await asyncio.to_thread(sheets_client.update_user_auth_status, row, update.effective_user.id)
+            
+            # Обновляем данные пользователя
+            context.user_data['is_authorized'] = True
+            context.user_data['partner_code'] = code
+            context.user_data['phone'] = phone
+            context.user_data['auth_timestamp'] = time.time()
+            
+            clear_failed_attempts(user.id)
+            
+            logger.info(f'Authorization successful for user {user.id}')
+            await update.message.reply_text('✅ Авторизация прошла успешно!')
+            
+            # Показываем кнопку для открытия личного кабинета
+            web_app_base = os.getenv('WEB_APP_MENU_URL', os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/'))
+            menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
+            await update.message.reply_text(
+                'Откройте личный кабинет для выбора раздела',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]])
+            )
+            
+        except Exception as e:
+            logger.error(f'Error updating auth status: {e}')
+            await update.message.reply_text('Ошибка при сохранении авторизации. Попробуйте позже.')
+            return
+    else:
+        # Неудачная попытка авторизации
+        is_blocked, block_duration = add_failed_attempt(user.id)
+        attempts_left = MAX_AUTH_ATTEMPTS - (FAILED_AUTH_CACHE[user.id]['attempts'] if user.id in FAILED_AUTH_CACHE else 0)
+        
+        if is_blocked:
+            hours = block_duration // 3600
+            if hours > 24:
+                days = hours // 24
+                time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
+            else:
+                time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
+            await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Авторизация заблокирована на {time_text}.')
+        else:
+            web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+            keyboard = [[InlineKeyboardButton('Повторить авторизацию', web_app=WebAppInfo(url=web_app_url))]]
+            await update.message.reply_text(
+                f'❌ Неверные данные или аккаунт неактивен.\nОсталось попыток: {attempts_left}',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    
+    # Очищаем все данные пользователя
+    context.user_data.clear()
+    
+    logger.info(f'/new_chat от {user.id} - кэш очищен')
+    
+    # Проверяем авторизацию заново
+    if await is_user_authorized(user.id, context):
+        await update.message.reply_text('История диалога сброшена. Вы авторизованы и можете продолжить работу.')
+    else:
+        await update.message.reply_text('История диалога сброшена. Для работы требуется авторизация.')
+        # Показываем кнопку авторизации
+        web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+        keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
+        await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Specialist can reply using: /reply <код> <текст ответа>
+    This will append the specialist's reply to the same ticket cell and forward the message to the user with that code.
+    """
+    user = update.effective_user
+    # Only allow authorized specialists/admins
+    if not await is_user_authorized(user.id, context) and not is_admin(user.id):
+        await update.message.reply_text('Недостаточно прав для выполнения этой команды.')
+        return
+    args = context.args
+    if len(args) < 2:
+        await update.message.reply_text('Использование: /reply <код> <текст ответа>')
+        return
+    code = args[0]
+    reply_text = ' '.join(args[1:])
+    try:
+        # find the ticket row by code and append specialist message
+        if not tickets_client or not tickets_client.sheet:
+            await update.message.reply_text('Tickets sheet не доступен.')
+            return
+        # offload blocking ops to thread
+        row = await asyncio.to_thread(tickets_client.find_row_by_code, code)
+        if not row:
+            await update.message.reply_text(f'Тикет с кодом {code} не найден.')
+            return
+        # read telegram_id in thread
+        telegram_id = await asyncio.to_thread(lambda r: tickets_client.sheet.cell(r, 4).value, row)
+        # upsert ticket in thread
+        await asyncio.to_thread(tickets_client.upsert_ticket, str(telegram_id), code, '', '', reply_text, 'в работе', 'specialist', False)
+        # Forward message to user (if telegram_id present)
+        if telegram_id:
+            try:
+                await context.bot.send_message(chat_id=int(telegram_id), text=f'Ответ специалиста (код {code}):\n{reply_text}')
+            except Exception as e:
+                logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
+        await update.message.reply_text('Ответ добавлен в тикет и отправлен пользователю.')
+    except Exception as e:
+        logger.error(f'Ошибка в /reply: {e}')
+        await update.message.reply_text('Ошибка при добавлении ответа.')
+
+async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Allow admin/specialist to set status: /setstatus <код|row> <статус>"""
+    user = update.effective_user
+    if not await is_user_authorized(user.id, context) and not is_admin(user.id):
+        await update.message.reply_text('Недостаточно прав для изменения статуса.')
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text('Использование: /setstatus <код> <статус>')
+        return
+    key = context.args[0]
+    status = ' '.join(context.args[1:])
+    try:
+        # Try interpret key as integer row index
+        row = None
+        if key.isdigit():
+            row = int(key)
+        # offload set_ticket_status to thread
+        success = await asyncio.to_thread(tickets_client.set_ticket_status, row, (None if row else key), status)
+        if success:
+            await update.message.reply_text(f'Статус для {key} обновлен на "{status}"')
+        else:
+            await update.message.reply_text('Не удалось обновить статус (тикет не найден или ошибка).')
+    except Exception as e:
+        logger.error(f'Ошибка в /setstatus: {e}')
+        await update.message.reply_text('Ошибка при обновлении статуса.')
+
+async def fix_telegram_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для исправления Telegram ID в таблице"""
+    user = update.effective_user
+    
+    if not sheets_client or not sheets_client.sheet:
+        await update.message.reply_text('База недоступна.')
+        return
+    
+    try:
+        # Run worker in thread
+        updated_count = await asyncio.to_thread(_fix_telegram_id_worker, user.id)
+        if updated_count == 0:
+            await update.message.reply_text('Не найдено авторизованных пользователей или обновлений не требовалось.')
+            return
+        await update.message.reply_text(
+            f'🔧 Обновлено {updated_count} записей.\n'
+            f'🆔 Ваш Telegram ID: {user.id}\n'
+            f'✅ Проверьте авторизацию командой /check_auth'
+        )
+        # refresh cache in thread
+        await asyncio.to_thread(refresh_authorized_cache)
+    except Exception as e:
+        logger.error(f'Ошибка в fix_telegram_id: {e}')
+        await update.message.reply_text('Ошибка при обновлении Telegram ID.')
+
+async def check_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для проверки авторизации пользователя"""
+    user = update.effective_user
+    
+    # Проверяем авторизацию
+    is_auth = await is_user_authorized(user.id, context)
+    
+    authorized_ids = get_authorized_ids()
+    
+    # Добавляем отладочную информацию о Google Sheets
+    sheets_info = "❌ Недоступно"
+    if sheets_client and sheets_client.sheet:
+        try:
+            def _read_sample():
+                auth_statuses = sheets_client.sheet.col_values(4)[:10]
+                telegram_ids = sheets_client.sheet.col_values(5)[:10]
+                return auth_statuses, telegram_ids
+            auth_statuses, telegram_ids = await asyncio.to_thread(_read_sample)
+            sheets_info = f"✅ Подключено\nСтатусы (D): {auth_statuses}\nTelegram ID (E): {telegram_ids}"
+        except Exception as e:
+            sheets_info = f"⚠️ Ошибка чтения: {e}"
+    
+    await update.message.reply_text(
+        f'🔍 Проверка авторизации:\n'
+        f'🆔 Ваш ID: {user.id}\n'
+        f'✅ Авторизован: {"Да" if is_auth else "Нет"}\n'
+        f'📊 Количество авторизованных: {len(authorized_ids) if authorized_ids else 0}\n'
+        f'📊 Авторизованные ID: {list(authorized_ids)[:5] if authorized_ids else []}{"..." if authorized_ids and len(authorized_ids) > 5 else ""}\n'
+        f'📋 Google Sheets: {sheets_info}'
+    )
+
+async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для очистки кэша авторизаций и принудительного обновления"""
+    user = update.effective_user
+    
+    # Очищаем кэш в контексте пользователя
+    if 'is_authorized' in context.user_data:
+        del context.user_data['is_authorized']
+    if 'auth_timestamp' in context.user_data:
+        del context.user_data['auth_timestamp']
+    
+    logger.info(f'/push от {user.id} - кэш авторизаций очищен')
+    
+    # Проверяем авторизацию заново
+    if await is_user_authorized(user.id, context):
+        await update.message.reply_text('Кэш очищен. Вы авторизованы.')
+    else:
+        await update.message.reply_text('Кэш очищен. Требуется авторизация.')
+        # Показываем кнопку авторизации
+        web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+        keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
+        await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
+
+def _fix_telegram_id_worker(new_id: int) -> int:
+    """Worker to run in thread: find rows with status 'авторизован' and update column 5 with new_id."""
+    try:
+        all_statuses = sheets_client.sheet.col_values(4)
+        found_rows = []
+        for i, status in enumerate(all_statuses[1:], start=2):  # skip header
+            if status and str(status).strip() == 'авторизован':
+                found_rows.append(i)
+        updated_count = 0
+        for row in found_rows:
+            current_id = sheets_client.sheet.cell(row, 5).value
+            if current_id != str(new_id):
+                sheets_client.sheet.update_cell(row, 5, str(new_id))
+                updated_count += 1
+        return updated_count
+    except Exception:
+        return 0
 
 # Запуск
 def main():
