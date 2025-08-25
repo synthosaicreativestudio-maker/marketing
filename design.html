@@ -64,7 +64,8 @@
             backBtn.textContent = '← Назад в главное меню';
             backBtn.onclick = () => {
                 try{
-                    tg.sendData(JSON.stringify({type: 'back_to_main'}));
+                    tg.sendData(JSON.stringify({type: 'direct_webapp', section: 'Главное меню', webapp_url: 'https://synthosaicreativestudio-maker.github.io/marketing/mini_app.html'}));
+                    backBtn.textContent = 'Возвращаемся...';
                     setTimeout(()=>tg.close(), 300);
                 }catch(e){ tg.close(); }
             };
