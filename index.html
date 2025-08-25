@@ -212,7 +212,23 @@
             }
             
             console.log('Sending to bot:', {code, phone: phone.substring(0,3) + '***'});
-            tg.sendData(JSON.stringify({code, phone}));
+            
+            // Проверяем доступность tg.sendData
+            if (typeof tg.sendData !== 'function') {
+                console.error('tg.sendData is not available!');
+                tg.showAlert('Ошибка: функция отправки недоступна');
+                return;
+            }
+            
+            try {
+                const data = JSON.stringify({code, phone});
+                console.log('Data to send:', data);
+                tg.sendData(data);
+                console.log('Data sent successfully');
+            } catch (error) {
+                console.error('Error sending data:', error);
+                tg.showAlert('Ошибка при отправке: ' + error.message);
+            }
         }
 
         // --- Second mini-app: menu screen ---

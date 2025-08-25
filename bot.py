@@ -439,11 +439,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def validate_payload(payload: dict) -> tuple[bool, str]:
     """Валидирует входящие данные от веб-приложения. Возвращает (валидно, сообщение об ошибке)."""
+    logger.info(f'Validating payload: {payload}')
+    
     if not isinstance(payload, dict):
+        logger.warning(f'Payload is not a dict: {type(payload)}')
         return False, "Неверный формат данных"
     
     # Проверяем тип данных
     data_type = payload.get('type')
+    logger.info(f'Payload type: {data_type}')
     
     if data_type == 'menu_selection':
         # Проверяем данные выбора раздела
@@ -459,15 +463,22 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
         code = payload.get('code')
         phone = payload.get('phone')
         
+        logger.info(f'Auth validation: code={code}, phone={phone}')
+        
         if not code or not isinstance(code, str):
+            logger.warning(f'Invalid code: {code} (type: {type(code)})')
             return False, "Не указан код партнера"
         if not phone or not isinstance(phone, str):
+            logger.warning(f'Invalid phone: {phone} (type: {type(phone)})')
             return False, "Не указан номер телефона"
         if len(code.strip()) < 3:
+            logger.warning(f'Code too short: {code}')
             return False, "Код партнера слишком короткий"
         if len(phone.strip()) < 10:
+            logger.warning(f'Phone too short: {phone}')
             return False, "Номер телефона слишком короткий"
         
+        logger.info(f'Payload validation successful')
         return True, ""
 
 async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -475,11 +486,22 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     logger.info(f'Web app data received from user {user.id}')
     
+    # Проверяем структуру update
+    logger.info(f'Update structure: message={hasattr(update, "message")}, web_app_data={hasattr(update.message, "web_app_data") if hasattr(update, "message") else False}')
+    
+    if not hasattr(update, 'message') or not hasattr(update.message, 'web_app_data'):
+        logger.error(f'No web_app_data in update: {update}')
+        await update.message.reply_text('Ошибка: данные от Web App не получены')
+        return
+    
     try:
-        payload = json.loads(update.message.web_app_data.data)
+        raw_data = update.message.web_app_data.data
+        logger.info(f'Raw web app data: {raw_data}')
+        payload = json.loads(raw_data)
         logger.info(f'Parsed web app payload: {payload}')
     except Exception as e:
         logger.error(f'Failed to parse web app data: {e}')
+        logger.error(f'Raw data was: {update.message.web_app_data.data if hasattr(update.message, "web_app_data") else "No web_app_data"}')
         await update.message.reply_text('Не удалось прочитать данные от Web App')
         return
     
@@ -492,8 +514,10 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Определяем тип данных и направляем в соответствующий обработчик
     if isinstance(payload, dict) and payload.get('type') == 'menu_selection':
+        logger.info(f'Routing to menu selection handler')
         await handle_menu_selection(update, context, payload)
     else:
+        logger.info(f'Routing to authorization handler')
         await handle_authorization(update, context, payload)
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
