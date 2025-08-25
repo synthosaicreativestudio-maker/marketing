@@ -297,19 +297,24 @@ class GoogleSheetsClient:
 
             if cell:
                 row = cell.row
-                # Обновляем tickets (колонка 5) добавляя новую запись как продолжение
+                # Обновляем tickets (колонка 5) добавляя новую запись вВЕРХ (новые сообщения сверху)
                 current = self.sheet.cell(row, 5).value or ''
                 if current:
-                    updated = current + '\n\n' + new_entry
+                    updated = new_entry + '\n\n' + current  # Новое сообщение вверху
                 else:
                     updated = new_entry
                 self.sheet.update_cell(row, 5, updated)
-                # Determine status: assistant handled -> 'выполнено' if handled True;
-                # specialist -> 'в работе'; otherwise use provided status.
+                # Определяем новый статус с учетом предыдущего
+                current_status = self.sheet.cell(row, 6).value or ''
+                
                 if sender_type == 'assistant' and handled:
                     new_status = 'выполнено'
                 elif sender_type == 'specialist':
                     new_status = 'в работе'
+                elif sender_type == 'user' and current_status.lower() in ('выполнено', 'completed', 'done'):
+                    # Если пользователь пишет к выполненной задаче - возвращаем в работу
+                    new_status = 'в работе'
+                    logger.info(f'Статус изменен с "выполнено" на "в работе" для пользователя {telegram_id}')
                 else:
                     new_status = status
                 self.sheet.update_cell(row, 6, new_status)

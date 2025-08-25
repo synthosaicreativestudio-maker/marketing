@@ -268,6 +268,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text('WebApp должен открыться автоматически. Если нет - используйте кнопку снизу.', reply_markup=persistent_keyboard)
             return
     
+    # Логируем входящее сообщение пользователя
+    try:
+        if tickets_client and tickets_client.sheet:
+            telegram_id = update.effective_user.id
+            code = context.user_data.get('partner_code', '')
+            phone = context.user_data.get('phone', '')
+            fio = f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
+            
+            await asyncio.to_thread(
+                tickets_client.upsert_ticket, 
+                str(telegram_id), code, phone, fio, 
+                text, 'в работе', 'user', False
+            )
+    except Exception as e:
+        logger.error(f'Не удалось записать входящее сообщение в tickets: {e}')
+    
     # Проверяем настройки OpenAI
     if not openai_client.is_available():
         await update.message.reply_text('OpenAI недоступен. Обратитесь к администратору.', reply_markup=persistent_keyboard)
