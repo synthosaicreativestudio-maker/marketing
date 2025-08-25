@@ -22,7 +22,7 @@ from sheets_client import GoogleSheetsClient
 from urllib.parse import urlencode
 
 # Импорты новых модулей
-from config import SECTIONS, get_web_app_url, get_ticket_status
+from config import SECTIONS, get_web_app_url, get_ticket_status, SECTION_TO_WEBAPP, SUBSECTIONS
 from auth_cache import auth_cache
 from openai_client import openai_client
 from process_lock import ProcessLock
@@ -250,8 +250,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f'Processing message {message_id} from user {user.id}: {update.message.text[:50]}...')
     
     from telegram import ReplyKeyboardMarkup, KeyboardButton
+    menu_url = get_web_app_url('MENU')
     persistent_keyboard = ReplyKeyboardMarkup(
-        [[KeyboardButton('Личный кабинет')]],
+        [[KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]],
         resize_keyboard=True,
         one_time_keyboard=False
     )
@@ -262,18 +263,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = update.message.text
     
-    # Если пользователь нажал на persistent кнопку
+    # Если пользователь нажал на persistent кнопку (теперь WebApp открывается сразу)
     if text.strip().lower() == 'личный кабинет':
-            # Build Web App buttons so the user opens the mini‑app directly (deep link to a section)
-            web_app_base = get_web_app_url('MAIN')
-            keyboard = []
-            for section in SECTIONS:
-                params = urlencode({'section': section})
-                url = f"{web_app_base.rstrip('/')}?{params}"
-                keyboard.append([InlineKeyboardButton(section, web_app=WebAppInfo(url=url))])
-            keyboard.append([InlineKeyboardButton('Открыть миниапп', web_app=WebAppInfo(url=web_app_base))])
-            # Send inline WebApp menu; the persistent ReplyKeyboardMarkup remains available on client
-            await update.message.reply_text('Откройте личный кабинет для выбора раздела', reply_markup=InlineKeyboardMarkup(keyboard))
+            await update.message.reply_text('WebApp должен открыться автоматически. Если нет - используйте кнопку снизу.', reply_markup=persistent_keyboard)
             return
     
     # Проверяем настройки OpenAI
@@ -308,6 +300,101 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text('Ошибка получения ответа от ассистента. Попробуйте позже.', reply_markup=persistent_keyboard)
                 return
             
+            # Создаем кнопки для управления тикетом
+            buttons = None
+            try:
+                code = context.user_data.get('partner_code', '')
+                row = None
+                if code and tickets_client:
+                    row = tickets_client.find_row_by_code(code)
+                if not row and tickets_client:
+                    try:
+                        cell = tickets_client.sheet.find(str(update.effective_user.id), in_column=4)
+                        row = cell.row if cell else None
+                    except Exception:
+                        row = None
+                
+                if row:
+                    # Создаем кнопки для управления тикетом
+                    menu_url = get_web_app_url('MENU')
+                    buttons = [
+                        [InlineKeyboardButton('Перевести специалисту', callback_data=f't:transfer:{row}'), InlineKeyboardButton('Выполнено', callback_data=f't:done:{row}')],
+                        [InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]
+                    ]
+            except Exception as e:
+                logger.warning(f'Failed to create ticket buttons: {e}')
+                buttons = None
+            
+            # Извлекаем текст из ответа ассистента
+            def extract_text(obj):
+                import collections.abc
+                if obj is None:
+                    return ''
+                if isinstance(obj, str):
+                    return obj
+                if isinstance(obj, bytes):
+                    try:
+                        return obj.decode('utf-8')
+                    except Exception:
+                        return ''
+                if isinstance(obj, collections.abc.Mapping):
+                    parts = []
+                    for v in obj.values():
+                        t = extract_text(v)
+                        if t:
+                            parts.append(t)
+                    return '\n'.join(parts)
+                if isinstance(obj, collections.abc.Iterable) and not isinstance(obj, (str, bytes)):
+                    parts = [extract_text(el) for el in obj]
+                    return '\n'.join([p for p in parts if p])
+                for attr in ['text', 'content', 'value', 'message', 'output_text']:
+                    if hasattr(obj, attr):
+                        val = getattr(obj, attr)
+                        t = extract_text(val)
+                        if t:
+                            return t
+                s = str(obj)
+                if s.startswith('<') and s.endswith('>'):
+                    return ''
+                if s and s != repr(obj):
+                    return s
+                return ''
+            
+            assistant_msg = extract_text(assistant_msg)
+            if not assistant_msg or not isinstance(assistant_msg, str):
+                assistant_msg = 'Ошибка: не удалось получить текст ответа.'
+            
+            # Заменяем нежелательные паттерны
+            assistant_msg = assistant_msg.replace('annotations value', 'Вера')
+            logger.info(f'Sending response to user. Has buttons: {buttons is not None}. Message: {assistant_msg[:100]}...')
+            logger.info(f'DEBUG: About to send message via reply_text')
+            
+            if buttons:
+                # Send message with inline action buttons; persistent keyboard remains available to the user
+                logger.info(f'DEBUG: Sending with buttons')
+                await update.message.reply_text(assistant_msg, reply_markup=InlineKeyboardMarkup(buttons))
+            else:
+                logger.info(f'DEBUG: Sending with persistent keyboard')
+                await update.message.reply_text(assistant_msg, reply_markup=persistent_keyboard)
+            
+            logger.info(f'DEBUG: Message sent successfully')
+            
+            # Логируем ответ ассистента в таблицу обращений
+            try:
+                if tickets_client and tickets_client.sheet:
+                    telegram_id = update.effective_user.id
+                    code = context.user_data.get('partner_code', '')
+                    phone = context.user_data.get('phone', '')
+                    fio = f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
+                    
+                    await asyncio.to_thread(
+                        tickets_client.upsert_ticket, 
+                        str(telegram_id), code, phone, fio, 
+                        assistant_msg, 'в работе', 'assistant', False
+                    )
+            except Exception as e:
+                logger.error(f'Не удалось записать ответ ассистента в tickets: {e}')
+            
             break
             
         except Exception as e:
@@ -320,97 +407,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             wait = backoff_base * (2 ** (retry-1))
             await asyncio.sleep(wait)
-        
-        # Создаем кнопки для управления тикетом
-        buttons = None
-        try:
-            code = context.user_data.get('partner_code', '')
-            row = None
-            if code and tickets_client:
-                row = tickets_client.find_row_by_code(code)
-            if not row and tickets_client:
-                try:
-                    cell = tickets_client.sheet.find(str(update.effective_user.id), in_column=4)
-                    row = cell.row if cell else None
-                except Exception:
-                    row = None
-            
-            if row:
-                # Создаем кнопки для управления тикетом
-                web_app_base = get_web_app_url('MAIN')
-                menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
-                buttons = [
-                    [InlineKeyboardButton('Перевести специалисту', callback_data=f't:transfer:{row}'), InlineKeyboardButton('Выполнено', callback_data=f't:done:{row}')],
-                    [InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]
-                ]
-        except Exception as e:
-            logger.warning(f'Failed to create ticket buttons: {e}')
-            buttons = None
-        
-        # Извлекаем текст из ответа ассистента
-        def extract_text(obj):
-            import collections.abc
-            if obj is None:
-                return ''
-            if isinstance(obj, str):
-                return obj
-            if isinstance(obj, bytes):
-                try:
-                    return obj.decode('utf-8')
-                except Exception:
-                    return ''
-            if isinstance(obj, collections.abc.Mapping):
-                parts = []
-                for v in obj.values():
-                    t = extract_text(v)
-                    if t:
-                        parts.append(t)
-                return '\n'.join(parts)
-            if isinstance(obj, collections.abc.Iterable) and not isinstance(obj, (str, bytes)):
-                parts = [extract_text(el) for el in obj]
-                return '\n'.join([p for p in parts if p])
-            for attr in ['text', 'content', 'value', 'message', 'output_text']:
-                if hasattr(obj, attr):
-                    val = getattr(obj, attr)
-                    t = extract_text(val)
-                    if t:
-                        return t
-            s = str(obj)
-            if s.startswith('<') and s.endswith('>'):
-                return ''
-            if s and s != repr(obj):
-                return s
-            return ''
-        
-        assistant_msg = extract_text(assistant_msg)
-        if not assistant_msg or not isinstance(assistant_msg, str):
-            assistant_msg = 'Ошибка: не удалось получить текст ответа.'
-        
-        # Заменяем нежелательные паттерны
-        assistant_msg = assistant_msg.replace('annotations value', 'Вера')
-        logger.info(f'Sending response to user. Has buttons: {buttons is not None}. Message: {assistant_msg[:100]}...')
-        
-        if buttons:
-            # Send message with inline action buttons; persistent keyboard remains available to the user
-            await update.message.reply_text(assistant_msg, reply_markup=InlineKeyboardMarkup(buttons))
-        else:
-            await update.message.reply_text(assistant_msg, reply_markup=persistent_keyboard)
-        
-        # Логируем ответ ассистента в таблицу обращений
-        try:
-            if tickets_client and tickets_client.sheet:
-                telegram_id = update.effective_user.id
-                code = context.user_data.get('partner_code', '')
-                phone = context.user_data.get('phone', '')
-                fio = f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
-                
-                await asyncio.to_thread(
-                    tickets_client.upsert_ticket, 
-                    str(telegram_id), code, phone, fio, 
-                    assistant_msg, 'в работе', 'assistant', False
-                )
-        except Exception as e:
-            logger.error(f'Не удалось записать ответ ассистента в tickets: {e}')
     
     logger.info(f'Completed processing message {message_id} from user {user.id}')
 
@@ -421,8 +417,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await is_user_authorized(user.id, context):
         # Persistent меню с кнопкой /menu
         from telegram import ReplyKeyboardMarkup, KeyboardButton
-        web_app_base = get_web_app_url('MAIN')
-        kb_button = KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=web_app_base))
+        menu_url = get_web_app_url('MENU')
+        kb_button = KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))
         persistent_keyboard = ReplyKeyboardMarkup(
             [[kb_button]],
             resize_keyboard=True,
@@ -433,8 +429,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=persistent_keyboard
         )
         return
-    web_app_url = get_web_app_url('MAIN')
-    keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
+    auth_url = get_web_app_url('MAIN')
+    keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=auth_url))]]
     await update.message.reply_text(f'Привет, {user.first_name}! Нажми кнопку чтобы авторизоваться.', reply_markup=InlineKeyboardMarkup(keyboard))
 
 def validate_payload(payload: dict) -> tuple[bool, str]:
@@ -456,6 +452,22 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
             return False, "Не указан раздел меню"
         if section not in SECTIONS:
             return False, f"Неизвестный раздел: {section}"
+        return True, ""
+    
+    elif data_type == 'subsection_selection':
+        # Проверяем данные выбора подраздела
+        section = payload.get('section')
+        subsection = payload.get('subsection')
+        if not section or not isinstance(section, str):
+            return False, "Не указан раздел"
+        if not subsection or not isinstance(subsection, str):
+            return False, "Не указан подраздел"
+        if section in SUBSECTIONS and subsection not in SUBSECTIONS[section]:
+            return False, f"Неизвестный подраздел: {subsection}"
+        return True, ""
+    
+    elif data_type == 'back_to_main':
+        # Никакой дополнительной валидации не требуется
         return True, ""
     
     else:
@@ -513,9 +525,16 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Определяем тип данных и направляем в соответствующий обработчик
-    if isinstance(payload, dict) and payload.get('type') == 'menu_selection':
+    data_type = payload.get('type')
+    if data_type == 'menu_selection':
         logger.info(f'Routing to menu selection handler')
         await handle_menu_selection(update, context, payload)
+    elif data_type == 'subsection_selection':
+        logger.info(f'Routing to subsection selection handler')
+        await handle_subsection_selection(update, context, payload)
+    elif data_type == 'back_to_main':
+        logger.info(f'Routing back to main menu')
+        await handle_back_to_main(update, context)
     else:
         logger.info(f'Routing to authorization handler')
         await handle_authorization(update, context, payload)
@@ -529,7 +548,16 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
         return
     
-    # Логируем выбор раздела как тикет
+    # Проверяем, есть ли для этого раздела отдельный миниапп
+    if section in SECTION_TO_WEBAPP:
+        # Открываем соответствующий миниапп
+        webapp_key = SECTION_TO_WEBAPP[section]
+        webapp_url = get_web_app_url(webapp_key)
+        keyboard = [[InlineKeyboardButton(f'📝 Открыть {section}', web_app=WebAppInfo(url=webapp_url))]]
+        await update.message.reply_text(f'Открываю раздел: {section}', reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+    
+    # Для разделов без подпунктов - сразу создаем тикет
     try:
         if tickets_client and tickets_client.sheet:
             telegram_id = str(user.id)
@@ -557,6 +585,65 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
                 pass
     except Exception:
         pass
+
+async def handle_subsection_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
+    """Обрабатывает выбор подраздела от пользователя."""
+    user = update.effective_user
+    section = payload.get('section')
+    subsection = payload.get('subsection')
+    
+    if not await is_user_authorized(user.id, context):
+        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+        return
+    
+    # Создаем тикет для выбранного подраздела
+    try:
+        if tickets_client and tickets_client.sheet:
+            telegram_id = str(user.id)
+            code = context.user_data.get('partner_code', '')
+            phone = context.user_data.get('phone', '')
+            fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
+            
+            ticket_text = f"{section} → {subsection}"
+            
+            await asyncio.to_thread(
+                tickets_client.upsert_ticket, 
+                telegram_id, code, phone, fio, 
+                ticket_text, 'в работе', 'user', False
+            )
+            
+            logger.info(f'Created ticket for user {user.id}: {ticket_text}')
+    except Exception as e:
+        logger.error(f'Не удалось создать тикет для подраздела: {e}')
+    
+    await update.message.reply_text(f'✅ Ваша заявка принята\n\n📝 Раздел: {section}\n🔹 Подраздел: {subsection}\n\nМы свяжемся с вами в ближайшее время.')
+    
+    # Уведомляем администраторов
+    try:
+        admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
+        for aid in admin_ids:
+            try:
+                await context.bot.send_message(
+                    chat_id=int(aid), 
+                    text=f'🆕 Новая заявка от {user.first_name or user.id}\n\n📝 {section} → {subsection}\n\n👤 ID: {user.id}'
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает возврат в главное меню."""
+    user = update.effective_user
+    
+    if not await is_user_authorized(user.id, context):
+        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+        return
+    
+    # Открываем главное меню
+    menu_url = get_web_app_url('MENU')
+    keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+    await update.message.reply_text('Возвращаюсь в главное меню:', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает данные авторизации от пользователя."""

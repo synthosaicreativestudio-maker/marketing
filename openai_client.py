@@ -8,7 +8,14 @@ import time
 import logging
 import asyncio
 from typing import Optional, Dict, Any
+from dotenv import load_dotenv
 from openai import OpenAI
+
+# Загружаем переменные окружения
+load_dotenv()
+if not os.getenv('OPENAI_API_KEY') and os.path.exists('bot.env'):
+    load_dotenv('bot.env', override=True)
+
 from config import OPENAI_CONFIG
 
 logger = logging.getLogger(__name__)

@@ -59,6 +59,11 @@ OPENAI_CONFIG = {
 WEB_APP_URLS = {
     'MAIN': 'https://synthosaicreativestudio-maker.github.io/marketing/',
     'MENU': 'https://synthosaicreativestudio-maker.github.io/marketing/mini_app.html',
+    'AGREGATORY': 'https://synthosaicreativestudio-maker.github.io/marketing/agregatory.html',
+    'CONTENT': 'https://synthosaicreativestudio-maker.github.io/marketing/content.html',
+    'FINANCE': 'https://synthosaicreativestudio-maker.github.io/marketing/finance.html',
+    'TECH': 'https://synthosaicreativestudio-maker.github.io/marketing/tech.html',
+    'DESIGN': 'https://synthosaicreativestudio-maker.github.io/marketing/design.html',
 }
 
 # Статусы тикетов
@@ -100,5 +105,48 @@ def get_sheet_color(status: str) -> dict:
     elif any(word in status_lower for word in ['в работе', 'work', 'open', 'in progress']):
         return SHEET_COLORS['IN_PROGRESS']
     return SHEET_COLORS['DEFAULT']
+
+# Маппинг разделов к миниаппам
+SECTION_TO_WEBAPP = {
+    'Агрегаторы': 'AGREGATORY',
+    'Контент': 'CONTENT',
+    'Финансы': 'FINANCE',
+    'Технические проблемы': 'TECH',
+    'Дизайн и материалы': 'DESIGN',
+}
+
+# Подпункты для каждого раздела
+SUBSECTIONS = {
+    'Агрегаторы': [
+        'Статус',
+        'Проблемы с выгрузкой',
+        'Платное продвижение',
+        'Ошибки, отклонения и блокировки',
+        'Редактирование контента на площадках',
+        'Прочие вопросы'
+    ],
+    'Контент': [
+        'Заказ фото/видео съемки',
+        'Работа с текстами объявлений',
+        'Требования к контенту',
+        'Прочие вопросы'
+    ],
+    'Финансы': [
+        'Списания и расходы',
+        'Баланс и пополнение',
+        'Отчетность',
+        'Прочие вопросы'
+    ],
+    'Технические проблемы': [
+        'Доступ к системам',
+        'Проблемы с телефонией',
+        'Прочие вопросы'
+    ],
+    'Дизайн и материалы': [
+        'Заказ полиграфии',
+        'Заказ цифровых материалов',
+        'Прочие вопросы'
+    ],
+}
 
 

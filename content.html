@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Контент — Marketing</title>
+    <meta name="theme-color" content="#0b1226">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root{--bg:#071028;--card:rgba(255,255,255,0.03);--muted:rgba(255,255,255,0.65);--gold:linear-gradient(90deg,#d4af37,#f6e7a0);--accent:#d4af37}
+        html,body{height:100%;margin:0}
+        body{background:radial-gradient(1200px 600px at 10% 10%, rgba(212,175,55,0.08), transparent),linear-gradient(180deg,#081428 0%,#041226 100%);color:#fff;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial;display:flex;align-items:center;justify-content:center;padding:20px}
+        .card{width:100%;max-width:760px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;padding:22px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 20px 50px rgba(2,6,23,0.6)}
+        h1{font-family:'Playfair Display',serif;margin:0 0 6px 0;font-size:18px;text-align:center;width:220px;white-space:nowrap;overflow:hidden}
+        p.lead{margin:0;color:var(--muted);font-size:13px}
+        .menu-grid{display:flex;flex-direction:column;gap:12px;margin-top:20px;align-items:flex-start}
+        .menu-btn{padding:12px 16px;border-radius:10px;background:linear-gradient(90deg,#1a2040, #1e2442);border:1px solid rgba(212,175,55,0.15);color:rgba(255,255,255,0.65);cursor:pointer;font-weight:400;font-size:14px;min-width:220px;width:220px;display:inline-flex;align-items:center;justify-content:flex-start;text-align:left;padding-left:20px;white-space:nowrap;overflow:hidden;transition:all 0.2s ease;box-sizing:border-box}
+        .menu-btn:hover{background:linear-gradient(90deg,#2a3050, #2e3452);border-color:rgba(212,175,55,0.25)}
+        .back-btn{background:linear-gradient(90deg,#402020, #442424);border:1px solid rgba(212,175,55,0.25);margin-top:15px}
+        .back-btn:hover{background:linear-gradient(90deg,#503030, #543434)}
+        .muted-small{font-size:12px;color:rgba(255,255,255,0.6)}
+        @media (max-width:720px){.menu-grid{grid-template-columns:1fr}}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1 style="margin-bottom:20px">КОНТЕНТ</h1>
+        <div id="menu_grid" class="menu-grid"></div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+
+        const SECTIONS = [
+            'Заказ фото/видео съемки',
+            'Работа с текстами объявлений',
+            'Требования к контенту',
+            'Прочие вопросы'
+        ];
+
+        const menuGrid = document.getElementById('menu_grid');
+        function renderMenu(){
+            menuGrid.innerHTML = '';
+            SECTIONS.forEach(section => {
+                const btn = document.createElement('button');
+                btn.className = 'menu-btn';
+                btn.textContent = section;
+                
+                btn.onclick = () => {
+                    try{
+                        tg.sendData(JSON.stringify({type: 'subsection_selection', section: 'Контент', subsection: section}));
+                        btn.textContent = 'Отправлено ✓';
+                        setTimeout(()=>tg.close(), 700);
+                    }catch(e){ tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.'); }
+                };
+                
+                menuGrid.appendChild(btn);
+            });
+
+            // Добавляем кнопку "Назад"
+            const backBtn = document.createElement('button');
+            backBtn.className = 'menu-btn back-btn';
+            backBtn.textContent = '← Назад в главное меню';
+            backBtn.onclick = () => {
+                try{
+                    tg.sendData(JSON.stringify({type: 'back_to_main'}));
+                    setTimeout(()=>tg.close(), 300);
+                }catch(e){ tg.close(); }
+            };
+            menuGrid.appendChild(backBtn);
+        }
+
+        renderMenu();
+    </script>
+</body>
+</html>
