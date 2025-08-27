@@ -67,10 +67,6 @@ WEB_APP_URLS = {
 TICKET_STATUSES = {
     'IN_PROGRESS': 'в работе',
     'COMPLETED': 'выполнено',
-    'PENDING': 'ожидает',
-    'ON_HOLD': 'приостановлено',
-    'CANCELLED': 'отменено',
-    'WAITING_USER': 'ожидает ответа пользователя',
 }
 
 # Цвета для форматирования Google Sheets

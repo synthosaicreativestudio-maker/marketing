@@ -897,13 +897,14 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         # 3. Логируем ответ в столбец E (текст_обращений) через upsert_ticket
+        # Добавляем ответ специалиста в историю обращений
         await asyncio.to_thread(
             tickets_client.upsert_ticket, 
-            str(telegram_id), code, '', '', reply_text, 'в работе', 'specialist', False
+            str(telegram_id), code, '', '', f'[ОТВЕТ СПЕЦИАЛИСТА] {reply_text}', 'в работе', 'specialist', False
         )
         
-        # 4. Очищаем поле G (SPECIALIST_REPLY)
-        await asyncio.to_thread(tickets_client.clear_specialist_reply, str(telegram_id))
+        # 4. Очищаем поле G (SPECIALIST_REPLY) - это уже делается в upsert_ticket
+        # await asyncio.to_thread(tickets_client.clear_specialist_reply, str(telegram_id))
         
         await update.message.reply_text(
             f'✅ Ответ успешно отправлен!\n\n'
@@ -1011,17 +1012,13 @@ async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status = ' '.join(context.args[1:])
     
     # Проверяем корректность статуса
-    valid_statuses = ['в работе', 'выполнено', 'ожидает', 'приостановлено', 'отменено', 'ожидает ответа пользователя']
+    valid_statuses = ['в работе', 'выполнено']
     if status.lower() not in [s.lower() for s in valid_statuses]:
         await update.message.reply_text(
             f'❌ Некорректный статус: {status}\n\n'
             f'✅ Доступные статусы:\n'
             f'• в работе\n'
-            f'• выполнено\n'
-            f'• ожидает\n'
-            f'• приостановлено\n'
-            f'• отменено\n'
-            f'• ожидает ответа пользователя'
+            f'• выполнено'
         )
         return
     
