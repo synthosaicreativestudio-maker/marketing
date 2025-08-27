@@ -29,10 +29,10 @@ from process_lock import ProcessLock
 # Загрузка .env. Если TELEGRAM_TOKEN не задан, попробуем загрузить `bot.env`
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /menu - открывает SPA меню"""
+    """Команда /menu - прямое открытие SPA меню"""
     menu_url = get_web_app_url('SPA_MENU')
-    keyboard = [[InlineKeyboardButton('📝 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
-    await update.message.reply_text('Личный кабинет:', reply_markup=InlineKeyboardMarkup(keyboard))
+    keyboard = [[InlineKeyboardButton('🚀 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+    await update.message.reply_text('💼 Открываю личный кабинет...', reply_markup=InlineKeyboardMarkup(keyboard))
     
     # Добавляем persistent keyboard
     persistent_keyboard = create_persistent_keyboard()
@@ -344,13 +344,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = update.message.text
     
-    # Обрабатываем команду menu
+    # Обрабатываем команду menu - прямое открытие личного кабинета
     if text and text.strip().lower() == 'menu':
         menu_url = get_web_app_url('SPA_MENU')
-        keyboard = [[InlineKeyboardButton('📝 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
-        await update.message.reply_text('Личный кабинет:', reply_markup=InlineKeyboardMarkup(keyboard))
-        # Отправляем persistent keyboard отдельным сообщением
-        await update.message.reply_text('Используйте кнопку menu для быстрого доступа:', reply_markup=persistent_keyboard)
+        # Отправляем прямую WebApp кнопку
+        keyboard = [[InlineKeyboardButton('🚀 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+        await update.message.reply_text('💼 Открываю личный кабинет...', reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
     # Удаляем старую обработку кнопки "Личный кабинет"
@@ -991,14 +990,47 @@ async def send_keyboard_command(update: Update, context: ContextTypes.DEFAULT_TY
     """Команда для принудительной отправки persistent keyboard"""
     user = update.effective_user
     
-    if await is_user_authorized(user.id, context):
+    # Проверяем авторизацию
+    auth_status = await is_user_authorized(user.id, context)
+    logger.info(f'User {user.id} authorization check: {auth_status}')
+    
+    if auth_status:
         persistent_keyboard = create_persistent_keyboard()
         await update.message.reply_text(
-            '👍 Reply клавиатура отправлена! Кнопка "menu" должна появиться рядом с полем ввода.',
+            f'✅ Вы авторизованы!\n'
+            f'👤 ID: {user.id}\n'
+            f'👍 Reply клавиатура отправлена!\n'
+            f'🔍 Посмотрите вниз экрана рядом с полем ввода.',
+            reply_markup=persistent_keyboard
+        )
+        # Отправляем ещё одну клавиатуру чтобы точно появилась
+        await update.message.reply_text('⚡️ Повторно отправляю клавиатуру...', reply_markup=persistent_keyboard)
+    else:
+        await update.message.reply_text(
+            f'❌ Вы не авторизованы!\n'
+            f'👤 ID: {user.id}\n'
+            f'⚠️ Сначала пройдите авторизацию через /start'
+        )
+
+async def reset_keyboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для полного сброса и установки клавиатуры"""
+    user = update.effective_user
+    
+    # Сначала убираем все клавиатуры
+    from telegram import ReplyKeyboardRemove
+    await update.message.reply_text('🗑️ Очищаю клавиатуру...', reply_markup=ReplyKeyboardRemove())
+    
+    # Проверяем авторизацию
+    if await is_user_authorized(user.id, context):
+        # Устанавливаем новую клавиатуру
+        persistent_keyboard = create_persistent_keyboard()
+        await update.message.reply_text(
+            '✨ Клавиатура сброшена и установлена заново!\n'
+            '🔍 Проверьте нижний левый угол экрана',
             reply_markup=persistent_keyboard
         )
     else:
-        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+        await update.message.reply_text('❌ Нужна авторизация. Напишите /start')
 
 async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Allow admin/specialist to set status: /setstatus <код|row> <статус>"""
@@ -1193,6 +1225,7 @@ def main():
                 app.add_handler(CommandHandler('monitor_status', monitor_status_command))
                 app.add_handler(CommandHandler('test_monitor', test_monitor_command))
                 app.add_handler(CommandHandler('send_keyboard', send_keyboard_command))
+                app.add_handler(CommandHandler('reset_keyboard', reset_keyboard_command))
                 app.add_handler(CallbackQueryHandler(handle_callback_query))
                 app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
                 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
