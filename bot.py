@@ -598,16 +598,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
         return
     
-    # Проверяем, есть ли для этого раздела отдельный миниапп
-    if section in SECTION_TO_WEBAPP:
-        # Открываем соответствующий миниапп
-        webapp_key = SECTION_TO_WEBAPP[section]
-        webapp_url = get_web_app_url(webapp_key)
-        keyboard = [[InlineKeyboardButton(f'📝 Открыть {section}', web_app=WebAppInfo(url=webapp_url))]]
-        await update.message.reply_text(f'Открываю раздел: {section}', reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-    
-    # Для разделов без подпунктов - сразу создаем тикет
+    # Создаем тикет для раздела без подпунктов
     try:
         if tickets_client and tickets_client.sheet:
             telegram_id = str(user.id)

@@ -58,13 +58,7 @@ OPENAI_CONFIG = {
 # URL веб-приложений
 WEB_APP_URLS = {
     'MAIN': 'https://synthosaicreativestudio-maker.github.io/marketing/',
-    'MENU': 'https://synthosaicreativestudio-maker.github.io/marketing/mini_app.html',
     'SPA_MENU': 'https://synthosaicreativestudio-maker.github.io/marketing/spa_menu.html',
-    'AGREGATORY': 'https://synthosaicreativestudio-maker.github.io/marketing/agregatory.html',
-    'CONTENT': 'https://synthosaicreativestudio-maker.github.io/marketing/content.html',
-    'FINANCE': 'https://synthosaicreativestudio-maker.github.io/marketing/finance.html',
-    'TECH': 'https://synthosaicreativestudio-maker.github.io/marketing/tech.html',
-    'DESIGN': 'https://synthosaicreativestudio-maker.github.io/marketing/design.html',
 }
 
 # Статусы тикетов
@@ -106,15 +100,6 @@ def get_sheet_color(status: str) -> dict:
     elif any(word in status_lower for word in ['в работе', 'work', 'open', 'in progress']):
         return SHEET_COLORS['IN_PROGRESS']
     return SHEET_COLORS['DEFAULT']
-
-# Маппинг разделов к миниаппам
-SECTION_TO_WEBAPP = {
-    'Агрегаторы': 'AGREGATORY',
-    'Контент': 'CONTENT',
-    'Финансы': 'FINANCE',
-    'Технические проблемы': 'TECH',
-    'Дизайн и материалы': 'DESIGN',
-}
 
 # Подпункты для каждого раздела
 SUBSECTIONS = {
