@@ -633,14 +633,14 @@ async def handle_subsection_selection(update: Update, context: ContextTypes.DEFA
     section = payload.get('section')
     subsection = payload.get('subsection')
     
-    if not await is_user_authorized(user.id, context):
-        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
-        return
+    # Убираем проверку авторизации для миниаппов
+    # Пользователь уже авторизован в основном меню
     
     # Создаем тикет для выбранного подраздела
     try:
         if tickets_client and tickets_client.sheet:
             telegram_id = str(user.id)
+            # Получаем данные из context или оставляем пустыми
             code = context.user_data.get('partner_code', '')
             phone = context.user_data.get('phone', '')
             fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
@@ -677,9 +677,8 @@ async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Обрабатывает возврат в главное меню."""
     user = update.effective_user
     
-    if not await is_user_authorized(user.id, context):
-        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
-        return
+    # Убираем проверку авторизации для навигации
+    # Пользователь уже авторизован в основном меню
     
     # Открываем главное меню
     menu_url = get_web_app_url('MENU')
@@ -692,9 +691,8 @@ async def handle_direct_webapp(update: Update, context: ContextTypes.DEFAULT_TYP
     section = payload.get('section')
     webapp_url = payload.get('webapp_url')
     
-    if not await is_user_authorized(user.id, context):
-        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
-        return
+    # Убираем проверку авторизации для прямого перехода в миниаппы
+    # Авторизация уже была пройдена в основном меню
     
     if not section or not webapp_url:
         await update.message.reply_text('❗️ Ошибка: не указан раздел или URL мини-приложения.')
