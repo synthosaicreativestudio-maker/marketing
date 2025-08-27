@@ -1119,6 +1119,37 @@ async def set_column_width_command(update: Update, context: ContextTypes.DEFAULT
         logger.error(f'Ошибка в /set_column_width: {e}')
         await update.message.reply_text('Ошибка при установке размеров.')
 
+async def setup_dropdown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для настройки выпадающего списка статусов в столбце F"""
+    user = update.effective_user
+    
+    if not is_admin(user.id):
+        await update.message.reply_text('Недостаточно прав для выполнения этой команды.')
+        return
+    
+    try:
+        if not tickets_client or not tickets_client.sheet:
+            await update.message.reply_text('Tickets sheet не доступен.')
+            return
+        
+        # Выгружаем setup_status_dropdown в поток
+        success = await asyncio.to_thread(tickets_client.setup_status_dropdown)
+        
+        if success:
+            await update.message.reply_text(
+                f'✅ Выпадающий список статусов настроен!\n\n'
+                f'📋 Доступные статусы:\n'
+                f'• в работе\n'
+                f'• выполнено\n\n'
+                f'📍 Применено к столбцу F (статус)'
+            )
+        else:
+            await update.message.reply_text('❌ Не удалось настроить выпадающий список.')
+            
+    except Exception as e:
+        logger.error(f'Ошибка в /setup_dropdown: {e}')
+        await update.message.reply_text('❌ Ошибка при настройке выпадающего списка.')
+
 async def check_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда для проверки авторизации пользователя"""
     user = update.effective_user
@@ -1305,6 +1336,7 @@ def main():
                 app.add_handler(CommandHandler('check_auth', check_auth_command))
                 app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
                 app.add_handler(CommandHandler('set_column_width', set_column_width_command))
+                app.add_handler(CommandHandler('setup_dropdown', setup_dropdown_command))
                 app.add_handler(CommandHandler('monitor_status', monitor_status_command))
                 app.add_handler(CommandHandler('test_monitor', test_monitor_command))
                 app.add_handler(CommandHandler('send_keyboard', send_keyboard_command))

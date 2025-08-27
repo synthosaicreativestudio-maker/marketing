@@ -378,8 +378,8 @@ class GoogleSheetsClient:
             logger.error(f'Error in upsert_ticket: {e}')
             raise
     
-    def set_tickets_column_width(self, width_pixels: int = 600, row_height_pixels: int = 100):
-        """Устанавливает ширину колонки обращений (колонка E) и высоту строк для новой структуры."""
+    def set_tickets_column_width(self, width_pixels: int, row_height_pixels: int) -> bool:
+        """Устанавливает ширину колонок E и G, а также высоту строк для таблицы обращений"""
         if not self.sheet:
             logger.error('Ticket sheet not connected')
             return False
@@ -404,6 +404,45 @@ class GoogleSheetsClient:
             
         except Exception as e:
             logger.error(f'Ошибка при установке размеров: {e}')
+            return False
+
+    def setup_status_dropdown(self):
+        """Настраивает выпадающий список статусов в столбце F для всех строк с данными"""
+        if not self.sheet:
+            logger.error('Ticket sheet not connected')
+            return False
+        
+        try:
+            # Получаем все значения для определения количества строк
+            all_values = self.sheet.get_all_values()
+            
+            if len(all_values) <= 1:
+                logger.info('Таблица пустая или содержит только заголовки, выпадающий список не нужен')
+                return True
+            
+            # Список доступных статусов
+            status_options = ['в работе', 'выполнено']
+            
+            # Настраиваем выпадающий список для каждой строки с данными (начиная со 2-й строки)
+            for row_num in range(2, len(all_values) + 1):
+                # Создаем правило валидации для выпадающего списка
+                from gspread_formatting import DataValidationRule, BooleanCondition
+                
+                # Создаем правило для выпадающего списка
+                rule = DataValidationRule(
+                    BooleanCondition('ONE_OF_LIST', status_options),
+                    showCustomUi=True,
+                    strict=True
+                )
+                
+                # Применяем правило к ячейке статуса (столбец F)
+                self.sheet.set_data_validation(f'F{row_num}', rule)
+            
+            logger.info(f'Выпадающий список статусов настроен для {len(all_values) - 1} строк')
+            return True
+            
+        except Exception as e:
+            logger.error(f'Ошибка при настройке выпадающего списка статусов: {e}')
             return False
 
     def set_specialist_reply(self, telegram_id: str, reply_text: str, clear_after_send: bool = True):
