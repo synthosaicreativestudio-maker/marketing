@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Меню — Marketing SPA</title>
+    <meta name="theme-color" content="#0b1226">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root{--bg:#071028;--card:rgba(255,255,255,0.03);--muted:rgba(255,255,255,0.65);--gold:linear-gradient(90deg,#d4af37,#f6e7a0);--accent:#d4af37}
+        html,body{height:100%;margin:0;overflow:hidden}
+        body{background:radial-gradient(1200px 600px at 10% 10%, rgba(212,175,55,0.08), transparent),linear-gradient(180deg,#081428 0%,#041226 100%);color:#fff;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial}
+        
+        .container{width:100%;height:100vh;position:relative;overflow:hidden}
+        .screen{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;transition:transform 0.3s ease,opacity 0.3s ease;transform:translateX(100%);opacity:0}
+        .screen.active{transform:translateX(0);opacity:1}
+        .screen.prev{transform:translateX(-100%);opacity:0}
+        
+        .card{width:100%;max-width:760px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;padding:22px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 20px 50px rgba(2,6,23,0.6);max-height:90vh;overflow-y:auto}
+        h1{font-family:'Playfair Display',serif;margin:0 0 20px 0;font-size:18px;text-align:center}
+        .menu-grid{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+        .menu-btn{padding:12px 16px;border-radius:10px;background:linear-gradient(90deg,#1a2040, #1e2442);border:1px solid rgba(212,175,55,0.15);color:rgba(255,255,255,0.65);cursor:pointer;font-weight:400;font-size:14px;min-width:220px;width:220px;display:inline-flex;align-items:center;justify-content:flex-start;text-align:left;padding-left:20px;white-space:nowrap;overflow:hidden;transition:all 0.2s ease;box-sizing:border-box;border:none}
+        .menu-btn:hover{background:linear-gradient(90deg,#2a3050, #2e3452);border-color:rgba(212,175,55,0.25)}
+        .back-btn{background:linear-gradient(90deg,#403020, #443822);border-color:rgba(212,175,55,0.2);margin-bottom:15px}
+        .back-btn:hover{background:linear-gradient(90deg,#504030, #544832)}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Главное меню -->
+        <div class="screen active" id="main-screen">
+            <div class="card">
+                <h1>ЛИЧНЫЙ КАБИНЕТ</h1>
+                <div class="menu-grid" id="main_menu_grid"></div>
+            </div>
+        </div>
+
+        <!-- Агрегаторы -->
+        <div class="screen" id="agregatory-screen">
+            <div class="card">
+                <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+                <h1>АГРЕГАТОРЫ</h1>
+                <div class="menu-grid" id="agregatory_grid"></div>
+            </div>
+        </div>
+
+        <!-- Контент -->
+        <div class="screen" id="content-screen">
+            <div class="card">
+                <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+                <h1>КОНТЕНТ</h1>
+                <div class="menu-grid" id="content_grid"></div>
+            </div>
+        </div>
+
+        <!-- Финансы -->
+        <div class="screen" id="finance-screen">
+            <div class="card">
+                <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+                <h1>ФИНАНСЫ</h1>
+                <div class="menu-grid" id="finance_grid"></div>
+            </div>
+        </div>
+
+        <!-- Технические проблемы -->
+        <div class="screen" id="tech-screen">
+            <div class="card">
+                <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+                <h1>ТЕХНИЧЕСКИЕ ПРОБЛЕМЫ</h1>
+                <div class="menu-grid" id="tech_grid"></div>
+            </div>
+        </div>
+
+        <!-- Дизайн и материалы -->
+        <div class="screen" id="design-screen">
+            <div class="card">
+                <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+                <h1>ДИЗАЙН И МАТЕРИАЛЫ</h1>
+                <div class="menu-grid" id="design_grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+
+        const SECTIONS = [
+            'Агрегаторы',
+            'Контент', 
+            'Финансы',
+            'Технические проблемы',
+            'Дизайн и материалы',
+            'Регламенты и обучение',
+            'Акции и мероприятия',
+            'Аналитика',
+            'Связаться со специалистом'
+        ];
+
+        const SUBSECTIONS = {
+            'Агрегаторы': [
+                'Статус',
+                'Проблемы с выгрузкой',
+                'Платное продвижение',
+                'Ошибки, отклонения и блокировки',
+                'Редактирование контента на площадках',
+                'Прочие вопросы'
+            ],
+            'Контент': [
+                'Заказ фото/видео съемки',
+                'Работа с текстами объявлений',
+                'Требования к контенту',
+                'Прочие вопросы'
+            ],
+            'Финансы': [
+                'Списания и расходы',
+                'Баланс и пополнение',
+                'Отчетность',
+                'Прочие вопросы'
+            ],
+            'Технические проблемы': [
+                'Доступ к системам',
+                'Проблемы с телефонией',
+                'Прочие вопросы'
+            ],
+            'Дизайн и материалы': [
+                'Заказ полиграфии',
+                'Заказ цифровых материалов',
+                'Прочие вопросы'
+            ]
+        };
+
+        const SECTIONS_WITH_SUBSECTIONS = ['Агрегаторы', 'Контент', 'Финансы', 'Технические проблемы', 'Дизайн и материалы'];
+
+        // Навигация между экранами
+        function showScreen(screenId) {
+            const screens = document.querySelectorAll('.screen');
+            screens.forEach(screen => {
+                screen.classList.remove('active', 'prev');
+                if (screen.id === screenId) {
+                    screen.classList.add('active');
+                } else {
+                    screen.classList.add('prev');
+                }
+            });
+        }
+
+        function goToMain() {
+            showScreen('main-screen');
+        }
+
+        function goToSection(section) {
+            const screenMap = {
+                'Агрегаторы': 'agregatory-screen',
+                'Контент': 'content-screen',
+                'Финансы': 'finance-screen',
+                'Технические проблемы': 'tech-screen',
+                'Дизайн и материалы': 'design-screen'
+            };
+            
+            if (screenMap[section]) {
+                showScreen(screenMap[section]);
+            }
+        }
+
+        // Отправка данных в бот
+        function sendToBot(data) {
+            try {
+                tg.sendData(JSON.stringify(data));
+                return true;
+            } catch(e) {
+                tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
+                return false;
+            }
+        }
+
+        // Создание главного меню
+        function renderMainMenu() {
+            const mainGrid = document.getElementById('main_menu_grid');
+            mainGrid.innerHTML = '';
+            
+            SECTIONS.forEach(section => {
+                const btn = document.createElement('button');
+                btn.className = 'menu-btn';
+                btn.textContent = section;
+                
+                btn.onclick = () => {
+                    if (SECTIONS_WITH_SUBSECTIONS.includes(section)) {
+                        // Переход к подразделам
+                        goToSection(section);
+                    } else {
+                        // Отправка данных для разделов без подпунктов
+                        if (sendToBot({type: 'menu_selection', section: section})) {
+                            btn.textContent = 'Отправлено ✓';
+                            setTimeout(() => {
+                                btn.textContent = section;
+                            }, 2000);
+                        }
+                    }
+                };
+                
+                mainGrid.appendChild(btn);
+            });
+        }
+
+        // Создание подменю для разделов
+        function renderSubsectionMenu(section, gridId) {
+            const grid = document.getElementById(gridId);
+            grid.innerHTML = '';
+            
+            if (SUBSECTIONS[section]) {
+                SUBSECTIONS[section].forEach(subsection => {
+                    const btn = document.createElement('button');
+                    btn.className = 'menu-btn';
+                    btn.textContent = subsection;
+                    
+                    btn.onclick = () => {
+                        if (sendToBot({type: 'subsection_selection', section: section, subsection: subsection})) {
+                            btn.textContent = 'Отправлено ✓';
+                            setTimeout(() => {
+                                tg.close();
+                            }, 1000);
+                        }
+                    };
+                    
+                    grid.appendChild(btn);
+                });
+            }
+        }
+
+        // Инициализация
+        function init() {
+            renderMainMenu();
+            renderSubsectionMenu('Агрегаторы', 'agregatory_grid');
+            renderSubsectionMenu('Контент', 'content_grid');
+            renderSubsectionMenu('Финансы', 'finance_grid');
+            renderSubsectionMenu('Технические проблемы', 'tech_grid');
+            renderSubsectionMenu('Дизайн и материалы', 'design_grid');
+        }
+
+        // Запуск при загрузке
+        init();
+    </script>
+</body>
+</html>
+<!-- GitHub Pages update: 2025-08-27 12:10 -->
