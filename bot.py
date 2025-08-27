@@ -19,7 +19,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 import telegram
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from sheets_client import GoogleSheetsClient
-from urllib.parse import urlencode
 
 # Импорты новых модулей
 from config import SECTIONS, get_web_app_url, get_ticket_status, SECTION_TO_WEBAPP, SUBSECTIONS
@@ -31,19 +30,10 @@ from process_lock import ProcessLock
 import subprocess
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Send a single Web App inline button that opens the mini‑app immediately.
-    # Many Telegram clients open inline web_app buttons more reliably than reply keyboard buttons.
-    web_app_base = get_web_app_url('MENU')
-    main_button = InlineKeyboardButton('Открыть миниапп', web_app=WebAppInfo(url=web_app_base))
-    # Optional: attach a secondary row with per-section deep-links (clients may show them as normal links)
-    section_rows = []
-    for section in SECTIONS:
-        # Prefer fragment deep-linking (more reliable in Telegram clients)
-        fragment = urlencode({'section': section})
-        url = f"{web_app_base.rstrip('/')}#{fragment}"
-        section_rows.append([InlineKeyboardButton(section, web_app=WebAppInfo(url=url))])
-    keyboard = [[main_button]] + section_rows
-    await update.message.reply_text('Нажмите кнопку ниже, чтобы открыть личный кабинет:', reply_markup=InlineKeyboardMarkup(keyboard))
+    """Команда /menu - открывает SPA меню"""
+    menu_url = get_web_app_url('SPA_MENU')
+    keyboard = [[InlineKeyboardButton('📝 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+    await update.message.reply_text('Личный кабинет:', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
