@@ -22,9 +22,6 @@ from sheets_client import GoogleSheetsClient
 
 # Импорты новых модулей
 from config import SECTIONS, get_web_app_url, get_ticket_status, SUBSECTIONS
-from auth_cache import auth_cache
-from openai_client import openai_client
-from process_lock import ProcessLock
 
 # Загрузка .env. Если TELEGRAM_TOKEN не задан, попробуем загрузить `bot.env`
 
@@ -161,12 +158,8 @@ tickets_client = None
 if TICKETS_SHEET_URL and os.path.exists('credentials.json'):
     try:
         tickets_client = GoogleSheetsClient(credentials_path='credentials.json', sheet_url=TICKETS_SHEET_URL, worksheet_name=TICKETS_WORKSHEET)
-        # Отладочная информация
-        logger.info(f'DEBUG: tickets_client создан: {type(tickets_client)}')
-        logger.info(f'DEBUG: tickets_client has extract_operator_replies: {hasattr(tickets_client, "extract_operator_replies")}')
-        logger.info(f'DEBUG: tickets_client methods: {[method for method in dir(tickets_client) if not method.startswith("_")]}')
         
-        # Устанавливаем фиксированные размеры для колонки с обращениями (колонка E: ширина 600px, высота строк 100px)
+        # Устанавливаем фиксированные размеры для колонки с обращений (колонка E: ширина 600px, высота строк 100px)
         if tickets_client and tickets_client.sheet:
             tickets_client.set_tickets_column_width(600, 100)
             logger.info('Установлены размеры: ширина 600px, высота 100px для колонки обращений')
@@ -1246,15 +1239,10 @@ async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
         return
     
     try:
-        # Отладочная информация
-        logger.info(f'DEBUG: tickets_client type: {type(tickets_client)}')
-        logger.info(f'DEBUG: tickets_client has extract_operator_replies: {hasattr(tickets_client, "extract_operator_replies")}')
-        logger.info(f'DEBUG: tickets_client methods: {[method for method in dir(tickets_client) if not method.startswith("_")]}')
-        
         # Получаем все ответы операторов из поля G
         replies = await asyncio.to_thread(tickets_client.extract_operator_replies)
         if not replies:
-        return
+            return
         
         for reply in replies:
             telegram_id = reply.get('telegram_id')
@@ -1282,10 +1270,10 @@ async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
                 
                 logger.info(f'Ответ специалиста отправлен пользователю {telegram_id} и записан в историю')
                 
-        except Exception as e:
+            except Exception as e:
                 logger.error(f'Ошибка при отправке ответа пользователю {telegram_id}: {e}')
                 
-                    except Exception as e:
+    except Exception as e:
         logger.error(f'Ошибка при проверке ответов операторов: {e}')
 
 async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1299,7 +1287,7 @@ async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_T
     try:
         if not tickets_client or not tickets_client.sheet:
             await update.message.reply_text('❌ Таблица обращений недоступна.')
-        return
+            return
 
         await update.message.reply_text('🔄 Обновляю заголовки таблицы...')
         
@@ -1327,7 +1315,7 @@ async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_T
         else:
             await update.message.reply_text('❌ Ошибка при обновлении заголовков.')
         
-            except Exception as e:
+    except Exception as e:
         logger.error(f'Ошибка в /update_headers: {e}')
         await update.message.reply_text('❌ Ошибка при обновлении заголовков.')
 
@@ -1346,16 +1334,19 @@ def _fix_telegram_id_worker(new_id: int) -> int:
                 sheets_client.sheet.update_cell(row, 5, str(new_id))
                 updated_count += 1
         return updated_count
-                except Exception:
+    except Exception:
         return 0
 
 # Запуск
 def main():
-    # Prevent multiple instances
+    # Простая блокировка через файл
     lock_file = 'bot.lock'
-    try:
-        with ProcessLock(lock_file) as lock:
-        logger.info('Successfully acquired lock, starting bot...')
+    if os.path.exists(lock_file):
+        logger.error('Бот уже запущен')
+        return
+    
+    with open(lock_file, 'w') as f:
+        f.write(str(os.getpid()))
     
     try:
         token = os.getenv('TELEGRAM_TOKEN')
@@ -1363,7 +1354,7 @@ def main():
             logger.error('TELEGRAM_TOKEN не задан в .env')
             return
                         
-                # Создаем Application с job_queue
+        # Создаем Application с job_queue
         app = Application.builder().token(token).build()
 
         app.add_handler(CommandHandler('start', start))
@@ -1373,33 +1364,33 @@ def main():
         app.add_handler(CommandHandler('push', push_command))
         app.add_handler(CommandHandler('check_auth', check_auth_command))
         app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
-                app.add_handler(CommandHandler('set_column_width', set_column_width_command))
-                app.add_handler(CommandHandler('setup_dropdown', setup_dropdown_command))
-                app.add_handler(CommandHandler('monitor_status', monitor_status_command))
-                app.add_handler(CommandHandler('test_monitor', test_monitor_command))
-                app.add_handler(CommandHandler('send_keyboard', send_keyboard_command))
-                app.add_handler(CommandHandler('reset_keyboard', reset_keyboard_command))
-                app.add_handler(CommandHandler('table_info', table_info_command))
-                app.add_handler(CommandHandler('update_headers', update_headers_command))
+        app.add_handler(CommandHandler('set_column_width', set_column_width_command))
+        app.add_handler(CommandHandler('setup_dropdown', setup_dropdown_command))
+        app.add_handler(CommandHandler('monitor_status', monitor_status_command))
+        app.add_handler(CommandHandler('test_monitor', test_monitor_command))
+        app.add_handler(CommandHandler('send_keyboard', send_keyboard_command))
+        app.add_handler(CommandHandler('reset_keyboard', reset_keyboard_command))
+        app.add_handler(CommandHandler('table_info', table_info_command))
+        app.add_handler(CommandHandler('update_headers', update_headers_command))
         app.add_handler(CallbackQueryHandler(handle_callback_query))
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         app.add_handler(CommandHandler('menu', menu_command))
         app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
                         
-                # Запускаем мониторинг ответов оператора
-                job_queue = app.job_queue
-                if job_queue and tickets_client:
-                    job_queue.run_repeating(
-                        check_operator_replies,
-                        interval=30,  # каждые 30 секунд
-                        first=10      # первый запуск через 10 секунд
-                    )
-                    logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
+        # Запускаем мониторинг ответов оператора
+        job_queue = app.job_queue
+        if job_queue and tickets_client:
+            job_queue.run_repeating(
+                check_operator_replies,
+                interval=30,  # каждые 30 секунд
+                first=10      # первый запуск через 10 секунд
+            )
+            logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
                         
         logger.info('Бот запущен...')
                         
-                # Global error handler
+        # Global error handler
         async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
             err = getattr(context, 'error', None)
             try:
@@ -1428,12 +1419,13 @@ def main():
                 logger.exception(f'Unexpected error in polling loop: {e}')
                 break
                                 
-        except Exception as e:
-                logger.error(f'Error starting bot: {e}')
-                return
     except Exception as e:
-        logger.error(f'Error acquiring lock: {e}')
+        logger.error(f'Error starting bot: {e}')
         return
+    finally:
+        # Очищаем блокировку при выходе
+        if os.path.exists(lock_file):
+            os.remove(lock_file)
 
 if __name__ == '__main__':
     main()
