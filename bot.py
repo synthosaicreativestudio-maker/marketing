@@ -80,9 +80,12 @@ else:
     logger.info('SHEET_URL не задан или credentials.json отсутствует — Google Sheets отключён')
 # Утилиты
 def is_admin(user_id: int) -> bool:
+    # Временно добавляем ваш ID для тестирования
+    hardcoded_admins = ['284355186']  # Ваш ID из логов
     admin_ids = os.getenv('ADMIN_TELEGRAM_ID', '')
     admin_list = [s.strip() for s in admin_ids.split(',') if s.strip()]
-    return str(user_id) in admin_list
+    all_admins = hardcoded_admins + admin_list
+    return str(user_id) in all_admins
 
 def create_persistent_keyboard():
     """Создаёт постоянную reply клавиатуру с кнопкой menu, которая сразу открывает миниапп"""
