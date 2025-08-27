@@ -760,6 +760,10 @@ async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE
     menu_url = get_web_app_url('SPA_MENU')
     keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
     await update.message.reply_text('Возвращаюсь в главное меню:', reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # Добавляем persistent keyboard
+    persistent_keyboard = create_persistent_keyboard()
+    await update.message.reply_text('Используйте кнопку menu для быстрого доступа:', reply_markup=persistent_keyboard)
 
 async def handle_direct_webapp(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает прямое открытие мини-приложения без промежуточных кнопок."""
@@ -983,6 +987,19 @@ async def test_monitor_command(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f'Ошибка в тесте мониторинга: {e}')
         await update.message.reply_text(f'❌ Ошибка: {e}')
 
+async def send_keyboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для принудительной отправки persistent keyboard"""
+    user = update.effective_user
+    
+    if await is_user_authorized(user.id, context):
+        persistent_keyboard = create_persistent_keyboard()
+        await update.message.reply_text(
+            '👍 Reply клавиатура отправлена! Кнопка "menu" должна появиться рядом с полем ввода.',
+            reply_markup=persistent_keyboard
+        )
+    else:
+        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+
 async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Allow admin/specialist to set status: /setstatus <код|row> <статус>"""
     user = update.effective_user
@@ -1175,6 +1192,7 @@ def main():
                 app.add_handler(CommandHandler('set_column_width', set_column_width_command))
                 app.add_handler(CommandHandler('monitor_status', monitor_status_command))
                 app.add_handler(CommandHandler('test_monitor', test_monitor_command))
+                app.add_handler(CommandHandler('send_keyboard', send_keyboard_command))
                 app.add_handler(CallbackQueryHandler(handle_callback_query))
                 app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
                 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
