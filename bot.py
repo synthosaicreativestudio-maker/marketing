@@ -713,41 +713,41 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор раздела меню от пользователя."""
-        user = update.effective_user
+    user = update.effective_user
     section = payload.get('section')
     
-        if not await is_user_authorized(user.id, context):
-            await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
-            return
+    if not await is_user_authorized(user.id, context):
+        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+        return
     
     # Создаем тикет для раздела без подпунктов
-        try:
-            if tickets_client and tickets_client.sheet:
-                telegram_id = str(user.id)
-                code = context.user_data.get('partner_code', '')
-                phone = context.user_data.get('phone', '')
-                fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    try:
+        if tickets_client and tickets_client.sheet:
+            telegram_id = str(user.id)
+            code = context.user_data.get('partner_code', '')
+            phone = context.user_data.get('phone', '')
+            fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
             
             await asyncio.to_thread(
                 tickets_client.upsert_ticket, 
                 telegram_id, code, phone, fio, 
                 f"Запрос: {section}", 'в работе', 'user', False
             )
-        except Exception as e:
-            logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
+    except Exception as e:
+        logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
     
-        await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
+    await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
     
     # Уведомляем администраторов
-        try:
-            admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
-            for aid in admin_ids:
-                try:
-                    await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
-                except Exception:
-                    pass
-        except Exception:
-            pass
+    try:
+        admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
+        for aid in admin_ids:
+            try:
+                await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 async def handle_subsection_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор подраздела от пользователя."""
