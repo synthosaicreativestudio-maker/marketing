@@ -17,7 +17,7 @@ import asyncio
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 import telegram
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler, JobQueue
 from sheets_client import GoogleSheetsClient
 
 # Импорты новых модулей
@@ -162,6 +162,93 @@ if TICKETS_SHEET_URL and os.path.exists('credentials.json'):
         logger.error(f'Ошибка инициализации tickets GoogleSheetsClient: {e}')
 else:
     logger.info('TICKETS_SHEET_URL не задан или credentials.json отсутствует — таблица обращений отключена')
+
+# Система мониторинга ответов операторов
+cell_states = {}  # {"row_col": {"last_content": str, "last_length": int, "telegram_id": str}}
+
+def extract_operator_replies(old_content, new_content):
+    """Извлекает новые ответы оператора из ячейки"""
+    if not new_content or not isinstance(new_content, str):
+        return []
+    
+    if not old_content:
+        old_content = ""
+    
+    # Получаем новый текст
+    if len(new_content) <= len(old_content):
+        return []
+    
+    new_text = new_content[len(old_content):].strip()
+    if not new_text:
+        return []
+    
+    # Разбиваем на строки и ищем ответы оператора
+    lines = new_text.split('\n')
+    operator_replies = []
+    
+    for line in lines:
+        line = line.strip()
+        if line and ('Оператор:' in line or 'Ответ:' in line):
+            # Убираем метки времени и префиксы
+            reply = line
+            for prefix in ['Оператор:', 'Ответ:']:
+                if prefix in reply:
+                    reply = reply.split(prefix, 1)[-1].strip()
+            
+            # Убираем метки времени в квадратных скобках
+            import re
+            reply = re.sub(r'\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]\s*', '', reply).strip()
+            
+            if reply:
+                operator_replies.append(reply)
+    
+    return operator_replies
+
+async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
+    """Проверяет новые ответы операторов в таблице"""
+    if not tickets_client or not tickets_client.sheet:
+        return
+    
+    try:
+        # Получаем все данные из таблицы
+        all_data = await asyncio.to_thread(tickets_client.sheet.get_all_records)
+        
+        for i, row_data in enumerate(all_data, start=2):  # начинаем с строки 2
+            telegram_id = str(row_data.get('telegram_id', '')).strip()
+            message_content = str(row_data.get('текст_обращений', '')).strip()
+            
+            if not telegram_id or not message_content:
+                continue
+            
+            cell_key = f"row_{i}_col_E"  # колонка E с обращениями
+            
+            # Проверяем, есть ли изменения
+            if cell_key in cell_states:
+                old_content = cell_states[cell_key]['last_content']
+                new_replies = extract_operator_replies(old_content, message_content)
+                
+                if new_replies:
+                    logger.info(f'Новые ответы оператора для {telegram_id}: {new_replies}')
+                    
+                    # Отправляем ответы пользователю
+                    for reply in new_replies:
+                        try:
+                            await context.bot.send_message(
+                                chat_id=int(telegram_id),
+                                text=f"✉️ Ответ оператора:\n{reply}"
+                            )
+                        except Exception as e:
+                            logger.error(f'Не удалось отправить ответ {telegram_id}: {e}')
+            
+            # Обновляем состояние
+            cell_states[cell_key] = {
+                'last_content': message_content,
+                'last_length': len(message_content),
+                'telegram_id': telegram_id
+            }
+                    
+    except Exception as e:
+        logger.error(f'Ошибка при проверке ответов операторов: {e}')
 
 
 
@@ -853,6 +940,45 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f'Ошибка в /reply: {e}')
         await update.message.reply_text('Ошибка при добавлении ответа.')
 
+async def monitor_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для проверки статуса мониторинга ответов оператора"""
+    user = update.effective_user
+    
+    if not is_admin(user.id):
+        await update.message.reply_text('Недостаточно прав для этой команды.')
+        return
+    
+    status_info = []
+    status_info.append(f'🔍 Мониторинг ответов оператора:')
+    status_info.append(f'📄 Таблица: {"\u2705 Подключена" if tickets_client else "\u274c Недоступна"}')
+    status_info.append(f'📊 Отслеживаемых ячеек: {len(cell_states)}')
+    
+    if cell_states:
+        status_info.append('\n📈 Последние ячейки:')
+        for cell_key, state in list(cell_states.items())[:5]:
+            telegram_id = state.get('telegram_id', 'Неизвестно')
+            content_len = state.get('last_length', 0)
+            status_info.append(f'  • {cell_key}: ID {telegram_id}, длина {content_len}')
+    
+    await update.message.reply_text('\n'.join(status_info))
+
+async def test_monitor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для ручного теста мониторинга"""
+    user = update.effective_user
+    
+    if not is_admin(user.id):
+        await update.message.reply_text('Недостаточно прав для этой команды.')
+        return
+    
+    await update.message.reply_text('🔄 Запускаю проверку ответов оператора...')
+    
+    try:
+        await check_operator_replies(context)
+        await update.message.reply_text('✅ Проверка завершена')
+    except Exception as e:
+        logger.error(f'Ошибка в тесте мониторинга: {e}')
+        await update.message.reply_text(f'❌ Ошибка: {e}')
+
 async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Allow admin/specialist to set status: /setstatus <код|row> <статус>"""
     user = update.effective_user
@@ -1043,11 +1169,24 @@ def main():
                 app.add_handler(CommandHandler('check_auth', check_auth_command))
                 app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
                 app.add_handler(CommandHandler('set_column_width', set_column_width_command))
+                app.add_handler(CommandHandler('monitor_status', monitor_status_command))
+                app.add_handler(CommandHandler('test_monitor', test_monitor_command))
                 app.add_handler(CallbackQueryHandler(handle_callback_query))
                 app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
                 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
                 app.add_handler(CommandHandler('menu', menu_command))
                 app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
+                
+                # Добавляем job для мониторинга ответов оператора
+                job_queue = app.job_queue
+                if job_queue and tickets_client:
+                    job_queue.run_repeating(
+                        check_operator_replies, 
+                        interval=30,  # каждые 30 секунд
+                        first=10      # первый запуск через 10 секунд
+                    )
+                    logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
+                
                 logger.info('Бот запущен...')
                 
                 # Global error handler
