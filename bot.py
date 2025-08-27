@@ -173,29 +173,6 @@ else:
 # Система мониторинга ответов операторов
 
 
-def extract_operator_replies(old_content, new_content):
-    """Извлекает новые ответы оператора из поля G (специалист_ответ).
-    НОВАЯ ЛОГИКА: мониторим поле G для новых ответов специалиста.
-    """
-    if not new_content or not isinstance(new_content, str):
-        return []
-    
-    if not old_content:
-        old_content = ""
-    
-    # Получаем новый текст
-    if len(new_content) <= len(old_content):
-        return []
-    
-    new_text = new_content[len(old_content):].strip()
-    if not new_text:
-        return []
-    
-    # В новой логике поле G содержит только ответ специалиста
-    # Возвращаем весь новый текст как ответ
-    return [new_text.strip()]
-
-
 
 
 
