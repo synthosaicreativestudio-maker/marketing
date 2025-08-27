@@ -35,15 +35,14 @@
             margin-left:-5%
         }
         .header{
-            display:flex;justify-content:flex-start;align-items:center;width:100%;
+            display:flex;justify-content:space-between;align-items:center;width:100%;
             position:relative;
         }
         .logo{
             width:50px;height:50px;border-radius:6px;overflow:hidden;
-            margin-left:25px;
-            align-self:center;
+            flex-shrink: 0; /* не сжимается */
+            position: relative; /* убираем absolute */
             z-index:1000;
-            order:2;
         }
 
         .logo img{
@@ -52,10 +51,9 @@
         .brand-text{
             text-align:left;display:flex;flex-direction:column;gap:8px;
             margin-top:0;
-            align-self:flex-start;
+            flex: 1; /* занимает оставшееся место */
             position:relative;
             z-index:1;
-            order:1;
         }
         h1{font-family:'Playfair Display',serif;margin:0;font-size:28px;color:#fff;text-align:left}
         p.lead{margin:8px 0 0 0;color:var(--muted);font-size:9px;text-align:left;white-space:nowrap}
@@ -78,9 +76,9 @@
         /* responsive */
         @media (max-width:720px){
             .shell{padding:20px;margin-top:-80px;margin-left:-3%}
-            .header{flex-direction:column;gap:12px;align-items:flex-start}
-            .brand-text{text-align:left;margin-top:0;align-self:flex-start}
-            .logo{position:relative;right:auto;top:auto;margin-left:auto;align-self:flex-end}
+            .header{flex-direction:column;gap:12px;align-items:center}
+            .brand-text{text-align:center;margin-top:0}
+            .logo{position:relative;margin:0}
             #code_input,#phone_input{width:100%;max-width:200px}
             .card{width:100%;max-width:240px;padding:12px}
         }
