@@ -35,13 +35,13 @@
             margin-left:-5%
         }
         .header{
-            display:flex;justify-content:space-between;align-items:center;width:100%;
+            display:flex;align-items:center;gap:15px;width:100%;
             position:relative;
+            margin-bottom: 20px; /* фиксированный отступ */
         }
         .logo{
             width:50px;height:50px;border-radius:6px;overflow:hidden;
             flex-shrink: 0; /* не сжимается */
-            position: relative; /* убираем absolute */
             z-index:1000;
         }
 
@@ -49,9 +49,7 @@
             width:100%;height:100%;object-fit:cover
         }
         .brand-text{
-            text-align:left;display:flex;flex-direction:column;gap:8px;
-            margin-top:0;
-            flex: 1; /* занимает оставшееся место */
+            text-align:left;
             position:relative;
             z-index:1;
         }
@@ -76,9 +74,9 @@
         /* responsive */
         @media (max-width:720px){
             .shell{padding:20px;margin-top:-80px;margin-left:-3%}
-            .header{flex-direction:column;gap:12px;align-items:center}
-            .brand-text{text-align:center;margin-top:0}
-            .logo{position:relative;margin:0}
+            .header{gap:10px;margin-bottom:15px}
+            .brand-text{text-align:left}
+            .logo{width:40px;height:40px}
             #code_input,#phone_input{width:100%;max-width:200px}
             .card{width:100%;max-width:240px;padding:12px}
         }
