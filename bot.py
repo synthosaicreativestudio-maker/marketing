@@ -17,7 +17,7 @@ import asyncio
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 import telegram
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler, JobQueue
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from sheets_client import GoogleSheetsClient
 
 # Импорты новых модулей
@@ -168,7 +168,7 @@ else:
     logger.info('TICKETS_SHEET_URL не задан или credentials.json отсутствует — таблица обращений отключена')
 
 # Система мониторинга ответов операторов
-cell_states = {}  # {"row_col": {"last_content": str, "last_length": int, "telegram_id": str}}
+
 
 def extract_operator_replies(old_content, new_content):
     """Извлекает новые ответы оператора из поля G (специалист_ответ).
@@ -192,122 +192,7 @@ def extract_operator_replies(old_content, new_content):
     # Возвращаем весь новый текст как ответ
     return [new_text.strip()]
 
-async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
-    """Проверяет новые ответы операторов в столбце G.
-    НОВАЯ ЛОГИКА:
-    - Мониторит столбец G (специалист_ответ) для новых ответов
-    - Отправляет ответы пользователям в Telegram
-    - Очищает столбец G после отправки
-    - Логирует ответ в столбец E (текст_обращений)
-    """
-    if not tickets_client or not tickets_client.sheet:
-        return
-    
-    try:
-        # Получаем все данные из таблицы
-        all_data = await asyncio.to_thread(tickets_client.sheet.get_all_records)
-        
-        for i, row_data in enumerate(all_data, start=2):  # начинаем с строки 2
-            telegram_id = str(row_data.get('telegram_id', '')).strip()
-            specialist_reply = str(row_data.get('специалист_ответ', '')).strip()  # колонка G
-            
-            if not telegram_id or not specialist_reply:
-                continue
-            
-            cell_key = f"row_{i}_col_G"  # колонка G с ответом специалиста
-            
-            # Проверяем, есть ли новый ответ в поле G
-            if cell_key in cell_states:
-                old_reply = cell_states[cell_key]['last_content']
-                if old_reply == specialist_reply:
-                    continue  # Нет изменений
-            
-            # Новый ответ найден!
-            logger.info(f'Найден новый ответ специалиста для пользователя {telegram_id}: {specialist_reply[:50]}...')
-            
-            # Отправляем ответ пользователю в Telegram
-            try:
-                await context.bot.send_message(
-                    chat_id=int(telegram_id),
-                    text=f"📝 Ответ специалиста:\n\n{specialist_reply}"
-                )
-                logger.info(f'Ответ отправлен пользователю {telegram_id}')
-                
-                # Логируем ответ в столбец E (текст_обращений)
-                current_messages = str(row_data.get('текст_обращений', '')).strip()
-                from datetime import datetime
-                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-                new_message = f"[{timestamp}] Специалист: {specialist_reply}"
-                
-                if current_messages:
-                    updated_messages = f"{new_message}\n\n{current_messages}"
-                else:
-                    updated_messages = new_message
-                
-                # Обновляем столбец E с новым сообщением
-                await asyncio.to_thread(tickets_client.sheet.update_cell, i, 5, updated_messages)
-                
-                # ОЧИЩАЕМ столбец G после успешной отправки
-                await asyncio.to_thread(tickets_client.sheet.update_cell, i, 7, "")
-                logger.info(f'Столбец G очищен для строки {i}')
-                
-                # Обновляем состояние - поле теперь пустое
-                cell_states[cell_key] = {
-                    'last_content': "",
-                    'last_length': 0,
-                    'telegram_id': telegram_id
-                }
-                
-            except Exception as e:
-                logger.error(f'Ошибка при отправке ответа пользователю {telegram_id}: {e}')
-                # Не очищаем поле G если отправка не удалась
-                continue
-                
-        else:
-            # Первое обнаружение этой ячейки - инициализируем состояние
-            cell_states[cell_key] = {
-                'last_content': specialist_reply,
-                'last_length': len(specialist_reply),
-                'telegram_id': telegram_id
-            }
-            
-            # Если это не пустое поле, обрабатываем как новый ответ
-            if specialist_reply:
-                logger.info(f'Обнаружен ответ специалиста для пользователя {telegram_id}: {specialist_reply[:50]}...')
-                
-                # Отправляем ответ пользователю
-                try:
-                    await context.bot.send_message(
-                        chat_id=int(telegram_id),
-                        text=f"📝 Ответ специалиста:\n\n{specialist_reply}"
-                    )
-                    
-                    # Логируем ответ в столбец E
-                    current_messages = str(row_data.get('текст_обращений', '')).strip()
-                    from datetime import datetime
-                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-                    new_message = f"[{timestamp}] Специалист: {specialist_reply}"
-                    
-                    if current_messages:
-                        updated_messages = f"{new_message}\n\n{current_messages}"
-                    else:
-                        updated_messages = new_message
-                    
-                    # Обновляем столбец E
-                    await asyncio.to_thread(tickets_client.sheet.update_cell, i, 5, updated_messages)
-                    
-                    # Очищаем столбец G
-                    await asyncio.to_thread(tickets_client.sheet.update_cell, i, 7, "")
-                    
-                    # Обновляем состояние как пустое
-                    cell_states[cell_key]['last_content'] = ""
-                    cell_states[cell_key]['last_length'] = 0
-                    
-                except Exception as e:
-                    logger.error(f'Ошибка при обработке ответа для {telegram_id}: {e}')
-                    
-    except Exception as e:
-        logger.error(f'Ошибка при проверке ответов операторов: {e}')
+
 
 
 
@@ -1042,14 +927,7 @@ async def monitor_status_command(update: Update, context: ContextTypes.DEFAULT_T
     status_info = []
     status_info.append(f'🔍 Мониторинг ответов оператора:')
     status_info.append(f'📄 Таблица: {"\u2705 Подключена" if tickets_client else "\u274c Недоступна"}')
-    status_info.append(f'📊 Отслеживаемых ячеек: {len(cell_states)}')
-    
-    if cell_states:
-        status_info.append('\n📈 Последние ячейки:')
-        for cell_key, state in list(cell_states.items())[:5]:
-            telegram_id = state.get('telegram_id', 'Неизвестно')
-            content_len = state.get('last_length', 0)
-            status_info.append(f'  • {cell_key}: ID {telegram_id}, длина {content_len}')
+    status_info.append(f'📊 Мониторинг: Отключен')
     
     await update.message.reply_text('\n'.join(status_info))
 
@@ -1064,8 +942,8 @@ async def test_monitor_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text('🔄 Запускаю проверку ответов оператора...')
     
     try:
-        await check_operator_replies(context)
-        await update.message.reply_text('✅ Проверка завершена')
+
+        await update.message.reply_text('✅ Проверка завершена (мониторинг временно отключен)')
     except Exception as e:
         logger.error(f'Ошибка в тесте мониторинга: {e}')
         await update.message.reply_text(f'❌ Ошибка: {e}')
@@ -1419,7 +1297,9 @@ def main():
                     logger.error('TELEGRAM_TOKEN не задан в .env')
                     return
                         
-                app = Application.builder().token(token).build()
+                # Создаем Application без job_queue
+                app = Application.builder().token(token).job_queue(None).build()
+
                 app.add_handler(CommandHandler('start', start))
                 app.add_handler(CommandHandler('new_chat', new_chat))
                 app.add_handler(CommandHandler('reply', reply_command))
@@ -1440,15 +1320,15 @@ def main():
                 app.add_handler(CommandHandler('menu', menu_command))
                 app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
                         
-                # Добавляем job для мониторинга ответов оператора
-                job_queue = app.job_queue
-                if job_queue and tickets_client:
-                    job_queue.run_repeating(
-                        check_operator_replies, 
-                        interval=30,  # каждые 30 секунд
-                        first=10      # первый запуск через 10 секунд
-                    )
-                    logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
+                # Временно отключен мониторинг ответов оператора из-за ошибки
+                # job_queue = app.job_queue
+                # if job_queue and tickets_client:
+                #     job_queue.run_repeating(
+ 
+                #         interval=30,  # каждые 30 секунд
+                #         first=10      # первый запуск через 10 секунд
+                #     )
+                #     logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
                         
                 logger.info('Бот запущен...')
                         
