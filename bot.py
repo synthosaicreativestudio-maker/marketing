@@ -33,6 +33,10 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     menu_url = get_web_app_url('SPA_MENU')
     keyboard = [[InlineKeyboardButton('📝 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
     await update.message.reply_text('Личный кабинет:', reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # Добавляем persistent keyboard
+    persistent_keyboard = create_persistent_keyboard()
+    await update.message.reply_text('Используйте кнопку menu для быстрого доступа:', reply_markup=persistent_keyboard)
 
 async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
