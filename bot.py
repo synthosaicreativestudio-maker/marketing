@@ -108,19 +108,19 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
     
     # Получаем актуальные данные из Google Sheets
     try:
-    authorized_ids = await asyncio.to_thread(get_authorized_ids)
-    if authorized_ids is None:
-        logger.warning(f'No access to sheets for user {user_id}')
-        return False
+        authorized_ids = await asyncio.to_thread(get_authorized_ids)
+        if authorized_ids is None:
+            logger.warning(f'No access to sheets for user {user_id}')
+            return False
         
-    is_auth = str(user_id) in authorized_ids
+        is_auth = str(user_id) in authorized_ids
         
         # Обновляем кэш
         auth_cache.set_user_authorized(user_id, is_auth)
         
-    logger.info(f'User {user_id} authorization result: {is_auth}')
-    return is_auth
-
+        logger.info(f'User {user_id} authorization result: {is_auth}')
+        return is_auth
+        
     except Exception as e:
         logger.error(f'Error checking authorization for user {user_id}: {e}')
         return False
@@ -263,67 +263,48 @@ async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
                 # Не очищаем поле G если отправка не удалась
                 continue
                 
-                # Если ответ изменился и не пустой
-                if specialist_reply != old_reply and specialist_reply.strip():
-                    logger.info(f'Новый ответ специалиста для {telegram_id}: {specialist_reply[:100]}...')
-                    
-                    # Отправляем ответ пользователю
-                    try:
-                        await context.bot.send_message(
-                            chat_id=int(telegram_id),
-                            text=f"✉️ Ответ специалиста:\n{specialist_reply}"
-                        )
-                        
-                        # Очищаем поле ответа специалиста после отправки
-                        await asyncio.to_thread(tickets_client.clear_specialist_reply, telegram_id)
-                        
-                        logger.info(f'Ответ специалиста отправлен пользователю {telegram_id} и поле очищено')
-                        
-                    except Exception as e:
-                        logger.error(f'Не удалось отправить ответ {telegram_id}: {e}')
+        else:
+            # Первое обнаружение этой ячейки - инициализируем состояние
+            cell_states[cell_key] = {
+                'last_content': specialist_reply,
+                'last_length': len(specialist_reply),
+                'telegram_id': telegram_id
+            }
             
-            else:
-                # Первое обнаружение этой ячейки - инициализируем состояние
-                cell_states[cell_key] = {
-                    'last_content': specialist_reply,
-                    'last_length': len(specialist_reply),
-                    'telegram_id': telegram_id
-                }
+            # Если это не пустое поле, обрабатываем как новый ответ
+            if specialist_reply:
+                logger.info(f'Обнаружен ответ специалиста для пользователя {telegram_id}: {specialist_reply[:50]}...')
                 
-                # Если это не пустое поле, обрабатываем как новый ответ
-                if specialist_reply:
-                    logger.info(f'Обнаружен ответ специалиста для пользователя {telegram_id}: {specialist_reply[:50]}...')
+                # Отправляем ответ пользователю
+                try:
+                    await context.bot.send_message(
+                        chat_id=int(telegram_id),
+                        text=f"📝 Ответ специалиста:\n\n{specialist_reply}"
+                    )
                     
-                    # Отправляем ответ пользователю
-                    try:
-                        await context.bot.send_message(
-                            chat_id=int(telegram_id),
-                            text=f"📝 Ответ специалиста:\n\n{specialist_reply}"
-                        )
-                        
-                        # Логируем ответ в столбец E
-                        current_messages = str(row_data.get('текст_обращений', '')).strip()
-                        from datetime import datetime
-                        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-                        new_message = f"[{timestamp}] Специалист: {specialist_reply}"
-                        
-                        if current_messages:
-                            updated_messages = f"{new_message}\n\n{current_messages}"
-                        else:
-                            updated_messages = new_message
-                        
-                        # Обновляем столбец E
-                        await asyncio.to_thread(tickets_client.sheet.update_cell, i, 5, updated_messages)
-                        
-                        # Очищаем столбец G
-                        await asyncio.to_thread(tickets_client.sheet.update_cell, i, 7, "")
-                        
-                        # Обновляем состояние как пустое
-                        cell_states[cell_key]['last_content'] = ""
-                        cell_states[cell_key]['last_length'] = 0
-                        
-                    except Exception as e:
-                        logger.error(f'Ошибка при обработке ответа для {telegram_id}: {e}')
+                    # Логируем ответ в столбец E
+                    current_messages = str(row_data.get('текст_обращений', '')).strip()
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
+                    new_message = f"[{timestamp}] Специалист: {specialist_reply}"
+                    
+                    if current_messages:
+                        updated_messages = f"{new_message}\n\n{current_messages}"
+                    else:
+                        updated_messages = new_message
+                    
+                    # Обновляем столбец E
+                    await asyncio.to_thread(tickets_client.sheet.update_cell, i, 5, updated_messages)
+                    
+                    # Очищаем столбец G
+                    await asyncio.to_thread(tickets_client.sheet.update_cell, i, 7, "")
+                    
+                    # Обновляем состояние как пустое
+                    cell_states[cell_key]['last_content'] = ""
+                    cell_states[cell_key]['last_length'] = 0
+                    
+                except Exception as e:
+                    logger.error(f'Ошибка при обработке ответа для {telegram_id}: {e}')
                     
     except Exception as e:
         logger.error(f'Ошибка при проверке ответов операторов: {e}')
