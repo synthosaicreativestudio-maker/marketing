@@ -100,148 +100,107 @@
 
         const SUBSECTIONS = {
             'Агрегаторы': [
-                'Статус',
-                'Проблемы с выгрузкой',
-                'Платное продвижение',
-                'Ошибки, отклонения и блокировки',
-                'Редактирование контента на площадках',
-                'Прочие вопросы'
+                'Яндекс.Директ',
+                'Google Ads',
+                'ВКонтакте',
+                'Telegram',
+                'Одноклассники',
+                'MyTarget',
+                'Facebook/Instagram'
             ],
             'Контент': [
-                'Заказ фото/видео съемки',
-                'Работа с текстами объявлений',
-                'Требования к контенту',
-                'Прочие вопросы'
+                'Тексты для рекламы',
+                'Изображения и баннеры',
+                'Видео контент',
+                'Лендинги',
+                'Email рассылки',
+                'Социальные сети'
             ],
             'Финансы': [
-                'Списания и расходы',
-                'Баланс и пополнение',
-                'Отчетность',
-                'Прочие вопросы'
+                'Бюджет рекламных кампаний',
+                'Отчеты по расходам',
+                'Эффективность вложений',
+                'Планирование бюджета',
+                'Анализ ROI'
             ],
             'Технические проблемы': [
-                'Доступ к системам',
-                'Проблемы с телефонией',
-                'Прочие вопросы'
+                'Проблемы с рекламными аккаунтами',
+                'Ошибки в кампаниях',
+                'Техническая поддержка',
+                'Интеграция с CRM',
+                'API и автоматизация'
             ],
             'Дизайн и материалы': [
-                'Заказ полиграфии',
-                'Заказ цифровых материалов',
-                'Прочие вопросы'
+                'Создание баннеров',
+                'Брендинг',
+                'Макеты для печати',
+                'Презентации',
+                'Инфографика'
             ]
         };
 
-        const SECTIONS_WITH_SUBSECTIONS = ['Агрегаторы', 'Контент', 'Финансы', 'Технические проблемы', 'Дизайн и материалы'];
-
-        // Навигация между экранами
-        function showScreen(screenId) {
-            const screens = document.querySelectorAll('.screen');
-            screens.forEach(screen => {
-                screen.classList.remove('active', 'prev');
-                if (screen.id === screenId) {
-                    screen.classList.add('active');
-                } else {
-                    screen.classList.add('prev');
-                }
-            });
-        }
-
-        function goToMain() {
-            showScreen('main-screen');
-        }
-
-        function goToSection(section) {
-            const screenMap = {
-                'Агрегаторы': 'agregatory-screen',
-                'Контент': 'content-screen',
-                'Финансы': 'finance-screen',
-                'Технические проблемы': 'tech-screen',
-                'Дизайн и материалы': 'design-screen'
-            };
-            
-            if (screenMap[section]) {
-                showScreen(screenMap[section]);
-            }
-        }
-
-        // Отправка данных в бот
-        function sendToBot(data) {
-            try {
-                tg.sendData(JSON.stringify(data));
-                return true;
-            } catch(e) {
-                tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
-                return false;
-            }
-        }
-
-        // Создание главного меню
-        function renderMainMenu() {
-            const mainGrid = document.getElementById('main_menu_grid');
-            mainGrid.innerHTML = '';
+        function createMainMenu() {
+            const grid = document.getElementById('main_menu_grid');
+            grid.innerHTML = '';
             
             SECTIONS.forEach(section => {
                 const btn = document.createElement('button');
                 btn.className = 'menu-btn';
                 btn.textContent = section;
-                
-                btn.onclick = () => {
-                    if (SECTIONS_WITH_SUBSECTIONS.includes(section)) {
-                        // Переход к подразделам
-                        goToSection(section);
-                    } else {
-                        // Отправка данных для разделов без подпунктов
-                        if (sendToBot({type: 'menu_selection', section: section})) {
-                            btn.textContent = 'Отправлено ✓';
-                            setTimeout(() => {
-                                btn.textContent = section;
-                            }, 2000);
-                        }
-                    }
-                };
-                
-                mainGrid.appendChild(btn);
+                btn.onclick = () => showSection(section);
+                grid.appendChild(btn);
             });
         }
 
-        // Создание подменю для разделов
-        function renderSubsectionMenu(section, gridId) {
-            const grid = document.getElementById(gridId);
-            grid.innerHTML = '';
+        function showSection(sectionName) {
+            // Скрываем главное меню
+            document.getElementById('main-screen').classList.remove('active');
             
-            if (SUBSECTIONS[section]) {
-                SUBSECTIONS[section].forEach(subsection => {
-                    const btn = document.createElement('button');
-                    btn.className = 'menu-btn';
-                    btn.textContent = subsection;
-                    
-                    btn.onclick = () => {
-                        if (sendToBot({type: 'subsection_selection', section: section, subsection: subsection})) {
-                            btn.textContent = 'Отправлено ✓';
-                            setTimeout(() => {
-                                tg.close();
-                            }, 1000);
-                        }
-                    };
-                    
-                    grid.appendChild(btn);
-                });
+            // Показываем экран раздела
+            const sectionScreen = document.getElementById(sectionName.toLowerCase().replace(/\s+/g, '-') + '-screen');
+            if (sectionScreen) {
+                sectionScreen.classList.add('active');
+                populateSubsections(sectionName, sectionScreen);
             }
         }
 
-        // Инициализация
-        function init() {
-            renderMainMenu();
-            renderSubsectionMenu('Агрегаторы', 'agregatory_grid');
-            renderSubsectionMenu('Контент', 'content_grid');
-            renderSubsectionMenu('Финансы', 'finance_grid');
-            renderSubsectionMenu('Технические проблемы', 'tech_grid');
-            renderSubsectionMenu('Дизайн и материалы', 'design_grid');
+        function populateSubsections(sectionName, screen) {
+            const subsections = SUBSECTIONS[sectionName] || [];
+            const grid = screen.querySelector('.menu-grid');
+            
+            grid.innerHTML = '';
+            subsections.forEach(subsection => {
+                const btn = document.createElement('button');
+                btn.className = 'menu-btn';
+                btn.textContent = subsection;
+                btn.onclick = () => handleSubsectionClick(sectionName, subsection);
+                grid.appendChild(btn);
+            });
         }
 
-        // Запуск при загрузке
-        init();
+        function handleSubsectionClick(section, subsection) {
+            // Отправляем данные в Telegram Bot
+            const data = {
+                type: 'subsection_selection',
+                section: section,
+                subsection: subsection
+            };
+            
+            tg.sendData(JSON.stringify(data));
+        }
+
+        function goToMain() {
+            // Скрываем все экраны
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active', 'prev');
+            });
+            
+            // Показываем главное меню
+            document.getElementById('main-screen').classList.add('active');
+        }
+
+        // Инициализация при загрузке
+        document.addEventListener('DOMContentLoaded', createMainMenu);
     </script>
 </body>
 </html>
-<!-- GitHub Pages update: 2025-08-27 13:30 -->

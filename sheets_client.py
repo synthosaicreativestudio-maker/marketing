@@ -1,7 +1,7 @@
 import logging
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from error_handler import ErrorHandler, safe_execute
+# from error_handler import ErrorHandler, safe_execute  # Модуль удален
 
 logger = logging.getLogger(__name__)
 
@@ -156,22 +156,14 @@ class GoogleSheetsClient:
             all_statuses = self.sheet.col_values(4)  # Колонка D - статусы авторизации
             all_ids = self.sheet.col_values(5)       # Колонка E - Telegram ID
             
-            logger.info(f"DEBUG: Found {len(all_statuses)} statuses and {len(all_ids)} IDs")
-            logger.info(f"DEBUG: Statuses (col D): {all_statuses[:5]}...")  # Первые 5 статусов
-            logger.info(f"DEBUG: IDs (col E): {all_ids[:5]}...")           # Первые 5 ID
-            
             authorized_ids = set()
             for i in range(1, min(len(all_statuses), len(all_ids))):  # Пропускаем заголовок
                 status = str(all_statuses[i]).strip() if i < len(all_statuses) else ""
                 user_id = str(all_ids[i]).strip() if i < len(all_ids) else ""
                 
-                logger.info(f"DEBUG: Row {i+1}: status='{status}', id='{user_id}'")
-                
                 if (status == "авторизован" and user_id):
                     authorized_ids.add(user_id)
-                    logger.info(f"DEBUG: Added authorized user {user_id} from row {i+1}")
             
-            logger.info(f"DEBUG: Total authorized users found: {len(authorized_ids)}")
             return authorized_ids
         except Exception as e:
             logger.error(f"Error getting all authorized user IDs: {e}")
@@ -392,19 +384,22 @@ class GoogleSheetsClient:
             return False
         
         try:
+            # Используем gspread-formatting для установки размеров
+            from gspread_formatting import set_column_width, set_row_height
+            
             # Устанавливаем ширину колонки E (текст_обращений) - 600px
-            self.sheet.set_column_width(5, width_pixels)  # Колонка E
+            set_column_width(self.sheet, 'E', width_pixels)
             
             # Устанавливаем ширину колонки G (поле ответа специалиста) - 400px
-            self.sheet.set_column_width(7, 400)  # Колонка G
+            set_column_width(self.sheet, 'G', 400)
             
             # Устанавливаем высоту строк - 100px
-            self.sheet.set_row_height(1, row_height_pixels)  # Заголовок
+            set_row_height(self.sheet, '1', row_height_pixels)  # Заголовок
             
             # Устанавливаем высоту для всех строк с данными
             all_values = self.sheet.get_all_values()
             for row_num in range(2, len(all_values) + 1):
-                self.sheet.set_row_height(row_num, row_height_pixels)
+                set_row_height(self.sheet, str(row_num), row_height_pixels)
             
             logger.info(f'Установлена ширина {width_pixels}px для колонки E и {400}px для колонки G, высота {row_height_pixels}px для строк')
             return True

@@ -381,17 +381,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Заменяем нежелательные паттерны
             assistant_msg = assistant_msg.replace('annotations value', 'Вера')
             logger.info(f'Sending response to user. Has buttons: {buttons is not None}. Message: {assistant_msg[:100]}...')
-            logger.info(f'DEBUG: About to send message via reply_text')
-            
             if buttons:
                 # Send message with inline action buttons; persistent keyboard remains available to the user
-                logger.info(f'DEBUG: Sending with buttons')
                 await update.message.reply_text(assistant_msg, reply_markup=InlineKeyboardMarkup(buttons))
             else:
-                logger.info(f'DEBUG: Sending with persistent keyboard')
                 await update.message.reply_text(assistant_msg, reply_markup=persistent_keyboard)
-            
-            logger.info(f'DEBUG: Message sent successfully')
             
             # Логируем ответ ассистента в таблицу обращений
             try:
@@ -442,7 +436,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def validate_payload(payload: dict) -> tuple[bool, str]:
     """Валидирует входящие данные от веб-приложения. Возвращает (валидно, сообщение об ошибке)."""
-    logger.info(f'DEBUG: Validating payload: {payload}')
     
     if not isinstance(payload, dict):
         logger.warning(f'Payload is not a dict: {type(payload)}')
@@ -450,16 +443,12 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
     
     # Проверяем тип данных
     data_type = payload.get('type', '').strip()  # Очищаем от пробелов
-    logger.info(f'DEBUG: Payload type detected: "{data_type}"')
-    logger.info(f'DEBUG: All payload keys: {list(payload.keys())}')
     
     # Проверяем, что в payload есть section и webapp_url (для direct_webapp)
     if 'section' in payload and 'webapp_url' in payload and not data_type:
-        logger.info('DEBUG: Detected direct_webapp payload without explicit type')
         data_type = 'direct_webapp'
     
     if data_type == 'menu_selection':
-        logger.info('DEBUG: Processing menu_selection')
         # Проверяем данные выбора раздела
         section = payload.get('section')
         if not section or not isinstance(section, str):
@@ -469,7 +458,6 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
         return True, ""
     
     elif data_type == 'subsection_selection':
-        logger.info('DEBUG: Processing subsection_selection')
         # Проверяем данные выбора подраздела
         section = payload.get('section')
         subsection = payload.get('subsection')
@@ -482,25 +470,20 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
         return True, ""
     
     elif data_type == 'back_to_main':
-        logger.info('DEBUG: Processing back_to_main')
         # Никакой дополнительной валидации не требуется
         return True, ""
     
     elif data_type == 'direct_webapp':
-        logger.info('DEBUG: Processing direct_webapp')
         # Проверяем данные для прямого открытия мини-приложения
         section = payload.get('section')
         webapp_url = payload.get('webapp_url')
-        logger.info(f'DEBUG: direct_webapp section="{section}", webapp_url="{webapp_url}"')
         if not section or not isinstance(section, str):
             return False, "Не указан раздел"
         if not webapp_url or not isinstance(webapp_url, str):
             return False, "Не указан URL мини-приложения"
-        logger.info('DEBUG: direct_webapp validation passed')
         return True, ""
     
     else:
-        logger.info(f'DEBUG: Processing as authorization data (type="{data_type}")')
         # Проверяем данные авторизации
         code = payload.get('code')
         phone = payload.get('phone')
@@ -1321,6 +1304,57 @@ async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_T
         logger.error(f'Ошибка в /update_headers: {e}')
         await update.message.reply_text('❌ Ошибка при обновлении заголовков.')
 
+async def test_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Тестирует авторизацию с данными из таблицы"""
+    if not await is_admin(update.effective_user.id):
+        await update.message.reply_text('❌ У вас нет прав для выполнения этой команды.')
+        return
+    
+    await update.message.reply_text('🔍 Тестирую авторизацию...')
+    
+    try:
+        # Получаем данные из таблицы
+        all_values = sheets_client.sheet.get_all_values()
+        if len(all_values) <= 1:
+            await update.message.reply_text('❌ Таблица пустая или содержит только заголовки')
+            return
+        
+        # Показываем доступных пользователей
+        users_info = []
+        for i, row_data in enumerate(all_values[1:], start=2):
+            if len(row_data) >= 4:
+                code = row_data[0] if row_data[0] else "пусто"
+                phone = row_data[2] if len(row_data) > 2 and row_data[2] else "пусто"
+                status = row_data[3] if len(row_data) > 3 and row_data[3] else "пусто"
+                users_info.append(f"Строка {i}: код={code}, телефон={phone}, статус={status}")
+        
+        await update.message.reply_text('📋 Доступные пользователи:\n' + '\n'.join(users_info))
+        
+        # Тестируем авторизацию с первым пользователем
+        if len(all_values) > 1:
+            test_code = all_values[1][0]  # Первый пользователь
+            test_phone = all_values[1][2] if len(all_values[1]) > 2 else ""
+            
+            if test_code and test_phone:
+                await update.message.reply_text(f'🧪 Тестирую авторизацию с:\nКод: {test_code}\nТелефон: {test_phone}')
+                
+                # Имитируем авторизацию
+                row = await asyncio.to_thread(sheets_client.find_user_by_credentials, test_code, test_phone)
+                if row:
+                    await update.message.reply_text(f'✅ Пользователь найден в строке {row}')
+                    
+                    # Авторизуем пользователя
+                    await asyncio.to_thread(sheets_client.update_user_auth_status, row, update.effective_user.id)
+                    await update.message.reply_text(f'✅ Пользователь {test_code} авторизован!')
+                else:
+                    await update.message.reply_text('❌ Пользователь не найден')
+            else:
+                await update.message.reply_text('❌ Недостаточно данных для тестирования')
+        
+    except Exception as e:
+        logger.error(f'Error in test_auth_command: {e}')
+        await update.message.reply_text(f'❌ Ошибка: {e}')
+
 def _fix_telegram_id_worker(new_id: int) -> int:
     """Worker to run in thread: find rows with status 'авторизован' and update column 5 with new_id."""
     try:
@@ -1374,6 +1408,7 @@ def main():
         app.add_handler(CommandHandler('reset_keyboard', reset_keyboard_command))
         app.add_handler(CommandHandler('table_info', table_info_command))
         app.add_handler(CommandHandler('update_headers', update_headers_command))
+        app.add_handler(CommandHandler('test_auth', test_auth_command))
         app.add_handler(CallbackQueryHandler(handle_callback_query))
         app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

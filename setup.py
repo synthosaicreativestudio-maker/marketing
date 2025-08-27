@@ -87,7 +87,7 @@ def run_diagnostics():
         print("⚠️ Файл диагностики не найден")
         return False
 
-def main():
+def setup_main():
     """Основная функция настройки"""
     print("🚀 НАСТРОЙКА MARKETING BOT")
     print("=" * 50)
@@ -140,7 +140,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        setup_main()
     except KeyboardInterrupt:
         print("\n\n⚠️ Настройка прервана пользователем")
     except Exception as e:

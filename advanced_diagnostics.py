@@ -15,7 +15,7 @@ from pathlib import Path
 # Добавляем путь к проекту
 sys.path.insert(0, str(Path(__file__).parent))
 
-def main():
+def diagnostics_main():
     """Основная функция диагностики"""
     print("🔍 РАСШИРЕННАЯ ДИАГНОСТИКА MARKETING BOT")
     print("=" * 60)
@@ -223,21 +223,11 @@ def check_configuration():
                 }
         
         # Валидация конфигурации
-        try:
-            from validator import validator
-            env_valid, env_errors = validator.validate_environment()
-            
-            checks['validation'] = {
-                'value': 'Пройдена' if env_valid else f'{len(env_errors)} ошибок',
-                'status': 'success' if env_valid else 'error',
-                'message': 'Конфигурация валидна' if env_valid else '; '.join(env_errors[:3])
-            }
-        except ImportError:
-            checks['validation'] = {
-                'value': 'Пропущена',
-                'status': 'warning',
-                'message': 'Модуль validator недоступен'
-            }
+        checks['validation'] = {
+            'value': 'Пропущена',
+            'status': 'warning',
+            'message': 'Модуль validator удален - пропускаем проверку'
+        }
     
     except Exception as e:
         checks['loading'] = {
@@ -485,4 +475,4 @@ def save_report(results):
         print(f"\n❌ Ошибка сохранения отчета: {e}")
 
 if __name__ == "__main__":
-    main()
+    diagnostics_main()
