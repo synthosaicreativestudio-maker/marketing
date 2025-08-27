@@ -254,9 +254,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f'Processing message {message_id} from user {user.id}: {update.message.text[:50]}...')
     
     from telegram import ReplyKeyboardMarkup, KeyboardButton
-    menu_url = get_web_app_url('SPA_MENU')
     persistent_keyboard = ReplyKeyboardMarkup(
-        [[KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]],
+        [['menu']],
         resize_keyboard=True,
         one_time_keyboard=False
     )
@@ -267,10 +266,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = update.message.text
     
-    # Если пользователь нажал на persistent кнопку (теперь WebApp открывается сразу)
-    if text.strip().lower() == 'личный кабинет':
-            await update.message.reply_text('WebApp должен открыться автоматически. Если нет - используйте кнопку снизу.', reply_markup=persistent_keyboard)
-            return
+    # Обрабатываем команду menu
+    if text and text.strip().lower() == 'menu':
+        menu_url = get_web_app_url('SPA_MENU')
+        keyboard = [[InlineKeyboardButton('📝 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+        await update.message.reply_text('Личный кабинет:', reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+    
+    # Удаляем старую обработку кнопки "Личный кабинет"
     
     # Логируем входящее сообщение пользователя
     try:
@@ -435,17 +438,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     logger.info(f'/start от {user.id} ({user.first_name})')
     if await is_user_authorized(user.id, context):
-        # Persistent меню с кнопкой /menu
+        # Persistent меню с кнопкой menu
         from telegram import ReplyKeyboardMarkup, KeyboardButton
-        menu_url = get_web_app_url('SPA_MENU')
-        kb_button = KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))
         persistent_keyboard = ReplyKeyboardMarkup(
-            [[kb_button]],
+            [['menu']],
             resize_keyboard=True,
             one_time_keyboard=False
         )
         await update.message.reply_text(
-            'Вы уже авторизованы и готовы к работе!\nНажмите кнопку ниже, чтобы открыть личный кабинет.',
+            'Вы уже авторизованы и готовы к работе!\nНажмите кнопку menu чтобы открыть личный кабинет.',
             reply_markup=persistent_keyboard
         )
         return
