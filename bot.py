@@ -261,6 +261,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         menu_url = get_web_app_url('SPA_MENU')
         keyboard = [[InlineKeyboardButton('📝 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
         await update.message.reply_text('Личный кабинет:', reply_markup=InlineKeyboardMarkup(keyboard))
+        # Отправляем persistent keyboard отдельным сообщением
+        await update.message.reply_text('Используйте кнопку menu для быстрого доступа:', reply_markup=persistent_keyboard)
         return
     
     # Удаляем старую обработку кнопки "Личный кабинет"
