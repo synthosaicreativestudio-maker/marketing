@@ -520,3 +520,44 @@ class GoogleSheetsClient:
         except Exception as e:
             logger.error(f'Ошибка при обновлении заголовков: {e}')
             return False
+
+    def extract_operator_replies(self):
+        """Извлекает все ответы операторов из поля G (специалист_ответ) для отправки пользователям"""
+        if not self.sheet:
+            logger.error('Ticket sheet not connected')
+            return []
+        
+        try:
+            # Получаем все значения из таблицы
+            all_values = self.sheet.get_all_values()
+            if len(all_values) < 2:  # Только заголовки или пустая таблица
+                return []
+            
+            replies = []
+            
+            # Проходим по всем строкам с данными (начиная со 2-й строки)
+            for row_idx, row in enumerate(all_values[1:], start=2):
+                if len(row) < 7:  # Проверяем, что есть достаточно колонок
+                    continue
+                
+                # Получаем данные из строки
+                code = row[0] if len(row) > 0 else ''           # A - код
+                telegram_id = row[3] if len(row) > 3 else ''    # D - telegram_id
+                specialist_reply = row[6] if len(row) > 6 else ''  # G - специалист_ответ
+                
+                # Если есть ответ специалиста и код, добавляем в список
+                if specialist_reply and specialist_reply.strip() and code and code.strip():
+                    replies.append({
+                        'telegram_id': telegram_id,
+                        'reply_text': specialist_reply.strip(),
+                        'code': code.strip(),
+                        'row': row_idx
+                    })
+                    logger.info(f'Found specialist reply in row {row_idx}: {specialist_reply[:50]}...')
+            
+            logger.info(f'Extracted {len(replies)} specialist replies from field G')
+            return replies
+            
+        except Exception as e:
+            logger.error(f'Error extracting operator replies: {e}')
+            return []
