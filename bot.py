@@ -171,7 +171,9 @@ else:
 cell_states = {}  # {"row_col": {"last_content": str, "last_length": int, "telegram_id": str}}
 
 def extract_operator_replies(old_content, new_content):
-    """Извлекает новые ответы оператора из ячейки"""
+    """Извлекает новые ответы оператора из поля G (специалист_ответ).
+    НОВАЯ ЛОГИКА: мониторим поле G для новых ответов специалиста.
+    """
     if not new_content or not isinstance(new_content, str):
         return []
     
@@ -186,30 +188,17 @@ def extract_operator_replies(old_content, new_content):
     if not new_text:
         return []
     
-    # Разбиваем на строки и ищем ответы оператора
-    lines = new_text.split('\n')
-    operator_replies = []
-    
-    for line in lines:
-        line = line.strip()
-        if line and ('Оператор:' in line or 'Ответ:' in line):
-            # Убираем метки времени и префиксы
-            reply = line
-            for prefix in ['Оператор:', 'Ответ:']:
-                if prefix in reply:
-                    reply = reply.split(prefix, 1)[-1].strip()
-            
-            # Убираем метки времени в квадратных скобках
-            import re
-            reply = re.sub(r'\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]\s*', '', reply).strip()
-            
-            if reply:
-                operator_replies.append(reply)
-    
-    return operator_replies
+    # В новой логике поле G содержит только ответ специалиста
+    # Возвращаем весь новый текст как ответ
+    return [new_text.strip()]
 
 async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
-    """Проверяет новые ответы операторов в таблице"""
+    """Проверяет новые ответы операторов в таблице.
+    НОВАЯ ЛОГИКА:
+    - Мониторит поле G (SPECIALIST_REPLY) для новых ответов
+    - Отправляет ответы пользователям
+    - Очищает поле G после отправки
+    """
     if not tickets_client or not tickets_client.sheet:
         return
     
@@ -219,35 +208,40 @@ async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
         
         for i, row_data in enumerate(all_data, start=2):  # начинаем с строки 2
             telegram_id = str(row_data.get('telegram_id', '')).strip()
-            message_content = str(row_data.get('текст_обращений', '')).strip()
+            specialist_reply = str(row_data.get('специалист_ответ', '')).strip()  # колонка G
             
-            if not telegram_id or not message_content:
+            if not telegram_id or not specialist_reply:
                 continue
             
-            cell_key = f"row_{i}_col_E"  # колонка E с обращениями
+            cell_key = f"row_{i}_col_G"  # колонка G с ответом специалиста
             
-            # Проверяем, есть ли изменения
+            # Проверяем, есть ли изменения в поле ответа специалиста
             if cell_key in cell_states:
-                old_content = cell_states[cell_key]['last_content']
-                new_replies = extract_operator_replies(old_content, message_content)
+                old_reply = cell_states[cell_key]['last_content']
                 
-                if new_replies:
-                    logger.info(f'Новые ответы оператора для {telegram_id}: {new_replies}')
+                # Если ответ изменился и не пустой
+                if specialist_reply != old_reply and specialist_reply.strip():
+                    logger.info(f'Новый ответ специалиста для {telegram_id}: {specialist_reply[:100]}...')
                     
-                    # Отправляем ответы пользователю
-                    for reply in new_replies:
-                        try:
-                            await context.bot.send_message(
-                                chat_id=int(telegram_id),
-                                text=f"✉️ Ответ оператора:\n{reply}"
-                            )
-                        except Exception as e:
-                            logger.error(f'Не удалось отправить ответ {telegram_id}: {e}')
+                    # Отправляем ответ пользователю
+                    try:
+                        await context.bot.send_message(
+                            chat_id=int(telegram_id),
+                            text=f"✉️ Ответ специалиста:\n{specialist_reply}"
+                        )
+                        
+                        # Очищаем поле ответа специалиста после отправки
+                        await asyncio.to_thread(tickets_client.clear_specialist_reply, telegram_id)
+                        
+                        logger.info(f'Ответ специалиста отправлен пользователю {telegram_id} и поле очищено')
+                        
+                    except Exception as e:
+                        logger.error(f'Не удалось отправить ответ {telegram_id}: {e}')
             
             # Обновляем состояние
             cell_states[cell_key] = {
-                'last_content': message_content,
-                'last_length': len(message_content),
+                'last_content': specialist_reply,
+                'last_length': len(specialist_reply),
                 'telegram_id': telegram_id
             }
                     
@@ -900,44 +894,81 @@ async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Specialist can reply using: /reply <код> <текст ответа>
-    This will append the specialist's reply to the same ticket cell and forward the message to the user with that code.
+    """Специалист отвечает: /reply <код> <текст ответа>
+    НОВАЯ ЛОГИКА:
+    1. Записывает ответ в поле G (SPECIALIST_REPLY)
+    2. Отправляет ответ пользователю в Telegram
+    3. Очищает поле G после отправки
+    4. Логирует ответ в столбец E (текст_обращений)
     """
     user = update.effective_user
-    # Only allow authorized specialists/admins
+    # Только авторизованные специалисты/админы
     if not await is_user_authorized(user.id, context) and not is_admin(user.id):
         await update.message.reply_text('Недостаточно прав для выполнения этой команды.')
         return
+    
     args = context.args
     if len(args) < 2:
         await update.message.reply_text('Использование: /reply <код> <текст ответа>')
         return
+    
     code = args[0]
     reply_text = ' '.join(args[1:])
+    
     try:
-        # find the ticket row by code and append specialist message
         if not tickets_client or not tickets_client.sheet:
             await update.message.reply_text('Tickets sheet не доступен.')
             return
-        # offload blocking ops to thread
+        
+        # Ищем тикет по коду
         row = await asyncio.to_thread(tickets_client.find_row_by_code, code)
         if not row:
             await update.message.reply_text(f'Тикет с кодом {code} не найден.')
             return
-        # read telegram_id in thread
+        
+        # Читаем telegram_id из строки
         telegram_id = await asyncio.to_thread(lambda r: tickets_client.sheet.cell(r, 4).value, row)
-        # upsert ticket in thread
-        await asyncio.to_thread(tickets_client.upsert_ticket, str(telegram_id), code, '', '', reply_text, 'в работе', 'specialist', False)
-        # Forward message to user (if telegram_id present)
-        if telegram_id:
-            try:
-                await context.bot.send_message(chat_id=int(telegram_id), text=f'Ответ специалиста (код {code}):\n{reply_text}')
-            except Exception as e:
-                logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
-        await update.message.reply_text('Ответ добавлен в тикет и отправлен пользователю.')
+        if not telegram_id:
+            await update.message.reply_text(f'Telegram ID не найден для кода {code}.')
+            return
+        
+        # 1. Записываем ответ в поле G (SPECIALIST_REPLY)
+        success = await asyncio.to_thread(tickets_client.set_specialist_reply, str(telegram_id), reply_text)
+        if not success:
+            await update.message.reply_text('Ошибка при записи ответа в поле специалиста.')
+            return
+        
+        # 2. Отправляем ответ пользователю в Telegram
+        try:
+            await context.bot.send_message(
+                chat_id=int(telegram_id), 
+                text=f'✉️ Ответ специалиста (код {code}):\n{reply_text}'
+            )
+            logger.info(f'Ответ специалиста отправлен пользователю {telegram_id}')
+        except Exception as e:
+            logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
+            await update.message.reply_text('Ответ записан, но не удалось отправить пользователю.')
+            return
+        
+        # 3. Логируем ответ в столбец E (текст_обращений) через upsert_ticket
+        await asyncio.to_thread(
+            tickets_client.upsert_ticket, 
+            str(telegram_id), code, '', '', reply_text, 'в работе', 'specialist', False
+        )
+        
+        # 4. Очищаем поле G (SPECIALIST_REPLY)
+        await asyncio.to_thread(tickets_client.clear_specialist_reply, str(telegram_id))
+        
+        await update.message.reply_text(
+            f'✅ Ответ успешно отправлен!\n\n'
+            f'👤 Пользователь: {telegram_id}\n'
+            f'📝 Код: {code}\n'
+            f'💬 Ответ: {reply_text[:100]}{"..." if len(reply_text) > 100 else ""}'
+        )
+        
     except Exception as e:
         logger.error(f'Ошибка в /reply: {e}')
-        await update.message.reply_text('Ошибка при добавлении ответа.')
+        await update.message.reply_text('Ошибка при отправке ответа.')
 
 async def monitor_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда для проверки статуса мониторинга ответов оператора"""
@@ -1025,30 +1056,58 @@ async def reset_keyboard_command(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text('❌ Нужна авторизация. Напишите /start')
 
 async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Allow admin/specialist to set status: /setstatus <код|row> <статус>"""
+    """Позволяет админу/специалисту установить статус: /setstatus <код|row> <статус>
+    НОВЫЕ СТАТУСЫ: в работе, выполнено, ожидает, приостановлено, отменено, ожидает ответа пользователя
+    """
     user = update.effective_user
     if not await is_user_authorized(user.id, context) and not is_admin(user.id):
         await update.message.reply_text('Недостаточно прав для изменения статуса.')
         return
+    
     if len(context.args) < 2:
         await update.message.reply_text('Использование: /setstatus <код> <статус>')
         return
+    
     key = context.args[0]
     status = ' '.join(context.args[1:])
+    
+    # Проверяем корректность статуса
+    valid_statuses = ['в работе', 'выполнено', 'ожидает', 'приостановлено', 'отменено', 'ожидает ответа пользователя']
+    if status.lower() not in [s.lower() for s in valid_statuses]:
+        await update.message.reply_text(
+            f'❌ Некорректный статус: {status}\n\n'
+            f'✅ Доступные статусы:\n'
+            f'• в работе\n'
+            f'• выполнено\n'
+            f'• ожидает\n'
+            f'• приостановлено\n'
+            f'• отменено\n'
+            f'• ожидает ответа пользователя'
+        )
+        return
+    
     try:
-        # Try interpret key as integer row index
+        # Пытаемся интерпретировать ключ как номер строки
         row = None
         if key.isdigit():
             row = int(key)
-        # offload set_ticket_status to thread
+        
+        # Выгружаем set_ticket_status в поток
         success = await asyncio.to_thread(tickets_client.set_ticket_status, row, (None if row else key), status)
+        
         if success:
-            await update.message.reply_text(f'Статус для {key} обновлен на "{status}"')
+            await update.message.reply_text(
+                f'✅ Статус обновлен!\n\n'
+                f'🔑 Ключ: {key}\n'
+                f'📊 Новый статус: {status}\n'
+                f'👤 Специалист: {user.first_name or user.id}'
+            )
         else:
-            await update.message.reply_text('Не удалось обновить статус (тикет не найден или ошибка).')
+            await update.message.reply_text('❌ Не удалось обновить статус (тикет не найден или ошибка).')
+            
     except Exception as e:
         logger.error(f'Ошибка в /setstatus: {e}')
-        await update.message.reply_text('Ошибка при обновлении статуса.')
+        await update.message.reply_text('❌ Ошибка при обновлении статуса.')
 
 async def fix_telegram_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда для исправления Telegram ID в таблице"""
@@ -1076,7 +1135,7 @@ async def fix_telegram_id_command(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text('Ошибка при обновлении Telegram ID.')
 
 async def set_column_width_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для установки ширины колонки обращений (колонка E) и высоты строк"""
+    """Команда для установки ширины колонок обращений (колонка E и G) и высоты строк"""
     user = update.effective_user
     
     if not is_admin(user.id):
@@ -1085,7 +1144,7 @@ async def set_column_width_command(update: Update, context: ContextTypes.DEFAULT
     
     args = context.args
     if len(args) != 2:
-        await update.message.reply_text('Использование: /set_column_width <ширина_колонки> <высота_строк>')
+        await update.message.reply_text('Использование: /set_column_width <ширина_колонки_E> <высота_строк>')
         return
     
     try:
@@ -1111,7 +1170,12 @@ async def set_column_width_command(update: Update, context: ContextTypes.DEFAULT
         
         success = await asyncio.to_thread(tickets_client.set_tickets_column_width, width, height)
         if success:
-            await update.message.reply_text(f'✅ Установлены размеры:\n📏 Ширина колонки: {width}px\n📏 Высота строк: {height}px')
+            await update.message.reply_text(
+                f'✅ Установлены размеры:\n'
+                f'📏 Колонка E (текст_обращений): {width}px\n'
+                f'📏 Колонка G (специалист_ответ): 400px\n'
+                f'📏 Высота строк: {height}px'
+            )
         else:
             await update.message.reply_text('❗️ Ошибка при установке размеров')
         
@@ -1173,6 +1237,90 @@ async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = create_auth_button(web_app_url)
         await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def table_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для просмотра структуры обновленной таблицы обращений"""
+    user = update.effective_user
+    
+    if not is_admin(user.id):
+        await update.message.reply_text('Недостаточно прав для этой команды.')
+        return
+    
+    try:
+        if not tickets_client or not tickets_client.sheet:
+            await update.message.reply_text('❌ Таблица обращений недоступна.')
+            return
+        
+        # Получаем информацию о таблице
+        all_values = await asyncio.to_thread(tickets_client.sheet.get_all_values)
+        row_count = len(all_values)
+        
+        info_text = [
+            '📊 **СТРУКТУРА ТАБЛИЦЫ ОБРАЩЕНИЙ**',
+            '',
+            '🔹 **Колонки:**',
+            '• A - Код партнера',
+            '• B - Телефон',
+            '• C - ФИО',
+            '• D - Telegram ID',
+            '• E - Текст обращений (история)',
+            '• F - Статус (ручной выбор)',
+            '• G - Ответ специалиста (временное поле)',
+            '• H - Время последнего обновления',
+            '',
+            f'📈 **Всего строк:** {row_count}',
+            f'📋 **Заголовки:** {row_count > 0}',
+            '',
+            '🎯 **НОВАЯ ЛОГИКА:**',
+            '• Новые обращения → новые строки',
+            '• Старые обращения → обновление в столбце E',
+            '• Поле G очищается после отправки ответа',
+            '• Статусы выбираются специалистом вручную'
+        ]
+        
+        await update.message.reply_text('\n'.join(info_text))
+        
+    except Exception as e:
+        logger.error(f'Ошибка в /table_info: {e}')
+        await update.message.reply_text('❌ Ошибка при получении информации о таблице.')
+
+async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для обновления заголовков таблицы обращений в соответствии с новой структурой"""
+    user = update.effective_user
+    
+    if not is_admin(user.id):
+        await update.message.reply_text('Недостаточно прав для выполнения этой команды.')
+        return
+    
+    try:
+        if not tickets_client or not tickets_client.sheet:
+            await update.message.reply_text('❌ Таблица обращений недоступна.')
+            return
+        
+        await update.message.reply_text('🔄 Обновляю заголовки таблицы...')
+        
+        # Обновляем заголовки в потоке
+        success = await asyncio.to_thread(tickets_client.update_tickets_headers)
+        
+        if success:
+            await update.message.reply_text(
+                '✅ Заголовки таблицы обновлены!\n\n'
+                '📊 Новая структура:\n'
+                '• A - код партнера\n'
+                '• B - телефон\n'
+                '• C - ФИО\n'
+                '• D - telegram_id\n'
+                '• E - текст_обращений\n'
+                '• F - статус\n'
+                '• G - специалист_ответ\n'
+                '• H - время_обновления'
+            )
+        else:
+            await update.message.reply_text('❌ Ошибка при обновлении заголовков.')
+        
+    except Exception as e:
+        logger.error(f'Ошибка в /update_headers: {e}')
+        await update.message.reply_text('❌ Ошибка при обновлении заголовков.')
+
 def _fix_telegram_id_worker(new_id: int) -> int:
     """Worker to run in thread: find rows with status 'авторизован' and update column 5 with new_id."""
     try:
@@ -1218,6 +1366,8 @@ def main():
                 app.add_handler(CommandHandler('test_monitor', test_monitor_command))
                 app.add_handler(CommandHandler('send_keyboard', send_keyboard_command))
                 app.add_handler(CommandHandler('reset_keyboard', reset_keyboard_command))
+                app.add_handler(CommandHandler('table_info', table_info_command))
+                app.add_handler(CommandHandler('update_headers', update_headers_command))
                 app.add_handler(CallbackQueryHandler(handle_callback_query))
                 app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
                 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

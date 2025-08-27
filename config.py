@@ -16,14 +16,16 @@ SHEET_COLUMNS = {
     'PARTNER_STATUS': 6, # Колонка F - статус партнера
 }
 
+# Структура колонок для таблицы обращений (новая логика)
 TICKET_COLUMNS = {
     'CODE': 1,           # Колонка A - код партнера
     'PHONE': 2,          # Колонка B - телефон
     'FIO': 3,            # Колонка C - ФИО
     'TELEGRAM_ID': 4,    # Колонка D - Telegram ID
-    'TICKETS': 5,        # Колонка E - обращения
-    'STATUS': 6,         # Колонка F - статус
-    'LAST_UPDATED': 7,   # Колонка G - время обновления
+    'TICKETS': 5,        # Колонка E - текст_обращений (история)
+    'STATUS': 6,         # Колонка F - статус (ручной выбор специалистом)
+    'SPECIALIST_REPLY': 7, # Колонка G - поле для ответа специалиста (временное)
+    'LAST_UPDATED': 8,   # Колонка H - время последнего обновления
 }
 
 # Разделы меню
@@ -61,11 +63,14 @@ WEB_APP_URLS = {
     'SPA_MENU': 'https://synthosaicreativestudio-maker.github.io/marketing/spa_menu.html',
 }
 
-# Статусы тикетов
+# Статусы тикетов (ручной выбор специалистом)
 TICKET_STATUSES = {
     'IN_PROGRESS': 'в работе',
     'COMPLETED': 'выполнено',
     'PENDING': 'ожидает',
+    'ON_HOLD': 'приостановлено',
+    'CANCELLED': 'отменено',
+    'WAITING_USER': 'ожидает ответа пользователя',
 }
 
 # Цвета для форматирования Google Sheets

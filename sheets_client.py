@@ -220,206 +220,265 @@ class GoogleSheetsClient:
             logger.error(f"Error setting thread_id for row={row} code={code}: {e}")
             return False
 
-    def set_ticket_status(self, row: int | None = None, code: str | None = None, status: str = 'в работе') -> bool:
-        """Set status for a ticket by row or code. Updates last_updated timestamp. Returns True on success."""
+    def set_ticket_status(self, row: int, code: str, status: str) -> bool:
+        """Устанавливает статус тикета. Поддерживает как номер строки, так и код."""
         if not self.sheet:
+            logger.error('Ticket sheet not connected')
             return False
+        
         try:
-            from datetime import datetime
-            ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-            if row is None and code is not None:
-                row = self.find_row_by_code(code)
-            if not row:
-                logger.error(f"Cannot set status; ticket not found for row={row} code={code}")
-                return False
-            self.sheet.update_cell(row, 6, status)
-            self.sheet.update_cell(row, 7, ts)
+            target_row = None
             
-            # Применяем форматирование цвета
-            try:
-                if status.lower() in ('выполнено', 'completed', 'done'):
-                    color = {'red': 0, 'green': 0.8, 'blue': 0}  # Зеленый
-                elif status.lower() in ('в работе', 'work', 'open', 'in progress'):
-                    color = {'red': 0.8, 'green': 0, 'blue': 0}  # Красный
+            if row and isinstance(row, int):
+                # Используем номер строки
+                if row > 0 and row <= len(self.sheet.get_all_values()):
+                    target_row = row
                 else:
-                    color = {'red': 1, 'green': 1, 'blue': 1}  # Белый
-                
-                fmt_range = f'F{row}'
-                self.sheet.format(fmt_range, {'backgroundColor': color})
-                logger.info(f'Применено форматирование для статуса "{status}" в строке {row}')
-            except Exception as e:
-                logger.warning(f'Не удалось применить форматирование: {e}')
+                    logger.warning(f'Invalid row number: {row}')
+                    return False
+            elif code:
+                # Ищем по коду
+                found_row = self.find_row_by_code(code)
+                if found_row:
+                    target_row = found_row
+                else:
+                    logger.warning(f'Code {code} not found')
+                    return False
+            else:
+                logger.warning('Neither row nor code provided')
+                return False
             
-            return True
+            if target_row:
+                # Обновляем статус в столбце F (новый индекс 6)
+                self.sheet.update_cell(target_row, 6, status)
+                
+                # Обновляем время последнего обновления в столбце H (новый индекс 8)
+                from datetime import datetime
+                ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                self.sheet.update_cell(target_row, 8, ts)
+                
+                # Форматирование статуса
+                try:
+                    if status.lower() in ('выполнено', 'completed', 'done'):
+                        color = {'red': 0, 'green': 0.8, 'blue': 0}  # Зеленый
+                    elif status.lower() in ('в работе', 'work', 'open', 'in progress'):
+                        color = {'red': 0.8, 'green': 0, 'blue': 0}  # Красный
+                    elif status.lower() in ('ожидает', 'pending', 'waiting'):
+                        color = {'red': 1, 'green': 0.6, 'blue': 0}  # Оранжевый
+                    else:
+                        color = {'red': 1, 'green': 1, 'blue': 1}  # Белый
+                    
+                    self.sheet.format(f'F{target_row}', {'backgroundColor': color})
+                    logger.info(f'Status updated to "{status}" for row {target_row}')
+                    
+                except Exception as e:
+                    logger.warning(f'Could not format status cell: {e}')
+                
+                return True
+            
         except Exception as e:
-            logger.error(f"Error setting ticket status for row={row} code={code}: {e}")
-            return False
+            logger.error(f'Error setting ticket status: {e}')
+        
+        return False
 
     # --- Ticket sheet helpers ---
     def upsert_ticket(self, telegram_id: str, code: str, phone: str, fio: str, text: str, status: str = 'в работе', sender_type: str = 'user', handled: bool = False):
         """Добавляет или обновляет запись обращения для пользователя в таблице обращений.
-        Структура колонок (1-based): 1=code,2=phone,3=fio,4=telegram_id,5=tickets,6=status,7=last_updated
-        Для одного и того же telegram_id записи объединяются в одну ячейку в колонке 5.
+        НОВАЯ ЛОГИКА:
+        - Новые обращения (новые пользователи) → новые строки
+        - Старые обращения (существующие пользователи) → обновление в столбце E
+        - Столбец G (SPECIALIST_REPLY) - временное поле для ответа специалиста
         """
         if not self.sheet:
             logger.error('Ticket sheet not connected')
             return
+        
         try:
-            # Prefer to locate the ticket by code (unique conversation id). If no code given,
-            # fall back to telegram_id lookup in column 4.
-            cell = None
-            if code:
-                try:
-                    row = self.find_row_by_code(code)
-                    if row:
-                        # create a lightweight cell-like object by reading the telegram_id cell
-                        try:
-                            cell = self.sheet.cell(row, 4)
-                        except Exception:
-                            cell = None
-                except Exception:
-                    cell = None
-            if not cell:
-                try:
-                    cell = self.sheet.find(str(telegram_id), in_column=4)
-                except Exception:
-                    cell = None
-
             from datetime import datetime
             ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-            # Normalize sender label
+            
+            # Ищем существующую запись по telegram_id
+            existing_row = None
+            try:
+                cell = self.sheet.find(str(telegram_id), in_column=4)  # колонка D
+                if cell:
+                    existing_row = cell.row
+            except Exception:
+                existing_row = None
+            
+            # Нормализуем метку отправителя
             sender_label = 'Пользователь'
             if sender_type == 'assistant':
                 sender_label = 'Ассистент'
             elif sender_type == 'specialist':
                 sender_label = 'Специалист'
+            
             new_entry = f"[{ts}] {sender_label}: {text}"
-
-            if cell:
-                row = cell.row
-                # Обновляем tickets (колонка 5) добавляя новую запись вВЕРХ (новые сообщения сверху)
-                current = self.sheet.cell(row, 5).value or ''
-                if current:
-                    updated = new_entry + '\n\n' + current  # Новое сообщение вверху
+            
+            if existing_row:
+                # ОБНОВЛЯЕМ существующую запись (старые обращения)
+                # Обновляем столбец E (текст_обращений) - добавляем новое сообщение
+                current_tickets = self.sheet.cell(existing_row, 5).value or ''
+                if current_tickets:
+                    updated_tickets = new_entry + '\n\n' + current_tickets  # Новое сверху
                 else:
-                    updated = new_entry
-                self.sheet.update_cell(row, 5, updated)
-                # Определяем новый статус с учетом предыдущего
-                current_status = self.sheet.cell(row, 6).value or ''
+                    updated_tickets = new_entry
                 
-                if sender_type == 'assistant' and handled:
-                    new_status = 'выполнено'
-                elif sender_type == 'specialist':
-                    new_status = 'в работе'
-                elif sender_type == 'user' and current_status.lower() in ('выполнено', 'completed', 'done'):
-                    # Если пользователь пишет к выполненной задаче - возвращаем в работу
-                    new_status = 'в работе'
-                    logger.info(f'Статус изменен с "выполнено" на "в работе" для пользователя {telegram_id}')
-                else:
-                    new_status = status
-                self.sheet.update_cell(row, 6, new_status)
-                self.sheet.update_cell(row, 7, ts)
-                # Также обновим code/phone/fio если пустые
-                if not (self.sheet.cell(row,1).value):
-                    self.sheet.update_cell(row,1, code or '')
-                if not (self.sheet.cell(row,2).value):
-                    self.sheet.update_cell(row,2, phone or '')
-                if not (self.sheet.cell(row,3).value):
-                    self.sheet.update_cell(row,3, fio or '')
+                self.sheet.update_cell(existing_row, 5, updated_tickets)
+                
+                # Обновляем статус только если это ответ специалиста
+                if sender_type == 'specialist':
+                    self.sheet.update_cell(existing_row, 6, status)
+                    # Очищаем поле ответа специалиста (столбец G)
+                    self.sheet.update_cell(existing_row, 7, '')
+                
+                # Обновляем время последнего обновления
+                self.sheet.update_cell(existing_row, 8, ts)
+                
+                logger.info(f'Updated existing ticket for user {telegram_id} in row {existing_row}')
+                
             else:
-                # Добавляем новую строку
-                values = [code or '', phone or '', fio or '', str(telegram_id), new_entry, status, ts]
-                self.sheet.append_row(values)
-
-            # Форматирование статуса (красный для 'в работе', зелёный для 'выполнено')
-            try:
-                # Определяем строку (если мы добавили новую, ищем её снова)
-                target_row = None
-                if cell:
-                    target_row = cell.row
-                else:
-                    # попробуем найти по telegram_id
-                    try:
-                        found_cell = self.sheet.find(str(telegram_id), in_column=4)
-                        if found_cell:
-                            target_row = found_cell.row
-                    except Exception:
-                        pass
+                # СОЗДАЕМ новую запись (новые обращения)
+                # Столбец G (SPECIALIST_REPLY) остается пустым для ответа специалиста
+                values = [
+                    code or '',           # A - код партнера
+                    phone or '',          # B - телефон
+                    fio or '',            # C - ФИО
+                    str(telegram_id),     # D - Telegram ID
+                    new_entry,            # E - текст_обращений
+                    status,               # F - статус
+                    '',                   # G - поле для ответа специалиста (пустое)
+                    ts                    # H - время последнего обновления
+                ]
                 
+                self.sheet.append_row(values)
+                logger.info(f'Created new ticket row for user {telegram_id}')
+            
+            # Форматирование статуса
+            try:
+                target_row = existing_row if existing_row else len(self.sheet.get_all_values())
                 if target_row:
-                    # Получаем актуальный статус из ячейки
                     current_status = self.sheet.cell(target_row, 6).value or ''
                     
                     if current_status.lower() in ('выполнено', 'completed', 'done'):
-                        color = {'red': 0, 'green': 0.8, 'blue': 0}  # Зеленый для выполнено
+                        color = {'red': 0, 'green': 0.8, 'blue': 0}  # Зеленый
                     elif current_status.lower() in ('в работе', 'work', 'open', 'in progress'):
-                        color = {'red': 0.8, 'green': 0, 'blue': 0}  # Красный для в работе
+                        color = {'red': 0.8, 'green': 0, 'blue': 0}  # Красный
+                    elif current_status.lower() in ('ожидает', 'pending', 'waiting'):
+                        color = {'red': 1, 'green': 0.6, 'blue': 0}  # Оранжевый
                     else:
-                        color = {'red': 1, 'green': 1, 'blue': 1}  # Белый для других статусов
+                        color = {'red': 1, 'green': 1, 'blue': 1}  # Белый
                     
-                    fmt_range = f'F{target_row}'
-                    self.sheet.format(fmt_range, {'backgroundColor': color})
-                    logger.info(f'Применено форматирование для статуса "{current_status}" в строке {target_row}')
+                    self.sheet.format(f'F{target_row}', {'backgroundColor': color})
+                    
             except Exception as e:
-                logger.warning(f'Не удалось применить форматирование статуса: {e}')
-
+                logger.warning(f'Could not format status cell: {e}')
+                
         except Exception as e:
-            logger.error(f'Error upserting ticket for {telegram_id}: {e}')
+            logger.error(f'Error in upsert_ticket: {e}')
+            raise
     
     def set_tickets_column_width(self, width_pixels: int = 600, row_height_pixels: int = 100):
-        """Устанавливает фиксированную ширину для колонки E (обращения) и высоту строк."""
+        """Устанавливает ширину колонки обращений (колонка E) и высоту строк для новой структуры."""
         if not self.sheet:
-            logger.error('Sheet not connected')
+            logger.error('Ticket sheet not connected')
             return False
+        
         try:
-            from gspread.utils import rowcol_to_a1
-            import requests
+            # Устанавливаем ширину колонки E (текст_обращений) - 600px
+            self.sheet.set_column_width(5, width_pixels)  # Колонка E
             
-            # Получаем ID таблицы и листа
-            spreadsheet_id = self.sheet.spreadsheet.id
-            sheet_id = self.sheet.id
+            # Устанавливаем ширину колонки G (поле ответа специалиста) - 400px
+            self.sheet.set_column_width(7, 400)  # Колонка G
             
-            # Батч запрос для установки ширины колонки и высоты строк
-            batch_update_request = {
-                'requests': [
-                    # Установка ширины колонки E
-                    {
-                        'updateDimensionProperties': {
-                            'range': {
-                                'sheetId': sheet_id,
-                                'dimension': 'COLUMNS',
-                                'startIndex': 4,  # Колонка E (счет с 0)
-                                'endIndex': 5     # До колонки E включительно
-                            },
-                            'properties': {
-                                'pixelSize': width_pixels
-                            },
-                            'fields': 'pixelSize'
-                        }
-                    },
-                    # Установка высоты всех строк (начиная с строки 2, пропуская заголовок)
-                    {
-                        'updateDimensionProperties': {
-                            'range': {
-                                'sheetId': sheet_id,
-                                'dimension': 'ROWS',
-                                'startIndex': 1,   # Начинаем со 2-й строки (счет с 0)
-                                'endIndex': 1000   # Охватываем до 1000 строк
-                            },
-                            'properties': {
-                                'pixelSize': row_height_pixels
-                            },
-                            'fields': 'pixelSize'
-                        }
-                    }
-                ]
-            }
+            # Устанавливаем высоту строк - 100px
+            self.sheet.set_row_height(1, row_height_pixels)  # Заголовок
             
-            # Отправляем batch update через gspread API
-            self.sheet.spreadsheet.batch_update(batch_update_request)
-            logger.info(f'Установлена ширина {width_pixels}px для колонки E и высота {row_height_pixels}px для строк')
+            # Устанавливаем высоту для всех строк с данными
+            all_values = self.sheet.get_all_values()
+            for row_num in range(2, len(all_values) + 1):
+                self.sheet.set_row_height(row_num, row_height_pixels)
+            
+            logger.info(f'Установлена ширина {width_pixels}px для колонки E и {400}px для колонки G, высота {row_height_pixels}px для строк')
             return True
             
         except Exception as e:
             logger.error(f'Ошибка при установке размеров: {e}')
+            return False
+
+    def set_specialist_reply(self, telegram_id: str, reply_text: str, clear_after_send: bool = True):
+        """Записывает ответ специалиста в поле G (SPECIALIST_REPLY) и отправляет пользователю.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            reply_text: Текст ответа специалиста
+            clear_after_send: Очищать ли поле после отправки
+        """
+        if not self.sheet:
+            logger.error('Ticket sheet not connected')
+            return False
+        
+        try:
+            # Ищем строку по telegram_id
+            cell = self.sheet.find(str(telegram_id), in_column=4)  # колонка D
+            if not cell:
+                logger.warning(f'User {telegram_id} not found in tickets')
+                return False
+            
+            row = cell.row
+            
+            # Записываем ответ в поле G (SPECIALIST_REPLY)
+            self.sheet.update_cell(row, 7, reply_text)
+            logger.info(f'Specialist reply written to row {row} for user {telegram_id}')
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f'Error setting specialist reply: {e}')
+            return False
+    
+    def clear_specialist_reply(self, telegram_id: str):
+        """Очищает поле ответа специалиста (столбец G) после отправки."""
+        if not self.sheet:
+            return False
+        
+        try:
+            cell = self.sheet.find(str(telegram_id), in_column=4)
+            if cell:
+                self.sheet.update_cell(cell.row, 7, '')
+                logger.info(f'Cleared specialist reply field for user {telegram_id}')
+                return True
+        except Exception as e:
+            logger.error(f'Error clearing specialist reply: {e}')
+        
+        return False
+
+    def update_tickets_headers(self):
+        """Обновляет заголовки таблицы обращений в соответствии с новой структурой"""
+        if not self.sheet:
+            logger.error('Ticket sheet not connected')
+            return False
+        
+        try:
+            # Новые заголовки для обновленной структуры
+            new_headers = [
+                'код',                    # A - код партнера
+                'телефон',                # B - телефон
+                'ФИО',                    # C - ФИО
+                'telegram_id',            # D - Telegram ID
+                'текст_обращений',        # E - текст обращений (история)
+                'статус',                 # F - статус (ручной выбор)
+                'специалист_ответ',       # G - ответ специалиста (временное поле)
+                'время_обновления'        # H - время последнего обновления
+            ]
+            
+            # Обновляем заголовки
+            for col_idx, header in enumerate(new_headers, start=1):
+                self.sheet.update_cell(1, col_idx, header)
+            
+            logger.info('Заголовки таблицы обращений обновлены в соответствии с новой структурой')
+            return True
+            
+        except Exception as e:
+            logger.error(f'Ошибка при обновлении заголовков: {e}')
             return False
