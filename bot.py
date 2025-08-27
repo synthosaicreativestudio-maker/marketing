@@ -770,7 +770,7 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             web_app_base = get_web_app_url('MENU')
             menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
             await update.message.reply_text(
-                'Откройте личный кабинет для выбора раздела',
+                'Откройте личный кабинет для выбора раздела, или напишите в чат',
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]])
             )
             
