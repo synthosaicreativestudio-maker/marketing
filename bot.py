@@ -21,7 +21,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 from sheets_client import GoogleSheetsClient
 
 # Импорты новых модулей
-from config import SECTIONS, get_web_app_url, get_ticket_status, SECTION_TO_WEBAPP, SUBSECTIONS
+from config import SECTIONS, get_web_app_url, get_ticket_status, SUBSECTIONS
 from auth_cache import auth_cache
 from openai_client import openai_client
 from process_lock import ProcessLock
