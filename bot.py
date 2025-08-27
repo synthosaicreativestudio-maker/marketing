@@ -1257,6 +1257,50 @@ async def table_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.error(f'Ошибка в /table_info: {e}')
         await update.message.reply_text('❌ Ошибка при получении информации о таблице.')
 
+async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
+    """Проверяет ответы операторов в поле G и отправляет их пользователям"""
+    if not tickets_client or not tickets_client.sheet:
+        logger.warning('Tickets sheet не доступен для проверки ответов')
+        return
+    
+    try:
+        # Получаем все ответы операторов из поля G
+        replies = await asyncio.to_thread(tickets_client.extract_operator_replies)
+        if not replies:
+            return
+        
+        for reply in replies:
+            telegram_id = reply.get('telegram_id')
+            reply_text = reply.get('reply_text')
+            code = reply.get('code')
+            
+            if not all([telegram_id, reply_text, code]):
+                continue
+            
+            try:
+                # Отправляем ответ пользователю
+                await context.bot.send_message(
+                    chat_id=telegram_id,
+                    text=f"📋 **Ответ специалиста по обращению {code}:**\n\n{reply_text}"
+                )
+                
+                # Логируем ответ в историю обращений (столбец E)
+                await asyncio.to_thread(
+                    tickets_client.upsert_ticket,
+                    str(telegram_id), code, '', '', f'[ОТВЕТ СПЕЦИАЛИСТА] {reply_text}', 'в работе', 'specialist', False
+                )
+                
+                # Очищаем поле G после обработки
+                await asyncio.to_thread(tickets_client.clear_specialist_reply, str(telegram_id))
+                
+                logger.info(f'Ответ специалиста отправлен пользователю {telegram_id} и записан в историю')
+                
+            except Exception as e:
+                logger.error(f'Ошибка при отправке ответа пользователю {telegram_id}: {e}')
+                
+    except Exception as e:
+        logger.error(f'Ошибка при проверке ответов операторов: {e}')
+
 async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда для обновления заголовков таблицы обращений в соответствии с новой структурой"""
     user = update.effective_user
@@ -1332,8 +1376,8 @@ def main():
                     logger.error('TELEGRAM_TOKEN не задан в .env')
                     return
                         
-                # Создаем Application без job_queue
-                app = Application.builder().token(token).job_queue(None).build()
+                # Создаем Application с job_queue
+                app = Application.builder().token(token).build()
 
                 app.add_handler(CommandHandler('start', start))
                 app.add_handler(CommandHandler('new_chat', new_chat))
@@ -1356,15 +1400,15 @@ def main():
                 app.add_handler(CommandHandler('menu', menu_command))
                 app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
                         
-                # Временно отключен мониторинг ответов оператора из-за ошибки
-                # job_queue = app.job_queue
-                # if job_queue and tickets_client:
-                #     job_queue.run_repeating(
- 
-                #         interval=30,  # каждые 30 секунд
-                #         first=10      # первый запуск через 10 секунд
-                #     )
-                #     logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
+                # Запускаем мониторинг ответов оператора
+                job_queue = app.job_queue
+                if job_queue and tickets_client:
+                    job_queue.run_repeating(
+                        check_operator_replies,
+                        interval=30,  # каждые 30 секунд
+                        first=10      # первый запуск через 10 секунд
+                    )
+                    logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
                         
                 logger.info('Бот запущен...')
                         
