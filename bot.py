@@ -1241,6 +1241,11 @@ async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
         return
     
     try:
+        # Отладочная информация
+        logger.info(f'DEBUG: tickets_client type: {type(tickets_client)}')
+        logger.info(f'DEBUG: tickets_client has extract_operator_replies: {hasattr(tickets_client, "extract_operator_replies")}')
+        logger.info(f'DEBUG: tickets_client methods: {[method for method in dir(tickets_client) if not method.startswith("_")]}')
+        
         # Получаем все ответы операторов из поля G
         replies = await asyncio.to_thread(tickets_client.extract_operator_replies)
         if not replies:
