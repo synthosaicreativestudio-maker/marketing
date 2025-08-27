@@ -462,9 +462,14 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
         return False, "Неверный формат данных"
     
     # Проверяем тип данных
-    data_type = payload.get('type')
+    data_type = payload.get('type', '').strip()  # Очищаем от пробелов
     logger.info(f'DEBUG: Payload type detected: "{data_type}"')
     logger.info(f'DEBUG: All payload keys: {list(payload.keys())}')
+    
+    # Проверяем, что в payload есть section и webapp_url (для direct_webapp)
+    if 'section' in payload and 'webapp_url' in payload and not data_type:
+        logger.info('DEBUG: Detected direct_webapp payload without explicit type')
+        data_type = 'direct_webapp'
     
     if data_type == 'menu_selection':
         logger.info('DEBUG: Processing menu_selection')
@@ -563,7 +568,11 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Определяем тип данных и направляем в соответствующий обработчик
-    data_type = payload.get('type')
+    data_type = payload.get('type', '').strip()
+    # Проверяем, что в payload есть section и webapp_url (для direct_webapp)
+    if 'section' in payload and 'webapp_url' in payload and not data_type:
+        data_type = 'direct_webapp'
+        
     if data_type == 'menu_selection':
         logger.info(f'Routing to menu selection handler')
         await handle_menu_selection(update, context, payload)
