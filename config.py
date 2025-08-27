@@ -59,6 +59,7 @@ OPENAI_CONFIG = {
 WEB_APP_URLS = {
     'MAIN': 'https://synthosaicreativestudio-maker.github.io/marketing/',
     'MENU': 'https://synthosaicreativestudio-maker.github.io/marketing/mini_app.html',
+    'SPA_MENU': 'https://synthosaicreativestudio-maker.github.io/marketing/spa_menu.html',
     'AGREGATORY': 'https://synthosaicreativestudio-maker.github.io/marketing/agregatory.html',
     'CONTENT': 'https://synthosaicreativestudio-maker.github.io/marketing/content.html',
     'FINANCE': 'https://synthosaicreativestudio-maker.github.io/marketing/finance.html',

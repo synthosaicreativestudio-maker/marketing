@@ -254,7 +254,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f'Processing message {message_id} from user {user.id}: {update.message.text[:50]}...')
     
     from telegram import ReplyKeyboardMarkup, KeyboardButton
-    menu_url = get_web_app_url('MENU')
+    menu_url = get_web_app_url('SPA_MENU')
     persistent_keyboard = ReplyKeyboardMarkup(
         [[KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]],
         resize_keyboard=True,
@@ -336,7 +336,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if row:
                     # Создаем кнопки для управления тикетом
-                    menu_url = get_web_app_url('MENU')
+                    menu_url = get_web_app_url('SPA_MENU')
                     buttons = [
                         [InlineKeyboardButton('Перевести специалисту', callback_data=f't:transfer:{row}'), InlineKeyboardButton('Выполнено', callback_data=f't:done:{row}')],
                         [InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]
@@ -437,7 +437,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await is_user_authorized(user.id, context):
         # Persistent меню с кнопкой /menu
         from telegram import ReplyKeyboardMarkup, KeyboardButton
-        menu_url = get_web_app_url('MENU')
+        menu_url = get_web_app_url('SPA_MENU')
         kb_button = KeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))
         persistent_keyboard = ReplyKeyboardMarkup(
             [[kb_button]],
@@ -690,7 +690,7 @@ async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Пользователь уже авторизован в основном меню
     
     # Открываем главное меню
-    menu_url = get_web_app_url('MENU')
+    menu_url = get_web_app_url('SPA_MENU')
     keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
     await update.message.reply_text('Возвращаюсь в главное меню:', reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -776,8 +776,8 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text('✅ Авторизация прошла успешно!')
             
             # Показываем кнопку для открытия личного кабинета
-            web_app_base = get_web_app_url('MENU')
-            menu_url = f"{web_app_base.rstrip('/')}#view=menu2"
+            web_app_base = get_web_app_url('SPA_MENU')
+            menu_url = web_app_base
             await update.message.reply_text(
                 'Откройте личный кабинет для выбора раздела, или напишите в чат',
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]])
