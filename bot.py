@@ -1006,8 +1006,8 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=f'✉️ Ответ специалиста (код {code}):\n{reply_text}'
             )
             logger.info(f'Ответ специалиста отправлен пользователю {telegram_id}')
-            except Exception as e:
-                logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
+        except Exception as e:
+            logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
             await update.message.reply_text('Ответ записан, но не удалось отправить пользователю.')
             return
         
@@ -1411,22 +1411,22 @@ def main():
     lock_file = 'bot.lock'
     try:
         with ProcessLock(lock_file) as lock:
-        logger.info('Successfully acquired lock, starting bot...')
-    
-    try:
-        token = os.getenv('TELEGRAM_TOKEN')
-        if not token:
-            logger.error('TELEGRAM_TOKEN не задан в .env')
-            return
-                
-        app = Application.builder().token(token).build()
-        app.add_handler(CommandHandler('start', start))
-        app.add_handler(CommandHandler('new_chat', new_chat))
-        app.add_handler(CommandHandler('reply', reply_command))
-        app.add_handler(CommandHandler('setstatus', setstatus_command))
-        app.add_handler(CommandHandler('push', push_command))
-        app.add_handler(CommandHandler('check_auth', check_auth_command))
-        app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
+            logger.info('Successfully acquired lock, starting bot...')
+            
+            try:
+                token = os.getenv('TELEGRAM_TOKEN')
+                if not token:
+                    logger.error('TELEGRAM_TOKEN не задан в .env')
+                    return
+                        
+                app = Application.builder().token(token).build()
+                app.add_handler(CommandHandler('start', start))
+                app.add_handler(CommandHandler('new_chat', new_chat))
+                app.add_handler(CommandHandler('reply', reply_command))
+                app.add_handler(CommandHandler('setstatus', setstatus_command))
+                app.add_handler(CommandHandler('push', push_command))
+                app.add_handler(CommandHandler('check_auth', check_auth_command))
+                app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
                 app.add_handler(CommandHandler('set_column_width', set_column_width_command))
                 app.add_handler(CommandHandler('monitor_status', monitor_status_command))
                 app.add_handler(CommandHandler('test_monitor', test_monitor_command))
@@ -1434,12 +1434,12 @@ def main():
                 app.add_handler(CommandHandler('reset_keyboard', reset_keyboard_command))
                 app.add_handler(CommandHandler('table_info', table_info_command))
                 app.add_handler(CommandHandler('update_headers', update_headers_command))
-        app.add_handler(CallbackQueryHandler(handle_callback_query))
-        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        app.add_handler(CommandHandler('menu', menu_command))
-        app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
-                
+                app.add_handler(CallbackQueryHandler(handle_callback_query))
+                app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
+                app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+                app.add_handler(CommandHandler('menu', menu_command))
+                app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
+                        
                 # Добавляем job для мониторинга ответов оператора
                 job_queue = app.job_queue
                 if job_queue and tickets_client:
@@ -1449,39 +1449,39 @@ def main():
                         first=10      # первый запуск через 10 секунд
                     )
                     logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
-                
-        logger.info('Бот запущен...')
-                
+                        
+                logger.info('Бот запущен...')
+                        
                 # Global error handler
-        async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-            err = getattr(context, 'error', None)
-            try:
-                if isinstance(err, telegram.error.Conflict):
-                    logger.warning(f'GetUpdates conflict (caught in error handler): {err} — sleeping briefly and will let polling retry.')
-                    await asyncio.sleep(5)
-                    return
-            except Exception:
-                logger.exception('Error in global error handler')
-            logger.exception(f'Unhandled exception in update handling: {err}')
+                async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+                    err = getattr(context, 'error', None)
+                    try:
+                        if isinstance(err, telegram.error.Conflict):
+                            logger.warning(f'GetUpdates conflict (caught in error handler): {err} — sleeping briefly and will let polling retry.')
+                            await asyncio.sleep(5)
+                            return
+                    except Exception:
+                        logger.exception('Error in global error handler')
+                    logger.exception(f'Unhandled exception in update handling: {err}')
 
-        app.add_error_handler(_global_error_handler)
+                app.add_error_handler(_global_error_handler)
 
                 # Run polling with retry/backoff
-        retry_delay = 3
-        while True:
-            try:
-                app.run_polling(drop_pending_updates=True)
-                break
-            except telegram.error.Conflict as e:
-                logger.error(f'GetUpdates conflict detected (outer loop): {e}. Retrying in {retry_delay}s...')
-                time.sleep(retry_delay)
-                retry_delay = min(60, retry_delay * 2)
-                continue
+                retry_delay = 3
+                while True:
+                    try:
+                        app.run_polling(drop_pending_updates=True)
+                        break
+                    except telegram.error.Conflict as e:
+                        logger.error(f'GetUpdates conflict detected (outer loop): {e}. Retrying in {retry_delay}s...')
+                        time.sleep(retry_delay)
+                        retry_delay = min(60, retry_delay * 2)
+                        continue
+                    except Exception as e:
+                        logger.exception(f'Unexpected error in polling loop: {e}')
+                        break
+                                
             except Exception as e:
-                logger.exception(f'Unexpected error in polling loop: {e}')
-                break
-                        
-        except Exception as e:
                 logger.error(f'Error starting bot: {e}')
                 return
     except Exception as e:
