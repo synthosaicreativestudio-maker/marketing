@@ -759,6 +759,13 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]])
             )
             
+            # Добавляем постоянную reply клавиатуру с кнопкой menu
+            persistent_keyboard = create_persistent_keyboard()
+            await update.message.reply_text(
+                'Используйте кнопку "menu" для быстрого доступа к личному кабинету',
+                reply_markup=persistent_keyboard
+            )
+            
         except Exception as e:
             logger.error(f'Error updating auth status: {e}')
             await update.message.reply_text('Ошибка при сохранении авторизации. Попробуйте позже.')
@@ -794,7 +801,11 @@ async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Проверяем авторизацию заново
     if await is_user_authorized(user.id, context):
-        await update.message.reply_text('История диалога сброшена. Вы авторизованы и можете продолжить работу.')
+        persistent_keyboard = create_persistent_keyboard()
+        await update.message.reply_text(
+            'История диалога сброшена. Вы авторизованы и можете продолжить работу.',
+            reply_markup=persistent_keyboard
+        )
     else:
         await update.message.reply_text('История диалога сброшена. Для работы требуется авторизация.')
         # Показываем кнопку авторизации
@@ -982,7 +993,8 @@ async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Проверяем авторизацию заново
     if await is_user_authorized(user.id, context):
-        await update.message.reply_text('Кэш очищен. Вы авторизованы.')
+        persistent_keyboard = create_persistent_keyboard()
+        await update.message.reply_text('Кэш очищен. Вы авторизованы.', reply_markup=persistent_keyboard)
     else:
         await update.message.reply_text('Кэш очищен. Требуется авторизация.')
         # Показываем кнопку авторизации
