@@ -27,7 +27,6 @@ from openai_client import openai_client
 from process_lock import ProcessLock
 
 # Загрузка .env. Если TELEGRAM_TOKEN не задан, попробуем загрузить `bot.env`
-import subprocess
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /menu - открывает SPA меню"""
@@ -62,16 +61,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-
-
-
-
-
-
-
-
-
 # Google Sheets клиент
 SHEET_URL = os.getenv('SHEET_URL')
 WORKSHEET_NAME = os.getenv('WORKSHEET_NAME', 'список сотрудников для авторизации')
@@ -91,6 +80,19 @@ def is_admin(user_id: int) -> bool:
     admin_ids = os.getenv('ADMIN_TELEGRAM_ID', '')
     admin_list = [s.strip() for s in admin_ids.split(',') if s.strip()]
     return str(user_id) in admin_list
+
+def create_persistent_keyboard():
+    """Создаёт постоянную reply клавиатуру с кнопкой menu"""
+    from telegram import ReplyKeyboardMarkup
+    return ReplyKeyboardMarkup(
+        [['menu']],
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+
+def create_auth_button(url: str):
+    """Создаёт кнопку для авторизации"""
+    return [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=url))]]
 
 async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Проверяет авторизацию пользователя. Использует единый кэш для оптимизации."""
@@ -243,12 +245,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_id = update.message.message_id
     logger.info(f'Processing message {message_id} from user {user.id}: {update.message.text[:50]}...')
     
-    from telegram import ReplyKeyboardMarkup, KeyboardButton
-    persistent_keyboard = ReplyKeyboardMarkup(
-        [['menu']],
-        resize_keyboard=True,
-        one_time_keyboard=False
-    )
+    persistent_keyboard = create_persistent_keyboard()
     
     if not await is_user_authorized(user.id, context):
         await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
@@ -431,19 +428,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f'/start от {user.id} ({user.first_name})')
     if await is_user_authorized(user.id, context):
         # Persistent меню с кнопкой menu
-        from telegram import ReplyKeyboardMarkup, KeyboardButton
-        persistent_keyboard = ReplyKeyboardMarkup(
-            [['menu']],
-            resize_keyboard=True,
-            one_time_keyboard=False
-        )
+        persistent_keyboard = create_persistent_keyboard()
         await update.message.reply_text(
             'Вы уже авторизованы и готовы к работе!\nНажмите кнопку menu чтобы открыть личный кабинет.',
             reply_markup=persistent_keyboard
         )
         return
     auth_url = get_web_app_url('MAIN')
-    keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=auth_url))]]
+    keyboard = create_auth_button(auth_url)
     await update.message.reply_text(f'Привет, {user.first_name}! Нажми кнопку чтобы авторизоваться.', reply_markup=InlineKeyboardMarkup(keyboard))
 
 def validate_payload(payload: dict) -> tuple[bool, str]:
@@ -786,7 +778,7 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Авторизация заблокирована на {time_text}.')
         else:
             web_app_url = get_web_app_url('MAIN')
-            keyboard = [[InlineKeyboardButton('Повторить авторизацию', web_app=WebAppInfo(url=web_app_url))]]
+            keyboard = create_auth_button(web_app_url)
             await update.message.reply_text(
                 f'❌ Неверные данные или аккаунт неактивен.\nОсталось попыток: {attempts_left}',
                 reply_markup=InlineKeyboardMarkup(keyboard)
@@ -995,7 +987,7 @@ async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Кэш очищен. Требуется авторизация.')
         # Показываем кнопку авторизации
         web_app_url = get_web_app_url('MAIN')
-        keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
+        keyboard = create_auth_button(web_app_url)
         await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
 
 def _fix_telegram_id_worker(new_id: int) -> int:
