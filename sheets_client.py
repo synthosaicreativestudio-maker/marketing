@@ -326,10 +326,17 @@ class GoogleSheetsClient:
                 
                 self.sheet.update_cell(existing_row, 5, updated_tickets)
                 
-                # Обновляем статус только если это ответ специалиста
+                # Обновляем статус: если это ответ специалиста - используем переданный статус,
+                # если это повторное обращение пользователя - меняем на "в работе"
                 if sender_type == 'specialist':
                     self.sheet.update_cell(existing_row, 6, status)
                     # НЕ очищаем поле G здесь - это делается отдельно после логирования
+                elif sender_type == 'user':
+                    # При повторном обращении пользователя меняем статус на "в работе"
+                    current_status = self.sheet.cell(existing_row, 6).value or ''
+                    if current_status.lower() in ('выполнено', 'completed', 'done'):
+                        self.sheet.update_cell(existing_row, 6, 'в работе')
+                        logger.info(f'Status changed from "{current_status}" to "в работе" for user {telegram_id} (repeated request)')
                 
                 # Обновляем время последнего обновления
                 self.sheet.update_cell(existing_row, 8, ts)
