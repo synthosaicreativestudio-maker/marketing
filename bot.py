@@ -161,6 +161,11 @@ tickets_client = None
 if TICKETS_SHEET_URL and os.path.exists('credentials.json'):
     try:
         tickets_client = GoogleSheetsClient(credentials_path='credentials.json', sheet_url=TICKETS_SHEET_URL, worksheet_name=TICKETS_WORKSHEET)
+        # Отладочная информация
+        logger.info(f'DEBUG: tickets_client создан: {type(tickets_client)}')
+        logger.info(f'DEBUG: tickets_client has extract_operator_replies: {hasattr(tickets_client, "extract_operator_replies")}')
+        logger.info(f'DEBUG: tickets_client methods: {[method for method in dir(tickets_client) if not method.startswith("_")]}')
+        
         # Устанавливаем фиксированные размеры для колонки с обращениями (колонка E: ширина 600px, высота строк 100px)
         if tickets_client and tickets_client.sheet:
             tickets_client.set_tickets_column_width(600, 100)
