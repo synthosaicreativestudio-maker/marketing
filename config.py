@@ -65,8 +65,11 @@ WEB_APP_URLS = {
 
 # Статусы тикетов (ручной выбор специалистом)
 TICKET_STATUSES = {
+    'PENDING': 'ожидает',
     'IN_PROGRESS': 'в работе',
     'COMPLETED': 'выполнено',
+    'CANCELLED': 'отменено',
+    'ON_HOLD': 'приостановлено',
 }
 
 # Цвета для форматирования Google Sheets
@@ -101,6 +104,36 @@ def get_sheet_color(status: str) -> dict:
     elif any(word in status_lower for word in ['в работе', 'work', 'open', 'in progress']):
         return SHEET_COLORS['IN_PROGRESS']
     return SHEET_COLORS['DEFAULT']
+
+def validate_config() -> tuple[bool, list[str]]:
+    """Валидирует конфигурацию проекта"""
+    errors = []
+    
+    # Проверяем константы
+    if not SECTIONS:
+        errors.append('Отсутствуют разделы меню')
+    
+    if not SUBSECTIONS:
+        errors.append('Отсутствуют подразделы')
+    
+    # Проверяем соответствие разделов и подразделов
+    for section in SECTIONS:
+        if section in SUBSECTIONS and not SUBSECTIONS[section]:
+            errors.append(f'Пустой список подразделов для {section}')
+    
+    # Проверяем URLы
+    for key, url in WEB_APP_URLS.items():
+        if not url.startswith(('http://', 'https://')):
+            errors.append(f'Некорректный URL для {key}: {url}')
+    
+    # Проверяем конфигурацию авторизации
+    if AUTH_CONFIG['MAX_ATTEMPTS'] <= 0:
+        errors.append('Некорректное количество попыток авторизации')
+    
+    if not AUTH_CONFIG['BLOCK_DURATIONS'] or not all(d > 0 for d in AUTH_CONFIG['BLOCK_DURATIONS']):
+        errors.append('Некорректные длительности блокировки')
+    
+    return len(errors) == 0, errors
 
 # Подпункты для каждого раздела
 SUBSECTIONS = {

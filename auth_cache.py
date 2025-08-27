@@ -144,6 +144,32 @@ class AuthCache:
         self.failed_attempts.clear()
         logger.info('Все кэши авторизации очищены')
     
+    def cleanup_expired_data(self):
+        """Удаляет устаревшие данные из кэшей"""
+        now = time.time()
+        
+        # Очищаем устаревшие данные пользователей
+        expired_users = []
+        for user_id, data in self.user_cache.items():
+            if now - data.get('auth_timestamp', 0) > self.user_cache_ttl:
+                expired_users.append(user_id)
+        
+        for user_id in expired_users:
+            del self.user_cache[user_id]
+        
+        # Очищаем разблокированных пользователей
+        unblocked_users = []
+        for user_id, data in self.failed_attempts.items():
+            if data.get('blocked_until', 0) < now and data.get('blocked_until', 0) > 0:
+                unblocked_users.append(user_id)
+        
+        for user_id in unblocked_users:
+            self.failed_attempts[user_id]['attempts'] = 0
+            self.failed_attempts[user_id]['blocked_until'] = 0
+        
+        if expired_users or unblocked_users:
+            logger.info(f'Очищены устаревшие данные: {len(expired_users)} пользователей, {len(unblocked_users)} разблокировок')
+    
     def get_cache_stats(self) -> Dict:
         """Получает статистику кэша"""
         return {

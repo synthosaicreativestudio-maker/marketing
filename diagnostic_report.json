@@ -1,0 +1,186 @@
+{
+  "timestamp": "2025-08-27 17:12:56",
+  "sections": {
+    "python": {
+      "python_version": {
+        "value": "3.13.7",
+        "status": "success",
+        "message": "OK"
+      },
+      "working_directory": {
+        "value": "/Users/verakoroleva/Desktop/@marketing",
+        "status": "success",
+        "message": "Корневая директория проекта"
+      },
+      "permissions": {
+        "value": "R: True, W: True",
+        "status": "success",
+        "message": "Достаточно прав"
+      }
+    },
+    "files": {
+      "bot.py": {
+        "value": "72871 байт",
+        "status": "success",
+        "message": "Основной файл бота"
+      },
+      "config.py": {
+        "value": "6930 байт",
+        "status": "success",
+        "message": "Конфигурация"
+      },
+      "auth_cache.py": {
+        "value": "7759 байт",
+        "status": "success",
+        "message": "Кэш авторизации"
+      },
+      "sheets_client.py": {
+        "value": "30407 байт",
+        "status": "success",
+        "message": "Клиент Google Sheets"
+      },
+      "openai_client.py": {
+        "value": "7000 байт",
+        "status": "success",
+        "message": "Клиент OpenAI"
+      },
+      "requirements.txt": {
+        "value": "98 байт",
+        "status": "success",
+        "message": "Зависимости Python"
+      },
+      "index.html": {
+        "value": "14144 байт",
+        "status": "success",
+        "message": "Веб-интерфейс авторизации"
+      },
+      "spa_menu.html": {
+        "value": "11369 байт",
+        "status": "success",
+        "message": "Веб-интерфейс меню"
+      },
+      "credentials.json": {
+        "value": "Найден",
+        "status": "success",
+        "message": "Google Cloud credentials"
+      },
+      ".env": {
+        "value": "Найден",
+        "status": "success",
+        "message": "Файл переменных окружения"
+      }
+    },
+    "dependencies": {
+      "telegram": {
+        "value": "Установлен",
+        "status": "success",
+        "message": "OK"
+      },
+      "gspread": {
+        "value": "Установлен",
+        "status": "success",
+        "message": "OK"
+      },
+      "oauth2client": {
+        "value": "Установлен",
+        "status": "success",
+        "message": "OK"
+      },
+      "openai": {
+        "value": "Установлен",
+        "status": "success",
+        "message": "OK"
+      },
+      "psutil": {
+        "value": "Установлен",
+        "status": "success",
+        "message": "OK"
+      },
+      "python-dotenv": {
+        "value": "Установлен",
+        "status": "success",
+        "message": "OK"
+      }
+    },
+    "configuration": {
+      "TELEGRAM_TOKEN": {
+        "value": "8232668997...",
+        "status": "success",
+        "message": "Токен Telegram бота"
+      },
+      "SHEET_URL": {
+        "value": "https://do...",
+        "status": "success",
+        "message": "URL таблицы авторизации"
+      },
+      "TICKETS_SHEET_URL": {
+        "value": "https://do...",
+        "status": "success",
+        "message": "URL таблицы обращений"
+      },
+      "OPENAI_API_KEY": {
+        "value": "sk-proj-Pg...",
+        "status": "success",
+        "message": "Ключ OpenAI API"
+      },
+      "validation": {
+        "value": "Пройдена",
+        "status": "success",
+        "message": "Конфигурация валидна"
+      }
+    },
+    "google_sheets": {
+      "auth_sheet": {
+        "value": "3 строк",
+        "status": "success",
+        "message": "Подключение успешно"
+      },
+      "tickets_sheet": {
+        "value": "1 строк",
+        "status": "success",
+        "message": "Подключение успешно"
+      }
+    },
+    "openai": {
+      "availability": {
+        "value": "Доступен",
+        "status": "success",
+        "message": "OpenAI API отвечает"
+      },
+      "configuration": {
+        "value": "Key: True, Assistant: True",
+        "status": "success",
+        "message": "Конфигурация OpenAI настроена"
+      }
+    },
+    "performance": {
+      "cpu_usage": {
+        "value": "14.0%",
+        "status": "success",
+        "message": "Нормальная нагрузка"
+      },
+      "memory_usage": {
+        "value": "65.4%",
+        "status": "success",
+        "message": "Достаточно памяти"
+      },
+      "disk_space": {
+        "value": "64.4%",
+        "status": "success",
+        "message": "Достаточно места"
+      }
+    },
+    "cache": {
+      "cache_stats": {
+        "value": "Users: 0, Auth: 0",
+        "status": "success",
+        "message": "Кэш функционирует"
+      },
+      "cache_age": {
+        "value": "0.0s",
+        "status": "success",
+        "message": "Свежий кэш"
+      }
+    }
+  }
+}

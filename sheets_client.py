@@ -1,6 +1,7 @@
 import logging
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from error_handler import ErrorHandler, safe_execute
 
 logger = logging.getLogger(__name__)
 
