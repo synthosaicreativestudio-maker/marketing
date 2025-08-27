@@ -111,19 +111,19 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
     
     # Получаем актуальные данные из Google Sheets
     try:
-        authorized_ids = await asyncio.to_thread(get_authorized_ids)
-        if authorized_ids is None:
-            logger.warning(f'No access to sheets for user {user_id}')
-            return False
+    authorized_ids = await asyncio.to_thread(get_authorized_ids)
+    if authorized_ids is None:
+        logger.warning(f'No access to sheets for user {user_id}')
+        return False
         
-        is_auth = str(user_id) in authorized_ids
+    is_auth = str(user_id) in authorized_ids
         
         # Обновляем кэш
         auth_cache.set_user_authorized(user_id, is_auth)
         
-        logger.info(f'User {user_id} authorization result: {is_auth}')
-        return is_auth
-        
+    logger.info(f'User {user_id} authorization result: {is_auth}')
+    return is_auth
+
     except Exception as e:
         logger.error(f'Error checking authorization for user {user_id}: {e}')
         return False
@@ -583,41 +583,41 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор раздела меню от пользователя."""
-    user = update.effective_user
+        user = update.effective_user
     section = payload.get('section')
     
-    if not await is_user_authorized(user.id, context):
-        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
-        return
+        if not await is_user_authorized(user.id, context):
+            await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+            return
     
     # Создаем тикет для раздела без подпунктов
-    try:
-        if tickets_client and tickets_client.sheet:
-            telegram_id = str(user.id)
-            code = context.user_data.get('partner_code', '')
-            phone = context.user_data.get('phone', '')
-            fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        try:
+            if tickets_client and tickets_client.sheet:
+                telegram_id = str(user.id)
+                code = context.user_data.get('partner_code', '')
+                phone = context.user_data.get('phone', '')
+                fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
             
             await asyncio.to_thread(
                 tickets_client.upsert_ticket, 
                 telegram_id, code, phone, fio, 
                 f"Запрос: {section}", 'в работе', 'user', False
             )
-    except Exception as e:
-        logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
+        except Exception as e:
+            logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
     
-    await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
+        await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
     
     # Уведомляем администраторов
-    try:
-        admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
-        for aid in admin_ids:
-            try:
-                await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
-            except Exception:
-                pass
-    except Exception:
-        pass
+        try:
+            admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
+            for aid in admin_ids:
+                try:
+                    await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
 async def handle_subsection_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор подраздела от пользователя."""
@@ -878,8 +878,8 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=f'✉️ Ответ специалиста (код {code}):\n{reply_text}'
             )
             logger.info(f'Ответ специалиста отправлен пользователю {telegram_id}')
-        except Exception as e:
-            logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
+            except Exception as e:
+                logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
             await update.message.reply_text('Ответ записан, но не удалось отправить пользователю.')
             return
         
@@ -1254,7 +1254,7 @@ async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
         # Получаем все ответы операторов из поля G
         replies = await asyncio.to_thread(tickets_client.extract_operator_replies)
         if not replies:
-            return
+        return
         
         for reply in replies:
             telegram_id = reply.get('telegram_id')
@@ -1282,10 +1282,10 @@ async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
                 
                 logger.info(f'Ответ специалиста отправлен пользователю {telegram_id} и записан в историю')
                 
-            except Exception as e:
+        except Exception as e:
                 logger.error(f'Ошибка при отправке ответа пользователю {telegram_id}: {e}')
                 
-    except Exception as e:
+                    except Exception as e:
         logger.error(f'Ошибка при проверке ответов операторов: {e}')
 
 async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1299,8 +1299,8 @@ async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_T
     try:
         if not tickets_client or not tickets_client.sheet:
             await update.message.reply_text('❌ Таблица обращений недоступна.')
-            return
-        
+        return
+
         await update.message.reply_text('🔄 Обновляю заголовки таблицы...')
         
         # Обновляем заголовки в потоке
@@ -1327,7 +1327,7 @@ async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_T
         else:
             await update.message.reply_text('❌ Ошибка при обновлении заголовков.')
         
-    except Exception as e:
+            except Exception as e:
         logger.error(f'Ошибка в /update_headers: {e}')
         await update.message.reply_text('❌ Ошибка при обновлении заголовков.')
 
@@ -1346,7 +1346,7 @@ def _fix_telegram_id_worker(new_id: int) -> int:
                 sheets_client.sheet.update_cell(row, 5, str(new_id))
                 updated_count += 1
         return updated_count
-    except Exception:
+                except Exception:
         return 0
 
 # Запуск
@@ -1355,24 +1355,24 @@ def main():
     lock_file = 'bot.lock'
     try:
         with ProcessLock(lock_file) as lock:
-            logger.info('Successfully acquired lock, starting bot...')
-            
-            try:
-                token = os.getenv('TELEGRAM_TOKEN')
-                if not token:
-                    logger.error('TELEGRAM_TOKEN не задан в .env')
-                    return
+        logger.info('Successfully acquired lock, starting bot...')
+    
+    try:
+        token = os.getenv('TELEGRAM_TOKEN')
+        if not token:
+            logger.error('TELEGRAM_TOKEN не задан в .env')
+            return
                         
                 # Создаем Application с job_queue
-                app = Application.builder().token(token).build()
+        app = Application.builder().token(token).build()
 
-                app.add_handler(CommandHandler('start', start))
-                app.add_handler(CommandHandler('new_chat', new_chat))
-                app.add_handler(CommandHandler('reply', reply_command))
-                app.add_handler(CommandHandler('setstatus', setstatus_command))
-                app.add_handler(CommandHandler('push', push_command))
-                app.add_handler(CommandHandler('check_auth', check_auth_command))
-                app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
+        app.add_handler(CommandHandler('start', start))
+        app.add_handler(CommandHandler('new_chat', new_chat))
+        app.add_handler(CommandHandler('reply', reply_command))
+        app.add_handler(CommandHandler('setstatus', setstatus_command))
+        app.add_handler(CommandHandler('push', push_command))
+        app.add_handler(CommandHandler('check_auth', check_auth_command))
+        app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
                 app.add_handler(CommandHandler('set_column_width', set_column_width_command))
                 app.add_handler(CommandHandler('setup_dropdown', setup_dropdown_command))
                 app.add_handler(CommandHandler('monitor_status', monitor_status_command))
@@ -1381,11 +1381,11 @@ def main():
                 app.add_handler(CommandHandler('reset_keyboard', reset_keyboard_command))
                 app.add_handler(CommandHandler('table_info', table_info_command))
                 app.add_handler(CommandHandler('update_headers', update_headers_command))
-                app.add_handler(CallbackQueryHandler(handle_callback_query))
-                app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
-                app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-                app.add_handler(CommandHandler('menu', menu_command))
-                app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
+        app.add_handler(CallbackQueryHandler(handle_callback_query))
+        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        app.add_handler(CommandHandler('menu', menu_command))
+        app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
                         
                 # Запускаем мониторинг ответов оператора
                 job_queue = app.job_queue
@@ -1397,38 +1397,38 @@ def main():
                     )
                     logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
                         
-                logger.info('Бот запущен...')
+        logger.info('Бот запущен...')
                         
                 # Global error handler
-                async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-                    err = getattr(context, 'error', None)
-                    try:
-                        if isinstance(err, telegram.error.Conflict):
-                            logger.warning(f'GetUpdates conflict (caught in error handler): {err} — sleeping briefly and will let polling retry.')
-                            await asyncio.sleep(5)
-                            return
-                    except Exception:
-                        logger.exception('Error in global error handler')
-                    logger.exception(f'Unhandled exception in update handling: {err}')
+        async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+            err = getattr(context, 'error', None)
+            try:
+                if isinstance(err, telegram.error.Conflict):
+                    logger.warning(f'GetUpdates conflict (caught in error handler): {err} — sleeping briefly and will let polling retry.')
+                    await asyncio.sleep(5)
+                    return
+            except Exception:
+                logger.exception('Error in global error handler')
+            logger.exception(f'Unhandled exception in update handling: {err}')
 
-                app.add_error_handler(_global_error_handler)
+        app.add_error_handler(_global_error_handler)
 
                 # Run polling with retry/backoff
-                retry_delay = 3
-                while True:
-                    try:
-                        app.run_polling(drop_pending_updates=True)
-                        break
-                    except telegram.error.Conflict as e:
-                        logger.error(f'GetUpdates conflict detected (outer loop): {e}. Retrying in {retry_delay}s...')
-                        time.sleep(retry_delay)
-                        retry_delay = min(60, retry_delay * 2)
-                        continue
-                    except Exception as e:
-                        logger.exception(f'Unexpected error in polling loop: {e}')
-                        break
-                                
+        retry_delay = 3
+        while True:
+            try:
+                app.run_polling(drop_pending_updates=True)
+                break
+            except telegram.error.Conflict as e:
+                logger.error(f'GetUpdates conflict detected (outer loop): {e}. Retrying in {retry_delay}s...')
+                time.sleep(retry_delay)
+                retry_delay = min(60, retry_delay * 2)
+                continue
             except Exception as e:
+                logger.exception(f'Unexpected error in polling loop: {e}')
+                break
+                                
+        except Exception as e:
                 logger.error(f'Error starting bot: {e}')
                 return
     except Exception as e:
