@@ -329,8 +329,7 @@ class GoogleSheetsClient:
                 # Обновляем статус только если это ответ специалиста
                 if sender_type == 'specialist':
                     self.sheet.update_cell(existing_row, 6, status)
-                    # Очищаем поле ответа специалиста (столбец G)
-                    self.sheet.update_cell(existing_row, 7, '')
+                    # НЕ очищаем поле G здесь - это делается отдельно после логирования
                 
                 # Обновляем время последнего обновления
                 self.sheet.update_cell(existing_row, 8, ts)

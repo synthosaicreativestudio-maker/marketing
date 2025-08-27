@@ -884,6 +884,8 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text('Ошибка при записи ответа в поле специалиста.')
             return
         
+        logger.info(f'Ответ специалиста записан в поле G для пользователя {telegram_id}')
+        
         # 2. Отправляем ответ пользователю в Telegram
         try:
             await context.bot.send_message(
@@ -898,13 +900,15 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # 3. Логируем ответ в столбец E (текст_обращений) через upsert_ticket
         # Добавляем ответ специалиста в историю обращений
+        logger.info(f'Логируем ответ специалиста в историю для пользователя {telegram_id}')
         await asyncio.to_thread(
             tickets_client.upsert_ticket, 
             str(telegram_id), code, '', '', f'[ОТВЕТ СПЕЦИАЛИСТА] {reply_text}', 'в работе', 'specialist', False
         )
         
-        # 4. Очищаем поле G (SPECIALIST_REPLY) - это уже делается в upsert_ticket
-        # await asyncio.to_thread(tickets_client.clear_specialist_reply, str(telegram_id))
+        # 4. Очищаем поле G (SPECIALIST_REPLY) после логирования
+        logger.info(f'Очищаем поле G для пользователя {telegram_id}')
+        await asyncio.to_thread(tickets_client.clear_specialist_reply, str(telegram_id))
         
         await update.message.reply_text(
             f'✅ Ответ успешно отправлен!\n\n'
