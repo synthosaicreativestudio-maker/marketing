@@ -29,14 +29,13 @@ from process_lock import ProcessLock
 # Загрузка .env. Если TELEGRAM_TOKEN не задан, попробуем загрузить `bot.env`
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /menu - прямое открытие SPA меню"""
-    menu_url = get_web_app_url('SPA_MENU')
-    keyboard = [[InlineKeyboardButton('🚀 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
-    await update.message.reply_text('💼 Открываю личный кабинет...', reply_markup=InlineKeyboardMarkup(keyboard))
-    
-    # Добавляем persistent keyboard
+    """Команда /menu - показывает persistent keyboard с кнопкой личного кабинета"""
+    # Показываем persistent keyboard с кнопкой личного кабинета
     persistent_keyboard = create_persistent_keyboard()
-    await update.message.reply_text('Используйте кнопку menu для быстрого доступа:', reply_markup=persistent_keyboard)
+    await update.message.reply_text(
+        '💼 Используйте кнопку "🚀 Личный кабинет" для быстрого доступа к личному кабинету:',
+        reply_markup=persistent_keyboard
+    )
 
 async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -86,10 +85,11 @@ def is_admin(user_id: int) -> bool:
     return str(user_id) in admin_list
 
 def create_persistent_keyboard():
-    """Создаёт постоянную reply клавиатуру с кнопкой menu"""
-    from telegram import ReplyKeyboardMarkup
+    """Создаёт постоянную reply клавиатуру с кнопкой menu, которая сразу открывает миниапп"""
+    from telegram import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+    menu_url = get_web_app_url('SPA_MENU')
     return ReplyKeyboardMarkup(
-        [['menu']],
+        [[KeyboardButton('🚀 Личный кабинет', web_app=WebAppInfo(url=menu_url))]],
         resize_keyboard=True,
         one_time_keyboard=False
     )
@@ -344,17 +344,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = update.message.text
     
-    # Обрабатываем команду menu - прямое открытие личного кабинета
-    if text and text.strip().lower() == 'menu':
-        menu_url = get_web_app_url('SPA_MENU')
-        # Отправляем прямую WebApp кнопку
-        keyboard = [[InlineKeyboardButton('🚀 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
-        await update.message.reply_text('💼 Открываю личный кабинет...', reply_markup=InlineKeyboardMarkup(keyboard))
-        # Возвращаем persistent keyboard
-        await update.message.reply_text('Используйте кнопку menu для быстрого доступа:', reply_markup=persistent_keyboard)
-        return
-    
-    # Удаляем старую обработку кнопки "Личный кабинет"
+    # Убираем обработку команды menu, так как теперь используется WebApp кнопка
     
     # Логируем входящее сообщение пользователя
     try:
@@ -519,10 +509,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     logger.info(f'/start от {user.id} ({user.first_name})')
     if await is_user_authorized(user.id, context):
-        # Persistent меню с кнопкой menu
+        # Persistent меню с кнопкой личного кабинета
         persistent_keyboard = create_persistent_keyboard()
         await update.message.reply_text(
-            'Вы уже авторизованы и готовы к работе!\nНажмите кнопку menu чтобы открыть личный кабинет.',
+            'Вы уже авторизованы и готовы к работе!\nНажмите кнопку "🚀 Личный кабинет" чтобы открыть личный кабинет.',
             reply_markup=persistent_keyboard
         )
         return
@@ -764,7 +754,7 @@ async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Добавляем persistent keyboard
     persistent_keyboard = create_persistent_keyboard()
-    await update.message.reply_text('Используйте кнопку menu для быстрого доступа:', reply_markup=persistent_keyboard)
+    await update.message.reply_text('Используйте кнопку "🚀 Личный кабинет" для быстрого доступа:', reply_markup=persistent_keyboard)
 
 async def handle_direct_webapp(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает прямое открытие мини-приложения без промежуточных кнопок."""
