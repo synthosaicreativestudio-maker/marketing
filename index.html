@@ -2,127 +2,66 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Авторизация — Marketing</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Перенаправление — Marketing</title>
     <meta name="theme-color" content="#0b1226">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230b1226'/%3E%3Ccircle cx='50' cy='40' r='22' fill='%23d4af37'/%3E%3C/text%3E%3C/svg%3E">
     <style>
-        :root{
-            --bg: #071028;
-            --card: rgba(255,255,255,0.03);
-            --muted: rgba(255,255,255,0.65);
-            --gold: linear-gradient(90deg, #d4af37, #f6e7a0);
-            --accent: #d4af37;
-        }
-        html,body{height:100%;margin:0}
-        body{
-            background: radial-gradient(1200px 600px at 10% 10%, rgba(212,175,55,0.08), transparent),
-                        linear-gradient(180deg, #081428 0%, #041226 100%);
-            color:#fff;
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(180deg, #081428 0%, #041226 100%);
+            color: #fff;
             font-family: 'Faraz Serif', serif;
-            display:flex;align-items:center;justify-content:center;padding:32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
         }
-        .shell{
-            width:100%;max-width:760px;
-            border-radius:18px;padding:28px;
-            display:flex;flex-direction:column;gap:28px;align-items:flex-start;
-            position:relative;
-            margin-top:-80px;
-            margin-left:-5%
+        .redirect-container {
+            text-align: center;
+            padding: 24px;
+            border-radius: 12px;
+            background: rgba(11, 18, 38, 0.95);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            backdrop-filter: blur(8px);
         }
-        .header{
-            display:flex;align-items:flex-start;gap:15px;width:100%;
-            position:relative;
-            margin-bottom: 20px; /* фиксированный отступ */
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid rgba(212, 175, 55, 0.3);
+            border-top: 3px solid #d4af37;
+            border-radius: 50%;
+            margin: 16px auto;
+            animation: spin 1s linear infinite;
         }
-        .logo{
-            width:115px;height:115px;border-radius:6px;overflow:hidden;
-            flex-shrink: 0; /* не сжимается */
-            z-index:1000;
-            margin-top: 0px; /* выравнивание по верху надписи */
-            background: transparent; /* убираем белый фон */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-
-        .logo img{
-            width:100%;height:100%;object-fit:contain;
-            background: transparent; /* убираем фон для img */
-            display: block; /* убираем возможные отступы */
-        }
-        .brand-text{
-            text-align:left;
-            position:relative;
-            z-index:1;
-        }
-        h1{font-family:'Faraz Serif',serif;font-size:24px;font-weight:600;margin:0 0 8px 0;text-align:left;color:#ffffff !important}
-        p.lead{font-family:'Faraz Serif',serif;font-size:12px;color:var(--muted);margin:0 0 32px 0;text-align:left;line-height:1.5;color:#ffffff !important}
-        .card{
-            width:280px;
-            background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-            padding:16px;border-radius:14px;border:1px solid rgba(255,255,255,0.03);
-            box-shadow:0 20px 50px rgba(2,6,23,0.6);backdrop-filter: blur(6px);
-            align-self:flex-start
-        }
-        label{font-family:'Faraz Serif',serif;font-size:14px;font-weight:500;color:rgba(255,255,255,0.9);margin-bottom:8px;display:block;color:#ffffff !important}
-        input[type=text],input[type=tel]{font-family:'Faraz Serif',serif;width:100%;padding:12px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:#ffffff;font-size:16px;box-sizing:border-box;transition:border-color 0.2s ease;color:#ffffff !important;-webkit-appearance:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-        #code_input{width:200px}
-                #phone_input{width:200px}
-        .input-container{display:flex;flex-direction:column;align-items:flex-start;margin-bottom:12px}
-        .footer-note{font-family:'Faraz Serif',serif;font-size:12px;color:rgba(255,255,255,0.5);text-align:center;margin-top:24px;color:#ffffff !important}
-        .divider{height:1px;background:linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);margin:18px 0;border-radius:2px}
-        .cta{display:flex;align-items:center;gap:12px}
-        .muted-small{font-family:'Faraz Serif',serif;font-size:11px;color:rgba(255,255,255,0.4);color:#ffffff !important}
-        /* responsive */
-        @media (max-width:720px){
-            .shell{padding:20px;margin-top:-80px;margin-left:-3%}
-            .header{gap:10px;margin-bottom:15px}
-            .brand-text{text-align:left}
-            .logo{width:92px;height:92px;margin-top: 0px;background: transparent;}
-            #code_input,#phone_input{width:100%;max-width:200px}
-            .card{width:100%;max-width:240px;padding:12px}
-        }
-    /* menu screen */
-    .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
-    .menu-btn{font-family:'Faraz Serif',serif;background:linear-gradient(90deg,#d4af37,#f6e7a0);color:#0b1226;border:none;padding:14px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;transition:all 0.2s ease;width:100%;margin-top:8px;color:#0b1226;-webkit-appearance:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-    .menu-title{font-size:18px;margin:0 0 8px 0;font-family:'Faraz Serif',serif}
     </style>
 </head>
 <body>
-    <div class="shell">
-        <div class="header">
-            <div class="logo">
-                <img src="logo_marketing.png" alt="Marketing Logo">
-            </div>
-            <div class="brand-text">
-                <h1>Marketing ЭТАЖИ</h1>
-                <p class="lead">панель авторизации партнёра</p>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="input-container">
-                <label for="code_input">Код партнёра</label>
-                <input type="text" id="code_input" placeholder="Введите ваш код">
-            </div>
-
-            <div class="input-container">
-                <label for="phone_input">Телефон партнёра (из КОСМОС)</label>
-                <input type="tel" id="phone_input" placeholder="8 XXX XXX XX XX">
-            </div>
-
-            <div class="divider"></div>
-            <div style="display:flex;justify-content:flex-start;align-items:center;width:100%">
-                <div style="color:#d4af37;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Produced by SYNTHOS AI®</div>
-            </div>
-
-            <!-- Menu screen (second mini-app) - hidden by default -->
-            <div id="menu_screen" style="display:none">
-                <h3 class="menu-title">ЛИЧНЫЙ КАБИНЕТ</h3>
-                <div class="menu-grid" id="menu_grid"></div>
-                <div style="margin-top:12px"><small class="muted-small">Нажмите раздел, чтобы отправить запрос в бота.</small></div>
-            </div>
-        </div>
+    <div class="redirect-container">
+        <h3 style="color: #d4af37; margin: 0 0 12px 0;">🔄 Перенаправление...</h3>
+        <p style="margin: 0 0 16px 0; opacity: 0.9;">
+            Переходим к новой системе авторизации
+        </p>
+        <div class="spinner"></div>
     </div>
+    
+    <script>
+        console.log('🔄 index.html: Перенаправление на auth_universal.html');
+        
+        // Перенаправляем через 1 секунду
+        setTimeout(() => {
+            const newUrl = window.location.href.replace('index.html', 'auth_universal.html');
+            console.log('🔎 Перенаправление на:', newUrl);
+            window.location.href = newUrl;
+        }, 1000);
+    </script>
+</body>
+</html>
 
     <script>
         let tg = window.Telegram?.WebApp;
