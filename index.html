@@ -32,14 +32,15 @@
             margin-left:-5%
         }
         .header{
-            display:flex;align-items:center;gap:15px;width:100%;
+            display:flex;align-items:flex-start;gap:15px;width:100%;
             position:relative;
             margin-bottom: 20px; /* фиксированный отступ */
         }
         .logo{
-            width:50px;height:50px;border-radius:6px;overflow:hidden;
+            width:75px;height:75px;border-radius:6px;overflow:hidden;
             flex-shrink: 0; /* не сжимается */
             z-index:1000;
+            margin-top: 8px; /* выравнивание по центру между надписями */
         }
 
         .logo img{
@@ -50,8 +51,8 @@
             position:relative;
             z-index:1;
         }
-        h1{font-family:'Faraz Serif',serif;font-size:24px;font-weight:600;margin:0 0 8px 0;background:var(--gold);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center;color:#ffffff !important}
-        p.lead{font-family:'Faraz Serif',serif;font-size:14px;color:var(--muted);margin:0 0 32px 0;text-align:center;line-height:1.5;color:#ffffff !important}
+        h1{font-family:'Faraz Serif',serif;font-size:24px;font-weight:600;margin:0 0 8px 0;background:var(--gold);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:left;color:#ffffff !important}
+        p.lead{font-family:'Faraz Serif',serif;font-size:12px;color:var(--muted);margin:0 0 32px 0;text-align:left;line-height:1.5;color:#ffffff !important}
         .card{
             width:280px;
             background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
@@ -73,7 +74,7 @@
             .shell{padding:20px;margin-top:-80px;margin-left:-3%}
             .header{gap:10px;margin-bottom:15px}
             .brand-text{text-align:left}
-            .logo{width:40px;height:40px}
+            .logo{width:60px;height:60px;margin-top: 6px;}
             #code_input,#phone_input{width:100%;max-width:200px}
             .card{width:100%;max-width:240px;padding:12px}
         }
