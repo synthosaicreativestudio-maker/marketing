@@ -275,6 +275,54 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         '💡 Используйте кнопку "🚀 Личный кабинет" для доступа к функциям или выберите раздел из главного меню.'
     )
 
+async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает данные от веб-приложения авторизации"""
+    user = update.effective_user
+    logger.info(f'Web app data received from user {user.id}')
+    
+    if not hasattr(update, 'message') or not hasattr(update.message, 'web_app_data'):
+        logger.error(f'No web_app_data in update: {update}')
+        await update.message.reply_text('Ошибка: данные от Web App не получены')
+        return
+    
+    try:
+        raw_data = update.message.web_app_data.data
+        logger.info(f'Raw web app data: {raw_data}')
+        payload = json.loads(raw_data)
+        logger.info(f'Parsed web app payload: {payload}')
+        
+        # Направляем в обработчик авторизации
+        await handle_authorization(update, context, payload)
+        
+    except Exception as e:
+        logger.error(f'Failed to parse web app data: {e}')
+        logger.error(f'Raw data was: {update.message.web_app_data.data if hasattr(update.message, "web_app_data") else "No web_app_data"}')
+        await update.message.reply_text('Не удалось прочитать данные от Web App')
+        return
+
+async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
+    """Обрабатывает данные авторизации из веб-приложения"""
+    user = update.effective_user
+    
+    # Логируем информацию о платформе пользователя
+    platform_info = payload.get('platform', {})
+    logger.info(f'🔐 Authorization attempt from user {user.id}')
+    logger.info(f'📱 Platform info: {platform_info}')
+    logger.info(f'📋 Full payload: {payload}')
+    
+    # Получаем данные авторизации
+    code = payload.get('code', '').strip()
+    phone = payload.get('phone', '').strip()
+    
+    logger.info(f'📝 Auth data received - code: "{code}", phone: "{phone}"')
+    
+    if not code or not phone:
+        await update.message.reply_text('❌ Код партнера и телефон обязательны для заполнения')
+        return
+    
+    # Обрабатываем авторизацию через существующую функцию
+    await process_auth_request(update, context, code, phone)
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает callback запросы от inline кнопок"""
     query = update.callback_query
@@ -388,6 +436,9 @@ def main():
     
     # Добавляем обработчики сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    
+    # Добавляем обработчик веб-данных
+    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
     
     # Добавляем обработчик callback запросов
     application.add_handler(CallbackQueryHandler(handle_callback_query))

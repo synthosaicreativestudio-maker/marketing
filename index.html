@@ -3,207 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Авторизация партнера</title>
+    <title>Авторизация партнера - Перенаправление</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
             font-family: Arial, sans-serif;
-            background-color: #f5f5f5;
-            padding: 20px;
-            line-height: 1.6;
-        }
-
-        .auth-container {
-            max-width: 400px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-
-        .logo {
-            width: 100px;
-            height: 100px;
-            margin: 0 auto 20px;
-            display: block;
-            border-radius: 10px;
-        }
-
-        .title {
-            font-size: 20px;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 25px;
-            text-align: center;
-        }
-
-        .input-group {
-            margin-bottom: 20px;
-        }
-
-        .input-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #333;
-            font-size: 14px;
-        }
-
-        .input-group input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-            background: white;
-        }
-
-        .input-group input:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 5px rgba(0,123,255,0.3);
-        }
-
-        .auth-button {
-            width: 100%;
-            padding: 15px;
-            background: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-bottom: 20px;
         }
-
-        .auth-button:hover {
-            background: #0056b3;
-        }
-
-        .auth-button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .status-message {
-            padding: 12px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            display: none;
-        }
-
-        .status-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .status-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .loading {
-            display: none;
+        .redirect-container {
             text-align: center;
-            margin: 20px 0;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
         }
-
         .spinner {
-            width: 20px;
-            height: 20px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #007bff;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
+            margin: 0 auto 20px;
         }
-
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        .platform-info {
-            font-size: 11px;
-            color: #666;
-            margin-top: 20px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 5px;
-            text-align: center;
+        h2 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
         }
-
-        @media (max-width: 480px) {
-            .auth-container {
-                padding: 20px;
-                margin: 10px;
-            }
-            
-            .title {
-                font-size: 18px;
-            }
-            
-            .input-group input {
-                padding: 10px;
-                font-size: 14px;
-            }
-            
-            .auth-button {
-                padding: 12px;
-                font-size: 14px;
-            }
+        p {
+            margin: 0;
+            opacity: 0.8;
+        }
+        .manual-link {
+            margin-top: 20px;
+        }
+        .manual-link a {
+            color: #ffd700;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .manual-link a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
 <body>
-    <div class="auth-container">
-        <img src="logo_marketing.png" alt="Logo" class="logo">
-        <h1 class="title">Панель авторизации партнёра</h1>
-        
-        <form id="authForm">
-            <div class="input-group">
-                <label for="partnerCode">Код партнера</label>
-                <input type="text" id="partnerCode" name="partnerCode" placeholder="Введите код партнера" required>
-            </div>
-
-            <div class="input-group">
-                <label for="phoneNumber">Телефон партнера</label>
-                <input type="tel" id="phoneNumber" name="phoneNumber" placeholder="Введите номер телефона" required>
-            </div>
-
-            <button type="submit" class="auth-button" id="authButton">
-                🔐 Авторизоваться
-            </button>
-        </form>
-        
-        <div id="statusMessage" class="status-message"></div>
-        
-        <div id="loading" class="loading">
-            <div class="spinner"></div>
-            <div>Проверяем данные...</div>
-        </div>
-
-        <div class="platform-info" id="platformInfo">
-            Загрузка информации о платформе...
+    <div class="redirect-container">
+        <div class="spinner"></div>
+        <h2>Перенаправление...</h2>
+        <p>Переходим к универсальной форме авторизации</p>
+        <div class="manual-link">
+            <p>Если автоматический переход не работает:</p>
+            <a href="auth_universal.html" id="manualLink">Нажмите здесь</a>
         </div>
     </div>
+
+    <script>
+        // Автоматическое перенаправление через 2 секунды
+        setTimeout(function() {
+            window.location.href = 'auth_universal.html';
+        }, 2000);
+
+        // Дополнительная проверка для Telegram WebApp
+        if (window.Telegram && window.Telegram.WebApp) {
+            // Для Telegram WebApp делаем немедленный переход
+            setTimeout(function() {
+                window.location.href = 'auth_universal.html';
+            }, 500);
+        }
+
+        // Обработчик для ручной ссылки
+        document.getElementById('manualLink').addEventListener('click', function(e) {
+            e.preventDefault();
+            window.location.href = 'auth_universal.html';
+        });
+    </script>
+</body>
+</html>
 
     <script>
         // Инициализация Telegram WebApp
         let tg = window.Telegram.WebApp;
         
         if (tg) {
-            tg.ready();
+        tg.ready();
             tg.expand();
             
             // Получаем информацию о платформе
@@ -260,7 +153,7 @@
                     try {
                         await tg.sendData(JSON.stringify(authData));
                         showStatus('Данные отправлены через Telegram WebApp', 'success');
-                        return;
+                return;
                     } catch (error) {
                         console.log('tg.sendData не сработал, используем fallback');
                     }

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Универсальная авторизация партнера</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .auth-container {
+            max-width: 400px;
+            width: 100%;
+            background: white;
+            padding: 40px 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .auth-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 25px;
+            display: block;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #718096;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            margin-bottom: 24px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #4a5568;
+            font-size: 14px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 16px;
+            background: #f7fafc;
+            transition: all 0.3s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .input-group input:valid {
+            border-color: #48bb78;
+        }
+
+        .auth-button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .auth-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .auth-button:hover::before {
+            left: 100%;
+        }
+
+        .auth-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(102, 126, 234, 0.3);
+        }
+
+        .auth-button:active {
+            transform: translateY(0);
+        }
+
+        .auth-button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .auth-button:disabled::before {
+            display: none;
+        }
+
+        .status-message {
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+            font-weight: 500;
+        }
+
+        .status-success {
+            background: #f0fff4;
+            color: #22543d;
+            border: 2px solid #9ae6b4;
+        }
+
+        .status-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 2px solid #fc8181;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .platform-info {
+            font-size: 11px;
+            color: #a0aec0;
+            margin-top: 25px;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+
+        .diagnostic-info {
+            margin-top: 10px;
+            font-size: 10px;
+            color: #9ca3af;
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+            
+            .auth-container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+            
+            .title {
+                font-size: 20px;
+            }
+            
+            .input-group input {
+                padding: 12px 14px;
+                font-size: 16px;
+            }
+            
+            .auth-button {
+                padding: 14px;
+                font-size: 16px;
+            }
+        }
+
+        /* Анимации */
+        .auth-container {
+            animation: slideUp 0.6s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <img src="logo_marketing.png" alt="Logo" class="logo" onerror="this.style.display='none'">
+        <h1 class="title">Авторизация партнера</h1>
+        <p class="subtitle">Универсальная платформа для всех устройств</p>
+        
+        <form id="authForm">
+            <div class="input-group">
+                <label for="partnerCode">Код партнера</label>
+                <input type="text" id="partnerCode" name="partnerCode" placeholder="Введите код партнера" required autocomplete="off">
+            </div>
+
+            <div class="input-group">
+                <label for="phoneNumber">Телефон партнера</label>
+                <input type="tel" id="phoneNumber" name="phoneNumber" placeholder="Введите номер телефона" required autocomplete="off">
+            </div>
+
+            <button type="submit" class="auth-button" id="authButton">
+                🔐 Авторизоваться
+            </button>
+        </form>
+        
+        <div id="statusMessage" class="status-message"></div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <div>Проверяем данные...</div>
+        </div>
+
+        <div class="platform-info" id="platformInfo">
+            <div>Загрузка информации о платформе...</div>
+            <div class="diagnostic-info" id="diagnosticInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        let tg = window.Telegram?.WebApp;
+        let platformInfo = {};
+        
+        // Определяем платформу и среду
+        function detectPlatform() {
+            const userAgent = navigator.userAgent;
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+            const isDesktop = !isMobile;
+            const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+            const isAndroid = /Android/.test(userAgent);
+            const isTelegram = !!window.Telegram;
+            
+            return {
+                isMobile,
+                isDesktop, 
+                isIOS,
+                isAndroid,
+                isTelegram,
+                isWeb: !window.Telegram,
+                isWebView: !!window.Telegram,
+                telegramClientType: tg?.initDataUnsafe?.user?.language_code || 'unknown',
+                userAgent: userAgent,
+                platform: navigator.platform,
+                touchSupport: 'ontouchstart' in window,
+                maxTouchPoints: navigator.maxTouchPoints || 0,
+                screenSize: `${screen.width}x${screen.height}`,
+                viewportSize: `${window.innerWidth}x${window.innerHeight}`,
+                devicePixelRatio: window.devicePixelRatio || 1,
+                connection: navigator.connection ? navigator.connection.effectiveType : 'unknown',
+                telegramVersion: tg?.version || 'unknown',
+                webAppPlatform: tg?.platform || 'unknown'
+            };
+        }
+
+        // Инициализация
+        function initializeApp() {
+            platformInfo = detectPlatform();
+            
+            if (tg) {
+                tg.ready();
+                tg.expand();
+                
+                // Убираем главную кнопку Telegram чтобы показывать только нашу золотую кнопку
+                tg.MainButton.hide();
+            }
+
+            updatePlatformInfo();
+            addEventListeners();
+        }
+
+        // Обновление информации о платформе
+        function updatePlatformInfo() {
+            const platformInfoDiv = document.getElementById('platformInfo');
+            const diagnosticInfoDiv = document.getElementById('diagnosticInfo');
+            
+            let platformText = '';
+            if (platformInfo.isTelegram) {
+                platformText = `📱 Telegram WebApp${platformInfo.isMobile ? ' (Мобильное)' : ' (Десктоп)'}`;
+            } else {
+                platformText = `🌐 Веб-браузер${platformInfo.isMobile ? ' (Мобильное)' : ' (Десктоп)'}`;
+            }
+            
+            platformInfoDiv.innerHTML = `
+                <div>${platformText}</div>
+            `;
+            
+            diagnosticInfoDiv.innerHTML = `
+                Platform: ${platformInfo.platform} | Screen: ${platformInfo.screenSize} | 
+                Touch: ${platformInfo.touchSupport ? 'Yes' : 'No'} | 
+                TG Version: ${platformInfo.telegramVersion}
+            `;
+        }
+
+        // Добавление обработчиков событий
+        function addEventListeners() {
+            // Обработка формы авторизации
+            document.getElementById('authForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                await handleAuth();
+            });
+
+            // Валидация в реальном времени
+            document.getElementById('partnerCode').addEventListener('input', validateForm);
+            document.getElementById('phoneNumber').addEventListener('input', validateForm);
+        }
+
+        // Валидация формы
+        function validateForm() {
+            const partnerCode = document.getElementById('partnerCode').value.trim();
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            const authButton = document.getElementById('authButton');
+            
+            const isValid = partnerCode.length > 0 && phoneNumber.length >= 10;
+            authButton.disabled = !isValid;
+        }
+
+        // Обработка авторизации
+        async function handleAuth() {
+            const partnerCode = document.getElementById('partnerCode').value.trim();
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            
+            if (!partnerCode || !phoneNumber) {
+                showStatus('Пожалуйста, заполните все поля', 'error');
+                return;
+            }
+            
+            // Показываем загрузку
+            showLoading(true);
+            hideStatus();
+            
+            try {
+                // Собираем данные для отправки
+                const authData = {
+                    code: partnerCode,
+                    phone: phoneNumber,
+                    platform: platformInfo,
+                    timestamp: Date.now(),
+                    source: 'auth_universal'
+                };
+                
+                // Пытаемся отправить через Telegram WebApp API
+                if (tg && tg.sendData) {
+                    try {
+                        tg.sendData(JSON.stringify(authData));
+                        showStatus('✅ Данные отправлены! Ожидайте результат авторизации...', 'success');
+                        return;
+                    } catch (error) {
+                        console.error('Telegram WebApp error:', error);
+                    }
+                }
+                
+                // HTTP fallback для случаев когда WebApp недоступен
+                await sendDataViaHTTP(authData);
+                
+            } catch (error) {
+                console.error('Auth error:', error);
+                showStatus('Произошла ошибка при авторизации. Попробуйте еще раз.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // HTTP fallback для отправки данных
+        async function sendDataViaHTTP(data) {
+            try {
+                // Получаем chat_id из Telegram WebApp
+                const chatId = getCurrentChatId();
+                
+                if (!chatId) {
+                    throw new Error('Не удалось получить chat_id');
+                }
+                
+                // Отправляем данные на бота через HTTP
+                const response = await fetch(`https://api.telegram.org/bot${getBotToken()}/sendMessage`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: `🔐 Универсальная авторизация\nКод: ${data.code}\nТелефон: ${data.phone}\nПлатформа: ${data.platform.isTelegram ? 'Telegram' : 'Web'}`
+                    })
+                });
+                
+                if (response.ok) {
+                    showStatus('✅ Данные отправлены через резервный канал!', 'success');
+                } else {
+                    throw new Error('HTTP запрос не удался');
+                }
+                
+            } catch (error) {
+                console.error('HTTP fallback error:', error);
+                showStatus('⚠️ Ошибка отправки. Используйте команду /auth в боте.', 'error');
+            }
+        }
+
+        // Получение chat_id
+        function getCurrentChatId() {
+            try {
+                if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                    return tg.initDataUnsafe.user.id;
+                }
+                
+                if (tg && tg.initData) {
+                    const urlParams = new URLSearchParams(tg.initData);
+                    const user = JSON.parse(urlParams.get('user') || '{}');
+                    if (user.id) {
+                        return user.id;
+                    }
+                }
+                
+                return null;
+            } catch (error) {
+                console.error('Ошибка получения chat_id:', error);
+                return null;
+            }
+        }
+
+        // Получение токена бота (в реальном приложении должен быть скрыт)
+        function getBotToken() {
+            return '8232668997:AAHCvWtcjtqw5b5tuYrYwg1lCz0oItjhUEg';
+        }
+
+        // Показ/скрытие загрузки
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+            document.getElementById('authButton').disabled = show;
+        }
+
+        // Показ статуса
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = `status-message status-${type}`;
+            statusDiv.style.display = 'block';
+            
+            // Автоскрытие через 5 секунд
+            setTimeout(hideStatus, 5000);
+        }
+
+        // Скрытие статуса
+        function hideStatus() {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.style.display = 'none';
+        }
+
+        // Запуск приложения
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+        // Дополнительная инициализация для Telegram WebApp
+        if (window.Telegram) {
+            initializeApp();
+        }
+    </script>
+</body>
+</html>
