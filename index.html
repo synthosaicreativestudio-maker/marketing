@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Авторизация — Marketing</title>
     <meta name="theme-color" content="#0b1226">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -64,7 +64,7 @@
             align-self:flex-start
         }
         label{font-family:'Faraz Serif',serif;font-size:14px;font-weight:500;color:rgba(255,255,255,0.9);margin-bottom:8px;display:block;color:#ffffff !important}
-        input[type=text],input[type=tel]{font-family:'Faraz Serif',serif;width:100%;padding:12px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:#ffffff;font-size:16px;box-sizing:border-box;transition:border-color 0.2s ease;color:#ffffff !important}
+        input[type=text],input[type=tel]{font-family:'Faraz Serif',serif;width:100%;padding:12px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:#ffffff;font-size:16px;box-sizing:border-box;transition:border-color 0.2s ease;color:#ffffff !important;-webkit-appearance:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
         #code_input{width:200px}
                 #phone_input{width:200px}
         .input-container{display:flex;flex-direction:column;align-items:flex-start;margin-bottom:12px}
@@ -83,7 +83,7 @@
         }
     /* menu screen */
     .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
-    .menu-btn{font-family:'Faraz Serif',serif;background:linear-gradient(90deg,#d4af37,#f6e7a0);color:#0b1226;border:none;padding:14px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;transition:all 0.2s ease;width:100%;margin-top:8px;color:#0b1226}
+    .menu-btn{font-family:'Faraz Serif',serif;background:linear-gradient(90deg,#d4af37,#f6e7a0);color:#0b1226;border:none;padding:14px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;transition:all 0.2s ease;width:100%;margin-top:8px;color:#0b1226;-webkit-appearance:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
     .menu-title{font-size:18px;margin:0 0 8px 0;font-family:'Faraz Serif',serif}
     </style>
 </head>
@@ -126,7 +126,21 @@
 
     <script>
         let tg = window.Telegram.WebApp;
-        tg.ready();
+        
+        // Расширенная инициализация для мобильных устройств
+        if (tg) {
+            tg.ready();
+            
+            // Устанавливаем цвет темы для WebApp
+            tg.setHeaderColor('#0b1226');
+            tg.setBackgroundColor('#071028');
+            
+            // Расширяем WebApp на весь экран
+            tg.expand();
+            
+            // Включаем жесты для закрытия
+            tg.enableClosingConfirmation();
+        }
 
         const codeInput = document.getElementById('code_input');
         const phoneInput = document.getElementById('phone_input');
@@ -146,11 +160,25 @@
             return result;
         }
 
+        // Улучшенная обработка ввода для мобильных
         phoneInput.addEventListener('input', e => {
             e.target.value = formatPhone(e.target.value);
             updateMainButtonState();
         });
+        
+        // Дополнительные события для мобильных
+        phoneInput.addEventListener('blur', updateMainButtonState);
+        phoneInput.addEventListener('keyup', updateMainButtonState);
+        phoneInput.addEventListener('paste', (e) => {
+            setTimeout(() => {
+                e.target.value = formatPhone(e.target.value);
+                updateMainButtonState();
+            }, 100);
+        });
+        
         codeInput.addEventListener('input', updateMainButtonState);
+        codeInput.addEventListener('blur', updateMainButtonState);
+        codeInput.addEventListener('keyup', updateMainButtonState);
 
         function updateMainButtonState(){
             const phoneDigits = phoneInput.value.replace(/\D/g,'');
@@ -200,9 +228,29 @@
             const code = codeInput.value.trim();
             const phone = phoneInput.value.replace(/\D/g,'');
             
+            // Диагностика для мобильных устройств
+            console.log('Device info:', {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                isMobile: /Mobile|Android|iPhone|iPad/.test(navigator.userAgent),
+                telegramWebApp: !!window.Telegram?.WebApp,
+                telegramSendData: typeof tg?.sendData === 'function'
+            });
+            
             if(!code || phone.length !== 11){
                 console.log('Validation failed:', {code: !!code, phoneLength: phone.length});
-                tg.showAlert('Пожалуйста, заполните корректно все поля.');
+                
+                // Для мобильных устройств используем hapticFeedback
+                if (tg?.HapticFeedback) {
+                    tg.HapticFeedback.notificationOccurred('error');
+                }
+                
+                if (tg?.showAlert) {
+                    tg.showAlert('Пожалуйста, заполните корректно все поля.');
+                } else {
+                    alert('Пожалуйста, заполните корректно все поля.');
+                }
+                
                 tg.MainButton.showProgress(false);
                 tg.MainButton.enable();
                 return;
@@ -211,20 +259,53 @@
             console.log('Sending to bot:', {code, phone: phone.substring(0,3) + '***'});
             
             // Проверяем доступность tg.sendData
-            if (typeof tg.sendData !== 'function') {
-                console.error('tg.sendData is not available!');
-                tg.showAlert('Ошибка: функция отправки недоступна');
+            if (typeof tg?.sendData !== 'function') {
+                console.error('tg.sendData is not available!', {
+                    tg: !!tg,
+                    telegramWebApp: !!window.Telegram?.WebApp,
+                    sendData: typeof tg?.sendData
+                });
+                
+                const errorMsg = 'Ошибка: функция отправки недоступна. Попробуйте открыть через Telegram.';
+                if (tg?.showAlert) {
+                    tg.showAlert(errorMsg);
+                } else {
+                    alert(errorMsg);
+                }
                 return;
             }
             
             try {
                 const data = JSON.stringify({code, phone});
                 console.log('Data to send:', data);
+                
+                // Хаптик для мобильных
+                if (tg?.HapticFeedback) {
+                    tg.HapticFeedback.impactOccurred('light');
+                }
+                
                 tg.sendData(data);
                 console.log('Data sent successfully');
+                
+                // Хаптик подтверждения
+                if (tg?.HapticFeedback) {
+                    tg.HapticFeedback.notificationOccurred('success');
+                }
+                
             } catch (error) {
                 console.error('Error sending data:', error);
-                tg.showAlert('Ошибка при отправке: ' + error.message);
+                
+                // Хаптик ошибки
+                if (tg?.HapticFeedback) {
+                    tg.HapticFeedback.notificationOccurred('error');
+                }
+                
+                const errorMsg = 'Ошибка при отправке: ' + error.message;
+                if (tg?.showAlert) {
+                    tg.showAlert(errorMsg);
+                } else {
+                    alert(errorMsg);
+                }
             }
         }
 
@@ -256,16 +337,59 @@
                 if(selectedSection && selectedSection === s){
                     btn.style.outline = '2px solid rgba(212,175,55,0.25)';
                 }
-                btn.onclick = () => {
+                
+                // Улучшенная обработка кликов для мобильных
+                const handleClick = () => {
                     try{
-                        tg.sendData(JSON.stringify({type:'menu_selection', section: s}));
-                        // give visual feedback
-                        btn.textContent = 'Отправлено ✓';
-                        setTimeout(()=>tg.close(), 700);
+                        // Хаптик для мобильных
+                        if (tg?.HapticFeedback) {
+                            tg.HapticFeedback.impactOccurred('light');
+                        }
+                        
+                        console.log('Menu button clicked:', s);
+                        
+                        if (typeof tg?.sendData === 'function') {
+                            tg.sendData(JSON.stringify({type:'menu_selection', section: s}));
+                            // give visual feedback
+                            btn.textContent = 'Отправлено ✓';
+                            
+                            if (tg?.HapticFeedback) {
+                                tg.HapticFeedback.notificationOccurred('success');
+                            }
+                            
+                            setTimeout(()=>{
+                                if (tg?.close) {
+                                    tg.close();
+                                }
+                            }, 700);
+                        } else {
+                            console.error('tg.sendData not available for menu');
+                            if (tg?.showAlert) {
+                                tg.showAlert('Ошибка отправки. Попробуйте ещё раз.');
+                            } else {
+                                alert('Ошибка отправки. Попробуйте ещё раз.');
+                            }
+                        }
                     }catch(e){
-                        tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
+                        console.error('Error in menu click handler:', e);
+                        if (tg?.HapticFeedback) {
+                            tg.HapticFeedback.notificationOccurred('error');
+                        }
+                        if (tg?.showAlert) {
+                            tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
+                        } else {
+                            alert('Ошибка при отправке. Попробуйте ещё раз.');
+                        }
                     }
                 };
+                
+                // Поддержка как click, так и touch событий
+                btn.onclick = handleClick;
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    handleClick();
+                });
+                
                 const wrap = document.createElement('div');
                 wrap.appendChild(btn);
                 menuGrid.appendChild(wrap);

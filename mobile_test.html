@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Тест мобильной авторизации</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background: linear-gradient(180deg, #081428 0%, #041226 100%);
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .test-container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .test-item {
+            margin: 15px 0;
+            padding: 10px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+        }
+        
+        .status {
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+        
+        .ok { background: rgba(76, 175, 80, 0.3); color: #4CAF50; }
+        .error { background: rgba(244, 67, 54, 0.3); color: #f44336; }
+        .warning { background: rgba(255, 193, 7, 0.3); color: #FFC107; }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            color: white;
+            font-size: 16px;
+            box-sizing: border-box;
+            -webkit-appearance: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(90deg, #d4af37, #f6e7a0);
+            color: #0b1226;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            -webkit-appearance: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        
+        #log {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h2>🔍 Диагностика мобильной авторизации</h2>
+        
+        <div class="test-item">
+            <strong>🌐 Окружение:</strong>
+            <div id="environment"></div>
+        </div>
+        
+        <div class="test-item">
+            <strong>📱 Telegram WebApp API:</strong>
+            <div id="telegram-api"></div>
+        </div>
+        
+        <div class="test-item">
+            <strong>🎯 Тест авторизации:</strong>
+            <input type="text" id="test-code" placeholder="Код партнёра" value="111098">
+            <input type="tel" id="test-phone" placeholder="Телефон" value="89827701055">
+            <button onclick="testAuth()">Тестировать авторизацию</button>
+        </div>
+        
+        <div class="test-item">
+            <strong>📋 Лог событий:</strong>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let tg = window.Telegram?.WebApp;
+        let logDiv = document.getElementById('log');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.textContent += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        function getStatus(condition) {
+            return condition ? 
+                '<span class="status ok">✓ OK</span>' : 
+                '<span class="status error">✗ ОШИБКА</span>';
+        }
+        
+        function checkEnvironment() {
+            const env = document.getElementById('environment');
+            const isMobile = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent);
+            const isTelegram = window.location.href.includes('telegram');
+            
+            env.innerHTML = `
+                Мобильное устройство: ${getStatus(isMobile)}<br>
+                Платформа: ${navigator.platform}<br>
+                User Agent: ${navigator.userAgent.substring(0, 50)}...<br>
+                Открыто в Telegram: ${getStatus(isTelegram)}
+            `;
+            
+            log(`Окружение: мобильное=${isMobile}, платформа=${navigator.platform}`);
+        }
+        
+        function checkTelegramAPI() {
+            const api = document.getElementById('telegram-api');
+            const hasTelegram = !!window.Telegram;
+            const hasWebApp = !!window.Telegram?.WebApp;
+            const hasSendData = typeof tg?.sendData === 'function';
+            const hasHaptic = !!tg?.HapticFeedback;
+            
+            api.innerHTML = `
+                window.Telegram: ${getStatus(hasTelegram)}<br>
+                WebApp: ${getStatus(hasWebApp)}<br>
+                sendData(): ${getStatus(hasSendData)}<br>
+                HapticFeedback: ${getStatus(hasHaptic)}<br>
+                Версия: ${tg?.version || 'неизвестно'}
+            `;
+            
+            if (tg) {
+                try {
+                    tg.ready();
+                    if (tg.expand) tg.expand();
+                    log('Telegram WebApp инициализирован');
+                } catch (e) {
+                    log('Ошибка инициализации Telegram WebApp: ' + e.message);
+                }
+            } else {
+                log('Telegram WebApp недоступен');
+            }
+        }
+        
+        function testAuth() {
+            const code = document.getElementById('test-code').value;
+            const phone = document.getElementById('test-phone').value;
+            
+            log(`Начинаем тест авторизации: код=${code}, телефон=${phone}`);
+            
+            if (!code || !phone) {
+                log('❌ Не заполнены поля');
+                return;
+            }
+            
+            if (!tg) {
+                log('❌ Telegram WebApp недоступен');
+                alert('Ошибка: откройте через Telegram');
+                return;
+            }
+            
+            if (typeof tg.sendData !== 'function') {
+                log('❌ tg.sendData недоступен');
+                alert('Ошибка: функция отправки недоступна');
+                return;
+            }
+            
+            try {
+                const data = JSON.stringify({code, phone: phone.replace(/\D/g, '')});
+                log(`Отправляем данные: ${data}`);
+                
+                // Тестируем хаптик
+                if (tg.HapticFeedback) {
+                    tg.HapticFeedback.impactOccurred('light');
+                    log('✅ Хаптик работает');
+                }
+                
+                tg.sendData(data);
+                log('✅ Данные отправлены успешно');
+                
+                setTimeout(() => {
+                    if (tg.close) {
+                        log('Закрываем WebApp...');
+                        tg.close();
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                log(`❌ Ошибка отправки: ${error.message}`);
+                alert('Ошибка: ' + error.message);
+            }
+        }
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            log('🚀 Страница загружена');
+            checkEnvironment();
+            checkTelegramAPI();
+        });
+        
+        // Отслеживание событий
+        document.addEventListener('click', (e) => {
+            log(`Клик по: ${e.target.tagName} (${e.target.textContent?.substring(0, 20)})`);
+        });
+        
+        document.addEventListener('touchstart', (e) => {
+            log(`Touch start: ${e.target.tagName}`);
+        });
+        
+        window.addEventListener('error', (e) => {
+            log(`JavaScript ошибка: ${e.message}`);
+        });
+    </script>
+</body>
+</html>
