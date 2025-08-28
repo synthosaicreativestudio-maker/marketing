@@ -41,13 +41,13 @@
             flex-shrink: 0; /* не сжимается */
             z-index:1000;
             margin-top: 8px; /* выравнивание по центру между надписями */
-            background: rgba(255,255,255,0.2); /* более заметный белый фон */
+            background: transparent; /* убираем белый фон */
             border: 1px solid rgba(255,255,255,0.1); /* тонкая рамка для лучшей видимости */
         }
 
         .logo img{
             width:100%;height:100%;object-fit:contain;
-            background: rgba(255,255,255,0.2); /* дублируем фон для img */
+            background: transparent; /* убираем фон для img */
             display: block; /* убираем возможные отступы */
         }
         .brand-text{
@@ -78,7 +78,7 @@
             .shell{padding:20px;margin-top:-80px;margin-left:-3%}
             .header{gap:10px;margin-bottom:15px}
             .brand-text{text-align:left}
-            .logo{width:60px;height:60px;margin-top: 6px;background: rgba(255,255,255,0.2);border: 1px solid rgba(255,255,255,0.1);}
+            .logo{width:60px;height:60px;margin-top: 6px;background: transparent;border: 1px solid rgba(255,255,255,0.1);}
             #code_input,#phone_input{width:100%;max-width:200px}
             .card{width:100%;max-width:240px;padding:12px}
         }
