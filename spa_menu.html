@@ -80,6 +80,33 @@
                 <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
             </div>
         </div>
+
+        <!-- Регламенты и обучение -->
+        <div class="screen" id="reglamenty-i-obuchenie-screen">
+            <div class="card">
+                <h1>РЕГЛАМЕНТЫ И ОБУЧЕНИЕ</h1>
+                <div class="menu-grid" id="reglamenty_i_obuchenie_grid"></div>
+                <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+            </div>
+        </div>
+
+        <!-- Акции и мероприятия -->
+        <div class="screen" id="aktsii-i-meropriyatiya-screen">
+            <div class="card">
+                <h1>АКЦИИ И МЕРОПРИЯТИЯ</h1>
+                <div class="menu-grid" id="aktsii_i_meropriyatiya_grid"></div>
+                <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+            </div>
+        </div>
+
+        <!-- Аналитика -->
+        <div class="screen" id="analitika-screen">
+            <div class="card">
+                <h1>АНАЛИТИКА</h1>
+                <div class="menu-grid" id="analitika_grid"></div>
+                <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -147,33 +174,98 @@
         };
 
         function createMainMenu() {
+            console.log('Создаем главное меню');
             const grid = document.getElementById('main_menu_grid');
+            if (!grid) {
+                console.error('Главное меню grid не найден!');
+                return;
+            }
+            
             grid.innerHTML = '';
             
             SECTIONS.forEach(section => {
                 const btn = document.createElement('button');
                 btn.className = 'menu-btn';
                 btn.textContent = section;
-                btn.onclick = () => showSection(section);
+                btn.onclick = () => {
+                    console.log('Клик по разделу:', section);
+                    showSection(section);
+                };
                 grid.appendChild(btn);
             });
+            
+            console.log('Главное меню создано, кнопок:', SECTIONS.length);
         }
 
         function showSection(sectionName) {
+            console.log('Показываем экран для раздела:', sectionName);
+            // Специальная обработка для "Связаться со специалистом"
+            if (sectionName === 'Связаться со специалистом') {
+                // Отправляем данные в Telegram Bot
+                const data = {
+                    type: 'contact_specialist',
+                    action: 'contact_specialist'
+                };
+                tg.sendData(JSON.stringify(data));
+                return;
+            }
+            
             // Скрываем главное меню
             document.getElementById('main-screen').classList.remove('active');
             
             // Показываем экран раздела
-            const sectionScreen = document.getElementById(sectionName.toLowerCase().replace(/\s+/g, '-') + '-screen');
+            let sectionScreen;
+            
+            // Специальная обработка для разделов с пробелами
+            switch(sectionName) {
+                case 'Регламенты и обучение':
+                    sectionScreen = document.getElementById('reglamenty-i-obuchenie-screen');
+                    break;
+                case 'Акции и мероприятия':
+                    sectionScreen = document.getElementById('aktsii-i-meropriyatiya-screen');
+                    break;
+                case 'Технические проблемы':
+                    sectionScreen = document.getElementById('tech-screen');
+                    break;
+                case 'Дизайн и материалы':
+                    sectionScreen = document.getElementById('design-screen');
+                    break;
+                default:
+                    // Для остальных разделов используем стандартную логику
+                    const sectionId = sectionName.toLowerCase().replace(/\s+/g, '-') + '-screen';
+                    sectionScreen = document.getElementById(sectionId);
+            }
+            
             if (sectionScreen) {
                 sectionScreen.classList.add('active');
                 populateSubsections(sectionName, sectionScreen);
+            } else {
+                console.error('Экран не найден для раздела:', sectionName);
+                // Возвращаемся в главное меню если экран не найден
+                goToMain();
             }
         }
 
         function populateSubsections(sectionName, screen) {
+            console.log('Заполняем подразделы для:', sectionName, 'экран:', screen);
+            
             const subsections = SUBSECTIONS[sectionName] || [];
-            const grid = screen.querySelector('.menu-grid');
+            console.log('Найдены подразделы:', subsections);
+            
+            // Ищем grid по ID или по классу
+            let grid = screen.querySelector('.menu-grid');
+            if (!grid) {
+                // Если не нашли по классу, ищем по ID
+                const sectionId = sectionName.toLowerCase().replace(/\s+/g, '-') + '-grid';
+                grid = document.getElementById(sectionId);
+            }
+            
+            if (!grid) {
+                console.error('Grid не найден для раздела:', sectionName, 'экран:', screen);
+                return;
+            }
+            
+            console.log('Grid найден:', grid);
             
             grid.innerHTML = '';
             subsections.forEach(subsection => {
@@ -183,6 +275,8 @@
                 btn.onclick = () => handleSubsectionClick(sectionName, subsection);
                 grid.appendChild(btn);
             });
+            
+            console.log('Подразделы добавлены в grid');
         }
 
         function handleSubsectionClick(section, subsection) {
