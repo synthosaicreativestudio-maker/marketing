@@ -414,6 +414,12 @@
                         if (this.tg.setBackgroundColor) this.tg.setBackgroundColor('#071028');
                         if (this.tg.enableClosingConfirmation) this.tg.enableClosingConfirmation();
                         
+                        // 🔥 Отключаем системную MainButton - используем только нашу золотую!
+                        if (this.tg.MainButton) {
+                            this.tg.MainButton.hide();
+                            console.log('🚫 Системная MainButton отключена - используем только золотую кнопку');
+                        }
+                        
                         console.log('✅ Telegram WebApp инициализирован');
                         document.body.classList.add('tg-webapp-mode');
                     } catch (error) {
@@ -425,7 +431,7 @@
                 this.setupForm();
                 this.isReady = true;
                 
-                console.log('✅ Система авторизации готова');
+                console.log('✅ Система авторизации готова с золотой кнопкой!');
             }
 
             // Настройка формы и событий
@@ -559,45 +565,10 @@
                     }
                 }
 
-                // Приоритет 2: Telegram WebApp MainButton (альтернативный метод)
-                if (this.tg?.MainButton) {
-                    try {
-                        console.log('🔘 Используем Telegram MainButton API');
-                        
-                        // Сохраняем данные в глобальную переменную для доступа из обработчика
-                        window.pendingAuthData = data;
-                        
-                        // Настраиваем MainButton
-                        this.tg.MainButton.setText('Отправить данные');
-                        this.tg.MainButton.show();
-                        
-                        // Обработчик нажатия на MainButton
-                        this.tg.MainButton.onClick(() => {
-                            try {
-                                const dataString = JSON.stringify(window.pendingAuthData);
-                                this.tg.sendData(dataString);
-                                console.log('✅ Данные отправлены через MainButton:', dataString);
-                                this.tg.MainButton.hide();
-                                delete window.pendingAuthData;
-                            } catch (e) {
-                                console.error('❌ Ошибка отправки через MainButton:', e);
-                            }
-                        });
-                        
-                        // Автоматически "нажимаем" кнопку
-                        setTimeout(() => {
-                            if (this.tg.MainButton.isVisible) {
-                                this.tg.MainButton.click();
-                            }
-                        }, 100);
-                        
-                        return true;
-                    } catch (error) {
-                        console.warn('⚠️ Ошибка Telegram MainButton:', error);
-                    }
-                }
+                // 🚫 MainButton отключен - используем только золотую кнопку!
+                // Этот метод удален чтобы избежать появления синей системной кнопки
 
-                // Приоритет 3: PostMessage API (для мобильных WebView)
+                // Приоритет 2: PostMessage API (для мобильных WebView)
                 if (window.parent !== window) {
                     try {
                         console.log('📨 Используем PostMessage API');
@@ -613,7 +584,7 @@
                     }
                 }
 
-                // Приоритет 4: Создание скрытой формы (последний резерв)
+                // Приоритет 3: Создание скрытой формы (последний резерв)
                 if (this.platform.isMobile) {
                     try {
                         console.log('📋 Используем скрытую форму для мобильных');
