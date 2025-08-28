@@ -84,10 +84,10 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /menu - показывает persistent keyboard с кнопкой личного кабинета"""
     # Показываем persistent keyboard с кнопкой личного кабинета
     persistent_keyboard = create_persistent_keyboard()
-        await update.message.reply_text(
+    await update.message.reply_text(
         '💼 Используйте кнопку "🚀 Личный кабинет" для быстрого доступа к личному кабинету:',
-            reply_markup=persistent_keyboard
-        )
+        reply_markup=persistent_keyboard
+    )
 
 async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -113,7 +113,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_auth:
             # Пользователь авторизован - показываем главное меню
             await show_main_menu(update, context)
-        return
+            return
         else:
             # Пользователь не авторизован - предлагаем авторизацию
             await show_auth_menu(update, context)
@@ -366,7 +366,7 @@ async def check_operator_replies():
                 # Здесь можно добавить логику отправки уведомлений
                 logger.info(f'New operator reply for ticket: {ticket.get("id")}')
                 
-        except Exception as e:
+    except Exception as e:
         logger.error(f'Error checking operator replies: {e}')
     
 def main():
@@ -396,11 +396,10 @@ def main():
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_operator_replies, 'interval', seconds=30)
-    scheduler.start()
     
     logger.info('Бот запущен...')
     
-    # Запускаем бота
+    # Запускаем бота (планировщик запустится автоматически)
     application.run_polling()
 
 if __name__ == '__main__':
