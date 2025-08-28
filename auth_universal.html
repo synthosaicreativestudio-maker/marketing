@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Авторизация — Marketing ЭТАЖИ</title>
+    <meta name="theme-color" content="#0b1226">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230b1226'/%3E%3Ccircle cx='50' cy='40' r='22' fill='%23d4af37'/%3E%3C/svg%3E">
+    <style>
+        /* Универсальные стили для всех платформ */
+        :root {
+            --bg-primary: #071028;
+            --bg-secondary: #081428;
+            --card-bg: rgba(255,255,255,0.03);
+            --text-primary: #ffffff;
+            --text-muted: rgba(255,255,255,0.65);
+            --accent-gold: #d4af37;
+            --accent-gradient: linear-gradient(90deg, #d4af37, #f6e7a0);
+            --border-color: rgba(255,255,255,0.1);
+            --shadow: 0 20px 50px rgba(2,6,23,0.6);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            overflow-x: hidden;
+        }
+
+        body {
+            background: radial-gradient(1200px 600px at 10% 10%, rgba(212,175,55,0.08), transparent),
+                        linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Основной контейнер */
+        .auth-container {
+            width: 100%;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* Header с логотипом и текстом */
+        .auth-header {
+            display: flex;
+            align-items: flex-start; /* Выравнивание по верху согласно спецификации */
+            gap: 15px;
+            margin-bottom: 8px;
+        }
+
+        /* Логотип с размером 15% больше базового */
+        .logo {
+            width: 115px; /* Базовый размер 100px + 15% */
+            height: 115px;
+            border-radius: 6px;
+            overflow: hidden;
+            flex-shrink: 0;
+            background: transparent;
+        }
+
+        .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        /* Текст рядом с логотипом */
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start; /* Выравнивание по верху */
+        }
+
+        .brand-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
+
+        .brand-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.4;
+            text-transform: lowercase; /* Согласно предыдущим правкам */
+        }
+
+        /* Карточка с формой */
+        .auth-card {
+            background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 24px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(8px);
+        }
+
+        /* Поля ввода */
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            color: var(--text-primary);
+            font-size: 16px;
+            font-family: inherit;
+            transition: all 0.2s ease;
+            
+            /* Универсальные стили для всех платформ */
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-gold);
+            background: rgba(255,255,255,0.08);
+        }
+
+        .input-field::placeholder {
+            color: rgba(255,255,255,0.4);
+        }
+
+        /* Кнопка авторизации */
+        .auth-button {
+            width: 100%;
+            padding: 16px 24px;
+            border: none;
+            border-radius: 10px;
+            background: var(--accent-gradient);
+            color: #0b1226;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 8px;
+            
+            /* Универсальные стили */
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        .auth-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.3);
+        }
+
+        .auth-button:active {
+            transform: translateY(0);
+        }
+
+        .auth-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Статус и информация */
+        .auth-status {
+            text-align: center;
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 16px;
+        }
+
+        .footer-info {
+            text-align: center;
+            font-size: 11px;
+            color: rgba(255,255,255,0.4);
+            margin-top: 20px;
+        }
+
+        /* Адаптивность для разных устройств */
+        
+        /* Мобильные устройства */
+        @media (max-width: 480px) {
+            body {
+                padding: 16px;
+            }
+            
+            .auth-container {
+                max-width: 100%;
+            }
+            
+            .logo {
+                width: 92px; /* Пропорциональное уменьшение на мобильных */
+                height: 92px;
+            }
+            
+            .auth-card {
+                padding: 20px;
+            }
+            
+            .auth-header {
+                gap: 12px;
+            }
+        }
+
+        /* Планшеты */
+        @media (min-width: 481px) and (max-width: 768px) {
+            .auth-container {
+                max-width: 400px;
+            }
+        }
+
+        /* Десктоп и Telegram Desktop */
+        @media (min-width: 769px) {
+            body {
+                padding: 32px;
+            }
+            
+            .auth-container {
+                max-width: 420px;
+            }
+        }
+
+        /* Специальные стили для Telegram WebApp */
+        .tg-webapp-mode .auth-container {
+            margin-top: 0;
+        }
+
+        /* Индикатор загрузки */
+        .loading-spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(11, 18, 38, 0.3);
+            border-top: 2px solid #0b1226;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading .loading-spinner {
+            display: inline-block;
+        }
+
+        .loading .button-text {
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <!-- Header с логотипом и брендингом -->
+        <div class="auth-header">
+            <div class="logo">
+                <img src="logo_marketing.png" alt="Marketing ЭТАЖИ" loading="eager">
+            </div>
+            <div class="brand-text">
+                <h1 class="brand-title">Marketing ЭТАЖИ</h1>
+                <p class="brand-subtitle">панель авторизации партнёра</p>
+            </div>
+        </div>
+
+        <!-- Карточка авторизации -->
+        <div class="auth-card">
+            <form id="authForm" novalidate>
+                <div class="input-group">
+                    <label for="partnerCode" class="input-label">Код партнёра</label>
+                    <input 
+                        type="text" 
+                        id="partnerCode" 
+                        class="input-field"
+                        placeholder="Введите ваш код"
+                        required
+                        autocomplete="off"
+                        inputmode="text"
+                    >
+                </div>
+
+                <div class="input-group">
+                    <label for="partnerPhone" class="input-label">Телефон партнёра (из КОСМОС)</label>
+                    <input 
+                        type="tel" 
+                        id="partnerPhone" 
+                        class="input-field"
+                        placeholder="8 XXX XXX XX XX"
+                        required
+                        autocomplete="tel"
+                        inputmode="tel"
+                    >
+                </div>
+
+                <button type="submit" id="authButton" class="auth-button">
+                    <span class="loading-spinner"></span>
+                    <span class="button-text">Подтвердить данные</span>
+                </button>
+            </form>
+
+            <div id="authStatus" class="auth-status"></div>
+            
+            <div class="footer-info">
+                Produced by SYNTHOS AI®
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Универсальная система авторизации для всех платформ
+        class UniversalAuth {
+            constructor() {
+                this.tg = window.Telegram?.WebApp;
+                this.platform = this.detectPlatform();
+                this.isReady = false;
+                
+                this.init();
+            }
+
+            // Определение платформы
+            detectPlatform() {
+                const userAgent = navigator.userAgent.toLowerCase();
+                const isMobile = /mobile|android|iphone|ipad/.test(userAgent);
+                const isTelegram = !!window.Telegram?.WebApp;
+                const isDesktop = !isMobile;
+                
+                return {
+                    isMobile,
+                    isDesktop,
+                    isTelegram,
+                    isWeb: !isTelegram,
+                    userAgent: navigator.userAgent,
+                    platform: navigator.platform
+                };
+            }
+
+            // Инициализация системы
+            async init() {
+                console.log('🚀 Инициализация универсальной авторизации');
+                console.log('📱 Платформа:', this.platform);
+
+                // Инициализация Telegram WebApp если доступен
+                if (this.tg) {
+                    try {
+                        this.tg.ready();
+                        this.tg.expand();
+                        
+                        // Настройка цветов для WebApp
+                        if (this.tg.setHeaderColor) this.tg.setHeaderColor('#0b1226');
+                        if (this.tg.setBackgroundColor) this.tg.setBackgroundColor('#071028');
+                        if (this.tg.enableClosingConfirmation) this.tg.enableClosingConfirmation();
+                        
+                        console.log('✅ Telegram WebApp инициализирован');
+                        document.body.classList.add('tg-webapp-mode');
+                    } catch (error) {
+                        console.warn('⚠️ Ошибка инициализации Telegram WebApp:', error);
+                    }
+                }
+
+                // Настройка формы
+                this.setupForm();
+                this.isReady = true;
+                
+                console.log('✅ Система авторизации готова');
+            }
+
+            // Настройка формы и событий
+            setupForm() {
+                const form = document.getElementById('authForm');
+                const codeInput = document.getElementById('partnerCode');
+                const phoneInput = document.getElementById('partnerPhone');
+                const button = document.getElementById('authButton');
+                const status = document.getElementById('authStatus');
+
+                // Маска для телефона
+                phoneInput.addEventListener('input', (e) => {
+                    this.formatPhone(e.target);
+                    this.validateForm();
+                });
+
+                // Валидация кода
+                codeInput.addEventListener('input', () => {
+                    this.validateForm();
+                });
+
+                // Обработка отправки формы
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleSubmit();
+                });
+
+                // Дополнительные события для мобильных
+                [codeInput, phoneInput].forEach(input => {
+                    input.addEventListener('blur', () => this.validateForm());
+                    input.addEventListener('paste', (e) => {
+                        setTimeout(() => {
+                            if (e.target === phoneInput) this.formatPhone(e.target);
+                            this.validateForm();
+                        }, 100);
+                    });
+                });
+            }
+
+            // Форматирование телефона
+            formatPhone(input) {
+                const value = input.value.replace(/\D/g, '');
+                if (!value) {
+                    input.value = '';
+                    return;
+                }
+                
+                let formatted = '8';
+                if (value.length > 1) formatted += ` (${value.slice(1, 4)}`;
+                if (value.length > 4) formatted += `) ${value.slice(4, 7)}`;
+                if (value.length > 7) formatted += `-${value.slice(7, 9)}`;
+                if (value.length > 9) formatted += `-${value.slice(9, 11)}`;
+                
+                input.value = formatted;
+            }
+
+            // Валидация формы
+            validateForm() {
+                const code = document.getElementById('partnerCode').value.trim();
+                const phone = document.getElementById('partnerPhone').value.replace(/\D/g, '');
+                const button = document.getElementById('authButton');
+                
+                const isValid = code.length > 0 && phone.length === 11;
+                button.disabled = !isValid;
+                
+                return isValid;
+            }
+
+            // Обработка отправки
+            async handleSubmit() {
+                if (!this.validateForm()) return;
+
+                const code = document.getElementById('partnerCode').value.trim();
+                const phone = document.getElementById('partnerPhone').value.replace(/\D/g, '');
+                const button = document.getElementById('authButton');
+                const status = document.getElementById('authStatus');
+
+                console.log('🔑 Начинаем авторизацию:', { code, phone: phone.slice(0, 3) + '***' });
+
+                // Показываем загрузку
+                this.setLoading(true);
+                status.textContent = 'Проверяем данные...';
+
+                try {
+                    // Подготовка данных
+                    const authData = {
+                        code: code,
+                        phone: phone,
+                        platform: this.platform,
+                        timestamp: Date.now()
+                    };
+
+                    // Отправка через подходящий метод
+                    const success = await this.sendAuthData(authData);
+                    
+                    if (success) {
+                        status.textContent = '✅ Данные отправлены! Ожидайте ответ в чате.';
+                        this.handleSuccess();
+                    } else {
+                        throw new Error('Не удалось отправить данные');
+                    }
+
+                } catch (error) {
+                    console.error('❌ Ошибка авторизации:', error);
+                    status.textContent = '❌ Ошибка отправки. Попробуйте еще раз.';
+                    this.handleError(error);
+                } finally {
+                    this.setLoading(false);
+                }
+            }
+
+            // Отправка данных (универсальный метод)
+            async sendAuthData(data) {
+                console.log('📤 Отправляем данные авторизации...');
+
+                // Приоритет 1: Telegram WebApp API
+                if (this.tg && typeof this.tg.sendData === 'function') {
+                    try {
+                        console.log('📱 Используем Telegram WebApp API');
+                        this.tg.sendData(JSON.stringify(data));
+                        console.log('✅ Данные отправлены через Telegram WebApp');
+                        return true;
+                    } catch (error) {
+                        console.warn('⚠️ Ошибка Telegram WebApp API:', error);
+                    }
+                }
+
+                // Приоритет 2: Прямой HTTP запрос (для веб-версии)
+                try {
+                    console.log('🌐 Используем HTTP API');
+                    const response = await fetch(window.location.origin + '/auth', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data)
+                    });
+
+                    if (response.ok) {
+                        console.log('✅ Данные отправлены через HTTP API');
+                        return true;
+                    } else {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Ошибка HTTP API:', error);
+                }
+
+                // Если все методы не сработали
+                console.error('❌ Все методы отправки данных недоступны');
+                return false;
+            }
+
+            // Успешная авторизация
+            handleSuccess() {
+                // Хаптик для мобильных устройств
+                if (this.tg?.HapticFeedback) {
+                    this.tg.HapticFeedback.notificationOccurred('success');
+                }
+
+                // Закрытие WebApp через 2 секунды
+                setTimeout(() => {
+                    if (this.tg?.close) {
+                        console.log('🔄 Закрываем WebApp');
+                        this.tg.close();
+                    }
+                }, 2000);
+            }
+
+            // Обработка ошибки
+            handleError(error) {
+                // Хаптик ошибки для мобильных
+                if (this.tg?.HapticFeedback) {
+                    this.tg.HapticFeedback.notificationOccurred('error');
+                }
+
+                // Показать детали ошибки в консоли
+                console.error('Детали ошибки:', {
+                    message: error.message,
+                    platform: this.platform,
+                    telegramAvailable: !!this.tg,
+                    sendDataAvailable: typeof this.tg?.sendData === 'function'
+                });
+            }
+
+            // Управление состоянием загрузки
+            setLoading(isLoading) {
+                const button = document.getElementById('authButton');
+                if (isLoading) {
+                    button.classList.add('loading');
+                    button.disabled = true;
+                } else {
+                    button.classList.remove('loading');
+                    this.validateForm(); // Восстанавливаем правильное состояние кнопки
+                }
+            }
+        }
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🌟 Загружается универсальная система авторизации Marketing ЭТАЖИ');
+            window.universalAuth = new UniversalAuth();
+        });
+
+        // Обработка ошибок JavaScript
+        window.addEventListener('error', (event) => {
+            console.error('🚨 Глобальная ошибка:', event.error);
+        });
+
+        // Обработка нераспознанных промисов
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('🚨 Необработанное отклонение промиса:', event.reason);
+        });
+    </script>
+</body>
+</html>

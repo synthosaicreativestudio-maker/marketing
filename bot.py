@@ -701,8 +701,13 @@ async def handle_direct_webapp(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(f'💼 Открываю раздел: {section}', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
-    """Обрабатывает данные авторизации от пользователя."""
+    """Упрощенный универсальный обработчик авторизации для всех платформ."""
     user = update.effective_user
+    
+    # Логируем информацию о платформе пользователя
+    platform_info = payload.get('platform', {})
+    logger.info(f'Authorization attempt from user {user.id}')
+    logger.info(f'Platform info: {platform_info}')
     
     # Проверяем блокировку
     is_blocked, seconds_left = auth_cache.is_user_blocked(user.id)
@@ -718,6 +723,109 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             time_text = f"{minutes} минут"
         await update.message.reply_text(f'❌ Авторизация заблокирована на {time_text}.')
         return
+    
+    # Получаем данные авторизации
+    code = payload.get('code', '').strip()
+    phone = payload.get('phone', '').strip()
+    
+    if not code or not phone:
+        logger.warning(f'Missing auth data from user {user.id}: code={bool(code)}, phone={bool(phone)}')
+        await update.message.reply_text('❌ Необходимо указать код партнера и телефон.')
+        return
+    
+    # Валидация телефона
+    phone_digits = ''.join(filter(str.isdigit, phone))
+    if len(phone_digits) != 11:
+        logger.warning(f'Invalid phone format from user {user.id}: {phone_digits}')
+        await update.message.reply_text('❌ Неверный формат телефона. Введите 11 цифр.')
+        return
+    
+    logger.info(f'Processing authorization: user_id={user.id}, code={code}, phone={phone_digits[:3]}***')
+    
+    # Отправляем подтверждение
+    await update.message.reply_text('🔍 Проверяю данные...')
+    
+    # Проверяем доступность Google Sheets
+    if not sheets_client or not sheets_client.sheet:
+        logger.error('Google Sheets client not available for authorization')
+        await update.message.reply_text('❌ База недоступна. Свяжитесь с админом.')
+        return
+    
+    # Выполняем проверку авторизации
+    try:
+        logger.info(f'Looking up credentials in Google Sheets for user {user.id}')
+        row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone_digits)
+        logger.info(f'Credentials lookup result for user {user.id}: row={row}')
+    except Exception as e:
+        logger.error(f'Error during credentials lookup for user {user.id}: {e}')
+        await update.message.reply_text('❌ Ошибка проверки данных. Попробуйте позже.')
+        return
+    
+    if row:
+        # ✅ Успешная авторизация
+        try:
+            logger.info(f'Updating auth status for user {user.id} in row {row}')
+            await asyncio.to_thread(sheets_client.update_user_auth_status, row, user.id)
+            
+            # Обновляем данные пользователя в контексте
+            context.user_data['is_authorized'] = True
+            context.user_data['partner_code'] = code
+            context.user_data['phone'] = phone_digits
+            context.user_data['auth_timestamp'] = time.time()
+            context.user_data['platform'] = platform_info
+            
+            # Очищаем счетчик неудачных попыток
+            auth_cache.clear_failed_attempts(user.id)
+            
+            logger.info(f'✅ Authorization successful for user {user.id} from platform: {platform_info.get("platform", "unknown")}')
+            
+            # Отправляем успешное сообщение
+            await update.message.reply_text('✅ Авторизация прошла успешно!')
+            
+            # Предлагаем открыть личный кабинет
+            menu_url = get_web_app_url('SPA_MENU')
+            keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+            await update.message.reply_text(
+                '🎉 Добро пожаловать! Откройте личный кабинет для выбора раздела:',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+            # Добавляем постоянную клавиатуру
+            persistent_keyboard = create_persistent_keyboard()
+            await update.message.reply_text(
+                '💡 Совет: Используйте кнопку "🚀 Личный кабинет" для быстрого доступа',
+                reply_markup=persistent_keyboard
+            )
+            
+        except Exception as e:
+            logger.error(f'Error updating auth status for user {user.id}: {e}')
+            await update.message.reply_text('❌ Ошибка при сохранении авторизации. Попробуйте позже.')
+            return
+    else:
+        # ❌ Неудачная попытка авторизации
+        is_blocked, block_duration = auth_cache.add_failed_attempt(user.id)
+        attempts_left = auth_cache.get_attempts_left(user.id)
+        
+        logger.warning(f'Failed authorization attempt for user {user.id}. Attempts left: {attempts_left}')
+        
+        if is_blocked:
+            hours = block_duration // 3600
+            if hours > 24:
+                days = hours // 24
+                time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
+            else:
+                time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
+            await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Доступ заблокирован на {time_text}.')
+        else:
+            # Предлагаем попробовать еще раз
+            auth_url = get_web_app_url('MAIN')
+            keyboard = [[InlineKeyboardButton('🔄 Попробовать еще раз', web_app=WebAppInfo(url=auth_url))]]
+            await update.message.reply_text(
+                f'❌ Неверные данные или аккаунт неактивен.\n\n'
+                f'⚠️ Осталось попыток: {attempts_left}\n\n'
+                f'💡 Проверьте правильность ввода кода партнера и телефона из системы КОСМОС.',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
     
     code = payload.get('code')
     phone = payload.get('phone')
