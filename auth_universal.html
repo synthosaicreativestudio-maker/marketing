@@ -349,18 +349,53 @@
             // Определение платформы
             detectPlatform() {
                 const userAgent = navigator.userAgent.toLowerCase();
-                const isMobile = /mobile|android|iphone|ipad/.test(userAgent);
+                
+                // Более точное определение мобильных устройств
+                const isMobile = /mobile|android|iphone|ipad|ipod|blackberry|windows phone|opera mini/i.test(userAgent) ||
+                                ('ontouchstart' in window) ||
+                                (navigator.maxTouchPoints > 0) ||
+                                (window.innerWidth <= 768);
+                
+                const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+                const isAndroid = /android/i.test(userAgent);
                 const isTelegram = !!window.Telegram?.WebApp;
                 const isDesktop = !isMobile;
+                const isWebView = window.parent !== window;
                 
-                return {
+                // Определяем тип Telegram клиента
+                let telegramClientType = 'unknown';
+                if (isTelegram) {
+                    if (isMobile) {
+                        telegramClientType = isIOS ? 'telegram_ios' : (isAndroid ? 'telegram_android' : 'telegram_mobile');
+                    } else {
+                        telegramClientType = 'telegram_desktop';
+                    }
+                }
+                
+                const platform = {
                     isMobile,
                     isDesktop,
+                    isIOS,
+                    isAndroid,
                     isTelegram,
                     isWeb: !isTelegram,
+                    isWebView,
+                    telegramClientType,
                     userAgent: navigator.userAgent,
-                    platform: navigator.platform
+                    platform: navigator.platform,
+                    // Дополнительная информация для диагностики
+                    touchSupport: 'ontouchstart' in window,
+                    maxTouchPoints: navigator.maxTouchPoints || 0,
+                    screenSize: `${window.screen.width}x${window.screen.height}`,
+                    viewportSize: `${window.innerWidth}x${window.innerHeight}`,
+                    devicePixelRatio: window.devicePixelRatio || 1,
+                    standalone: window.navigator.standalone,
+                    connection: navigator.connection?.effectiveType || 'unknown'
                 };
+                
+                console.log('🔍 Детали платформы:', platform);
+                
+                return platform;
             }
 
             // Инициализация системы
@@ -504,43 +539,131 @@
 
             // Отправка данных (универсальный метод)
             async sendAuthData(data) {
-                console.log('📤 Отправляем данные авторизации...');
+                console.log('📤 Отправляем данные авторизации...', {
+                    platform: this.platform,
+                    hasTelegram: !!this.tg,
+                    hasSendData: typeof this.tg?.sendData === 'function',
+                    hasMainButton: !!this.tg?.MainButton
+                });
 
-                // Приоритет 1: Telegram WebApp API
+                // Приоритет 1: Telegram WebApp sendData API
                 if (this.tg && typeof this.tg.sendData === 'function') {
                     try {
-                        console.log('📱 Используем Telegram WebApp API');
-                        this.tg.sendData(JSON.stringify(data));
-                        console.log('✅ Данные отправлены через Telegram WebApp');
+                        console.log('📱 Используем Telegram WebApp sendData API');
+                        const dataString = JSON.stringify(data);
+                        this.tg.sendData(dataString);
+                        console.log('✅ Данные отправлены через Telegram WebApp sendData:', dataString);
                         return true;
                     } catch (error) {
-                        console.warn('⚠️ Ошибка Telegram WebApp API:', error);
+                        console.warn('⚠️ Ошибка Telegram WebApp sendData:', error);
                     }
                 }
 
-                // Приоритет 2: Прямой HTTP запрос (для веб-версии)
-                try {
-                    console.log('🌐 Используем HTTP API');
-                    const response = await fetch(window.location.origin + '/auth', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(data)
-                    });
-
-                    if (response.ok) {
-                        console.log('✅ Данные отправлены через HTTP API');
+                // Приоритет 2: Telegram WebApp MainButton (альтернативный метод)
+                if (this.tg?.MainButton) {
+                    try {
+                        console.log('🔘 Используем Telegram MainButton API');
+                        
+                        // Сохраняем данные в глобальную переменную для доступа из обработчика
+                        window.pendingAuthData = data;
+                        
+                        // Настраиваем MainButton
+                        this.tg.MainButton.setText('Отправить данные');
+                        this.tg.MainButton.show();
+                        
+                        // Обработчик нажатия на MainButton
+                        this.tg.MainButton.onClick(() => {
+                            try {
+                                const dataString = JSON.stringify(window.pendingAuthData);
+                                this.tg.sendData(dataString);
+                                console.log('✅ Данные отправлены через MainButton:', dataString);
+                                this.tg.MainButton.hide();
+                                delete window.pendingAuthData;
+                            } catch (e) {
+                                console.error('❌ Ошибка отправки через MainButton:', e);
+                            }
+                        });
+                        
+                        // Автоматически "нажимаем" кнопку
+                        setTimeout(() => {
+                            if (this.tg.MainButton.isVisible) {
+                                this.tg.MainButton.click();
+                            }
+                        }, 100);
+                        
                         return true;
-                    } else {
-                        throw new Error(`HTTP ${response.status}`);
+                    } catch (error) {
+                        console.warn('⚠️ Ошибка Telegram MainButton:', error);
                     }
-                } catch (error) {
-                    console.warn('⚠️ Ошибка HTTP API:', error);
                 }
 
-                // Если все методы не сработали
+                // Приоритет 3: PostMessage API (для мобильных WebView)
+                if (window.parent !== window) {
+                    try {
+                        console.log('📨 Используем PostMessage API');
+                        const message = {
+                            type: 'telegram_auth_data',
+                            data: data
+                        };
+                        window.parent.postMessage(JSON.stringify(message), '*');
+                        console.log('✅ Данные отправлены через PostMessage');
+                        return true;
+                    } catch (error) {
+                        console.warn('⚠️ Ошибка PostMessage:', error);
+                    }
+                }
+
+                // Приоритет 4: Создание скрытой формы (последний резерв)
+                if (this.platform.isMobile) {
+                    try {
+                        console.log('📋 Используем скрытую форму для мобильных');
+                        
+                        const form = document.createElement('form');
+                        form.method = 'POST';
+                        form.style.display = 'none';
+                        
+                        // Добавляем данные как скрытые поля
+                        Object.keys(data).forEach(key => {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = key;
+                            input.value = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
+                            form.appendChild(input);
+                        });
+                        
+                        document.body.appendChild(form);
+                        
+                        // Пытаемся отправить через Telegram API
+                        const formData = new FormData(form);
+                        const urlParams = new URLSearchParams(formData);
+                        
+                        // Используем Telegram API для отправки данных
+                        if (this.tg) {
+                            this.tg.sendData(urlParams.toString());
+                            console.log('✅ Данные отправлены через скрытую форму');
+                            document.body.removeChild(form);
+                            return true;
+                        }
+                        
+                        document.body.removeChild(form);
+                    } catch (error) {
+                        console.warn('⚠️ Ошибка скрытой формы:', error);
+                    }
+                }
+
+                // Если все методы Telegram не сработали - показываем данные пользователю
                 console.error('❌ Все методы отправки данных недоступны');
+                console.log('📋 Данные для ручной передачи:', data);
+                
+                // Показываем данные пользователю для ручного ввода
+                const status = document.getElementById('authStatus');
+                status.innerHTML = `
+                    ❌ Автоматическая отправка недоступна.<br>
+                    📝 Отправьте эти данные боту вручную:<br>
+                    <strong>Код:</strong> ${data.code}<br>
+                    <strong>Телефон:</strong> ${data.phone}
+                `;
+                
                 return false;
             }
 
@@ -568,12 +691,30 @@
                 }
 
                 // Показать детали ошибки в консоли
-                console.error('Детали ошибки:', {
+                console.error('🔍 Детали ошибки:', {
                     message: error.message,
                     platform: this.platform,
                     telegramAvailable: !!this.tg,
-                    sendDataAvailable: typeof this.tg?.sendData === 'function'
+                    sendDataAvailable: typeof this.tg?.sendData === 'function',
+                    mainButtonAvailable: !!this.tg?.MainButton,
+                    isIframe: window.parent !== window,
+                    userAgent: navigator.userAgent,
+                    webAppInitData: this.tg?.initData || 'отсутствует',
+                    webAppVersion: this.tg?.version || 'неизвестно'
                 });
+
+                // Дополнительная диагностика для мобильных
+                if (this.platform.isMobile) {
+                    console.log('📱 Мобильная диагностика:', {
+                        touchEventsSupported: 'ontouchstart' in window,
+                        orientationSupported: 'orientation' in window,
+                        devicePixelRatio: window.devicePixelRatio,
+                        screenSize: `${window.screen.width}x${window.screen.height}`,
+                        viewportSize: `${window.innerWidth}x${window.innerHeight}`,
+                        isStandalone: window.navigator.standalone,
+                        connectionType: navigator.connection?.effectiveType || 'неизвестно'
+                    });
+                }
             }
 
             // Управление состоянием загрузки
