@@ -14,6 +14,8 @@ import os
 import json
 import time
 import asyncio
+import signal
+import sys
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 import telegram
@@ -1462,14 +1464,41 @@ async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # Запуск
 def main():
-    # Простая блокировка через файл
+    # Улучшенная блокировка через файл с проверкой PID
     lock_file = 'bot.lock'
-    if os.path.exists(lock_file):
-        logger.error('Бот уже запущен')
-        return
     
+    # Проверяем существующую блокировку
+    if os.path.exists(lock_file):
+        try:
+            with open(lock_file, 'r') as f:
+                stored_pid = f.read().strip()
+            
+            # Проверяем, действительно ли процесс с этим PID запущен
+            if stored_pid.isdigit():
+                pid = int(stored_pid)
+                try:
+                    # Проверяем, существует ли процесс
+                    os.kill(pid, 0)  # Сигнал 0 не убивает процесс, только проверяет существование
+                    logger.error(f'Бот уже запущен (PID: {pid})')
+                    return
+                except OSError:
+                    # Процесс не существует, удаляем мертвую блокировку
+                    logger.warning(f'Найдена мертвая блокировка (PID: {pid} не существует), удаляю...')
+                    os.remove(lock_file)
+        except Exception as e:
+            logger.warning(f'Ошибка чтения файла блокировки: {e}, удаляю...')
+            os.remove(lock_file)
+    
+    # Создаем новую блокировку
     with open(lock_file, 'w') as f:
         f.write(str(os.getpid()))
+    
+    logger.info(f'Создана блокировка для PID: {os.getpid()}')
+    
+    # Регистрируем обработчики сигналов для корректного завершения
+    signal.signal(signal.SIGINT, cleanup_and_exit)   # Ctrl+C
+    signal.signal(signal.SIGTERM, cleanup_and_exit)  # Сигнал завершения
+    logger.info('Зарегистрированы обработчики сигналов завершения')
     
     try:
         token = os.getenv('TELEGRAM_TOKEN')
@@ -1550,6 +1579,22 @@ def main():
         # Очищаем блокировку при выходе
         if os.path.exists(lock_file):
             os.remove(lock_file)
+
+# Функция для корректного завершения
+def cleanup_and_exit(signum=None, frame=None):
+    """Корректно завершает бота и очищает блокировку"""
+    logger.info(f'Получен сигнал завершения {signum}, завершаю бота...')
+    
+    # Удаляем файл блокировки
+    lock_file = 'bot.lock'
+    if os.path.exists(lock_file):
+        try:
+            os.remove(lock_file)
+            logger.info('Файл блокировки удален')
+        except Exception as e:
+            logger.error(f'Ошибка при удалении файла блокировки: {e}')
+    
+    sys.exit(0)
 
 if __name__ == '__main__':
     main()
