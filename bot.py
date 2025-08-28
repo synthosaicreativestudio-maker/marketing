@@ -777,6 +777,9 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             # Очищаем счетчик неудачных попыток
             auth_cache.clear_failed_attempts(user.id)
             
+            # Обновляем глобальный кэш авторизованных пользователей
+            await asyncio.to_thread(refresh_authorized_cache)
+            
             logger.info(f'✅ Authorization successful for user {user.id} from platform: {platform_info.get("platform", "unknown")}')
             
             # Отправляем успешное сообщение
@@ -868,6 +871,9 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data['auth_timestamp'] = time.time()
             
             auth_cache.clear_failed_attempts(user.id)
+            
+            # Обновляем глобальный кэш авторизованных пользователей
+            await asyncio.to_thread(refresh_authorized_cache)
             
             logger.info(f'Authorization successful for user {user.id}')
             await update.message.reply_text('✅ Авторизация прошла успешно!')
