@@ -41,13 +41,7 @@ SECTIONS = [
     'Связаться со специалистом'
 ]
 
-# Настройки авторизации
-AUTH_CONFIG = {
-    'MAX_ATTEMPTS': 5,
-    'BLOCK_DURATIONS': [86400, 432000, 2592000],  # 1 день, 5 дней, 30 дней
-    'CACHE_TTL': 30,  # секунды
-    'USER_CACHE_TTL': 300,  # 5 минут
-}
+# Настройки авторизации удалены
 
 # Настройки OpenAI
 OPENAI_CONFIG = {
@@ -61,6 +55,7 @@ OPENAI_CONFIG = {
 WEB_APP_URLS = {
     'MAIN': os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/'),
     'SPA_MENU': os.getenv('WEB_APP_MENU_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/spa_menu.html'),
+    'AUTH': os.getenv('WEB_APP_AUTH_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/index.html'),
 }
 
 # Статусы тикетов (ручной выбор специалистом)
@@ -126,12 +121,7 @@ def validate_config() -> tuple[bool, list[str]]:
         if not url.startswith(('http://', 'https://')):
             errors.append(f'Некорректный URL для {key}: {url}')
     
-    # Проверяем конфигурацию авторизации
-    if AUTH_CONFIG['MAX_ATTEMPTS'] <= 0:
-        errors.append('Некорректное количество попыток авторизации')
-    
-    if not AUTH_CONFIG['BLOCK_DURATIONS'] or not all(d > 0 for d in AUTH_CONFIG['BLOCK_DURATIONS']):
-        errors.append('Некорректные длительности блокировки')
+    # Проверки авторизации удалены
     
     return len(errors) == 0, errors
 
