@@ -190,19 +190,39 @@
 
         function updateMainButtonState(){
             const phoneDigits = phoneInput.value.replace(/\D/g,'');
-            if(codeInput.value.trim() !== '' && phoneDigits.length === 11){
+            const codeValue = codeInput.value.trim();
+            const isValid = codeValue !== '' && phoneDigits.length === 11;
+            
+            console.log('updateMainButtonState:', {codeValue, phoneDigits: phoneDigits.length, isValid});
+            
+            if (isValid) {
+                // Пробуем использовать MainButton, если доступен
                 if (tg && tg.MainButton) {
-                    tg.MainButton.setText('Подтвердить данные');
-                    tg.MainButton.show();
+                    try {
+                        tg.MainButton.setText('Подтвердить данные');
+                        tg.MainButton.show();
+                        hideFallbackButton();
+                        console.log('MainButton показана');
+                    } catch (e) {
+                        console.error('Ошибка MainButton:', e);
+                        showFallbackButton();
+                    }
                 } else {
-                    // Fallback для случаев когда MainButton недоступен
+                    // Если MainButton недоступна, показываем fallback
+                    console.log('MainButton недоступна, показываем fallback');
                     showFallbackButton();
                 }
             } else {
+                // Скрываем все кнопки если данные невалидны
                 if (tg && tg.MainButton) {
-                    tg.MainButton.hide();
+                    try {
+                        tg.MainButton.hide();
+                    } catch (e) {
+                        console.error('Ошибка скрытия MainButton:', e);
+                    }
                 }
                 hideFallbackButton();
+                console.log('Данные невалидны, кнопки скрыты');
             }
         }
 

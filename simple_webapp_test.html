@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Тест WebApp API</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background: linear-gradient(180deg, #081428 0%, #041226 100%);
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .ok { background: rgba(76, 175, 80, 0.2); border-color: #4CAF50; }
+        .error { background: rgba(244, 67, 54, 0.2); border-color: #f44336; }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(90deg, #d4af37, #f6e7a0);
+            color: #0b1226;
+            font-size: 16px;
+            font-weight: bold;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        #log {
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Тест WebApp API</h1>
+        
+        <div id="api-status" class="status">
+            <strong>Статус API:</strong> <span id="api-text">Проверяю...</span>
+        </div>
+        
+        <div id="device-info" class="status">
+            <strong>Устройство:</strong> <span id="device-text">Загружаю...</span>
+        </div>
+        
+        <button onclick="basicTest()">🧪 Базовый тест sendData</button>
+        <button onclick="authTest()">🔑 Тест авторизации</button>
+        <button onclick="clearLog()">🗑️ Очистить лог</button>
+        
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let tg = window.Telegram?.WebApp;
+        let logDiv = document.getElementById('log');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.textContent += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        function clearLog() {
+            logDiv.textContent = '';
+        }
+        
+        function checkAPI() {
+            const apiStatus = document.getElementById('api-status');
+            const apiText = document.getElementById('api-text');
+            
+            if (!tg) {
+                apiStatus.className = 'status error';
+                apiText.textContent = 'Telegram WebApp недоступен';
+                log('❌ КРИТИЧЕСКАЯ ОШИБКА: window.Telegram?.WebApp недоступен');
+                log('Возможные причины:');
+                log('1. Страница открыта не в Telegram');
+                log('2. Старая версия Telegram');
+                log('3. Проблемы с загрузкой telegram-web-app.js');
+                return false;
+            }
+            
+            const hasSendData = typeof tg.sendData === 'function';
+            if (!hasSendData) {
+                apiStatus.className = 'status error';
+                apiText.textContent = 'sendData недоступен';
+                log('❌ КРИТИЧЕСКАЯ ОШИБКА: tg.sendData не является функцией');
+                log(`Тип tg.sendData: ${typeof tg.sendData}`);
+                log(`Telegram WebApp версия: ${tg.version || 'неизвестно'}`);
+                return false;
+            }
+            
+            apiStatus.className = 'status ok';
+            apiText.textContent = 'Все API доступны';
+            log('✅ Telegram WebApp API полностью доступен');
+            log(`Версия: ${tg.version || 'неизвестно'}`);
+            return true;
+        }
+        
+        function checkDevice() {
+            const deviceInfo = document.getElementById('device-info');
+            const deviceText = document.getElementById('device-text');
+            
+            const isMobile = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent);
+            const isSecure = window.location.protocol === 'https:';
+            const inTelegram = window.location.href.includes('telegram') || 
+                              window.location.href.includes('t.me') ||
+                              navigator.userAgent.includes('Telegram');
+            
+            deviceText.textContent = `${isMobile ? 'Мобильное' : 'Десктоп'}, ${isSecure ? 'HTTPS' : 'HTTP'}, ${inTelegram ? 'в Telegram' : 'вне Telegram'}`;
+            
+            if (isMobile && isSecure && inTelegram) {
+                deviceInfo.className = 'status ok';
+            } else {
+                deviceInfo.className = 'status error';
+            }
+            
+            log(`📱 Устройство: ${navigator.platform}`);
+            log(`🌐 User Agent: ${navigator.userAgent.substring(0, 80)}...`);
+            log(`🔒 HTTPS: ${isSecure}`);
+            log(`📲 Размер экрана: ${window.innerWidth}x${window.innerHeight}`);
+            log(`🤖 В Telegram: ${inTelegram}`);
+        }
+        
+        function basicTest() {
+            log('🧪 === БАЗОВЫЙ ТЕСТ SENDDATA ===');
+            
+            if (!tg || typeof tg.sendData !== 'function') {
+                log('❌ Telegram WebApp API недоступен');
+                return;
+            }
+            
+            try {
+                // Инициализация WebApp
+                tg.ready();
+                if (tg.expand) tg.expand();
+                log('✅ WebApp инициализирован');
+                
+                // Тестовые данные
+                const testData = {
+                    test: 'basic_test',
+                    timestamp: Date.now(),
+                    device: navigator.platform
+                };
+                
+                const dataString = JSON.stringify(testData);
+                log(`📤 Отправляю тестовые данные: ${dataString}`);
+                
+                // Показываем прогресс если возможно
+                if (tg.MainButton) {
+                    tg.MainButton.setText('Отправка...');
+                    tg.MainButton.showProgress(true);
+                    tg.MainButton.show();
+                }
+                
+                // Хаптик если доступен
+                if (tg.HapticFeedback) {
+                    tg.HapticFeedback.impactOccurred('light');
+                }
+                
+                // Отправляем данные
+                tg.sendData(dataString);
+                log('✅ tg.sendData выполнен без ошибок');
+                
+                // Скрываем прогресс
+                setTimeout(() => {
+                    if (tg.MainButton) {
+                        tg.MainButton.showProgress(false);
+                        tg.MainButton.setText('Готово');
+                    }
+                    if (tg.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred('success');
+                    }
+                    log('🎯 Базовый тест завершен. Проверьте чат с ботом.');
+                }, 1000);
+                
+            } catch (error) {
+                log(`❌ Ошибка в базовом тесте: ${error.message}`);
+                log(`Stack: ${error.stack}`);
+                
+                if (tg.MainButton) {
+                    tg.MainButton.showProgress(false);
+                    tg.MainButton.setText('Ошибка');
+                }
+            }
+        }
+        
+        function authTest() {
+            log('🔑 === ТЕСТ АВТОРИЗАЦИИ ===');
+            
+            if (!tg || typeof tg.sendData !== 'function') {
+                log('❌ Telegram WebApp API недоступен для авторизации');
+                return;
+            }
+            
+            try {
+                const authData = {
+                    code: '111098',
+                    phone: '89827701055'
+                };
+                
+                const dataString = JSON.stringify(authData);
+                log(`🔐 Отправляю данные авторизации: ${dataString}`);
+                
+                if (tg.MainButton) {
+                    tg.MainButton.setText('Авторизация...');
+                    tg.MainButton.showProgress(true);
+                    tg.MainButton.show();
+                }
+                
+                if (tg.HapticFeedback) {
+                    tg.HapticFeedback.impactOccurred('medium');
+                }
+                
+                tg.sendData(dataString);
+                log('✅ Данные авторизации отправлены');
+                
+                setTimeout(() => {
+                    if (tg.MainButton) {
+                        tg.MainButton.showProgress(false);
+                        tg.MainButton.setText('Авторизован');
+                    }
+                    if (tg.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred('success');
+                    }
+                    log('🎯 Тест авторизации завершен. Проверьте результат в чате.');
+                }, 1500);
+                
+            } catch (error) {
+                log(`❌ Ошибка в тесте авторизации: ${error.message}`);
+                
+                if (tg.MainButton) {
+                    tg.MainButton.showProgress(false);
+                    tg.MainButton.setText('Ошибка авторизации');
+                }
+            }
+        }
+        
+        // Автоматическая проверка при загрузке
+        document.addEventListener('DOMContentLoaded', () => {
+            log('🚀 Страница загружена, начинаю диагностику...');
+            
+            setTimeout(() => {
+                checkDevice();
+                checkAPI();
+                
+                // Инициализируем WebApp если доступен
+                if (tg) {
+                    try {
+                        tg.ready();
+                        if (tg.expand) tg.expand();
+                        log('✅ WebApp готов к работе');
+                    } catch (e) {
+                        log(`❌ Ошибка инициализации WebApp: ${e.message}`);
+                    }
+                }
+            }, 500);
+        });
+        
+        // Отслеживание ошибок
+        window.addEventListener('error', (e) => {
+            log(`❌ JavaScript ошибка: ${e.message}`);
+            log(`Файл: ${e.filename}:${e.lineno}`);
+        });
+        
+        // Отслеживание событий
+        document.addEventListener('click', (e) => {
+            log(`👆 Клик: ${e.target.tagName} "${e.target.textContent?.substring(0, 20)}"`);
+        });
+    </script>
+</body>
+</html>

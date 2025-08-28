@@ -59,8 +59,8 @@ OPENAI_CONFIG = {
 
 # URL веб-приложений
 WEB_APP_URLS = {
-    'MAIN': 'https://synthosaicreativestudio-maker.github.io/marketing/',
-    'SPA_MENU': 'https://synthosaicreativestudio-maker.github.io/marketing/spa_menu.html',
+    'MAIN': os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/'),
+    'SPA_MENU': os.getenv('WEB_APP_MENU_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/spa_menu.html'),
 }
 
 # Статусы тикетов (ручной выбор специалистом)
