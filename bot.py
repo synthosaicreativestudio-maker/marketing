@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 import telegram
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
+from telegram import CallbackQuery
 from sheets_client import GoogleSheetsClient
 
 # Импорты новых модулей
@@ -183,10 +184,194 @@ else:
 
 
 
+async def perform_mobile_auth(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, code: str, phone: str):
+    """Выполняет авторизацию пользователя по введенным данным"""
+    user = query.from_user
+    
+    logger.info(f'🔐 Выполняем мобильную авторизацию для пользователя {user.id}: код={code}, телефон={phone[:3]}***')
+    
+    # Валидация телефона
+    phone_digits = ''.join(filter(str.isdigit, phone))
+    if len(phone_digits) != 11:
+        await query.edit_message_text(
+            '❌ <b>Неверный формат телефона!</b>\n\n'
+            '📝 Введите 11 цифр без пробелов и символов\n\n'
+            '💡 Пример: <code>89827701055</code>',
+            parse_mode='HTML'
+        )
+        return
+    
+    # Отправляем подтверждение
+    await query.edit_message_text('🔍 <b>Проверяю данные...</b>', parse_mode='HTML')
+    
+    # Проверяем доступность Google Sheets
+    if not sheets_client or not sheets_client.sheet:
+        logger.error('❌ Google Sheets client not available for mobile auth')
+        await query.edit_message_text('❌ База недоступна. Свяжитесь с админом.')
+        return
+    
+    try:
+        # Выполняем проверку авторизации
+        logger.info(f'🔍 Looking up credentials for mobile auth user {user.id}')
+        row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone_digits)
+        logger.info(f'✅ Mobile auth credentials lookup result for user {user.id}: row={row}')
+        
+        if row:
+            # ✅ Успешная авторизация
+            try:
+                logger.info(f'🔄 Updating mobile auth status for user {user.id} in row {row}')
+                await asyncio.to_thread(sheets_client.update_user_auth_status, row, user.id)
+                
+                # Обновляем данные пользователя в контексте
+                context.user_data['is_authorized'] = True
+                context.user_data['partner_code'] = code
+                context.user_data['phone'] = phone_digits
+                context.user_data['auth_timestamp'] = time.time()
+                context.user_data['platform'] = {'platform': 'mobile_command'}
+                
+                # Очищаем данные мобильной авторизации
+                context.user_data.pop('mobile_auth_state', None)
+                context.user_data.pop('mobile_auth_code', None)
+                context.user_data.pop('mobile_auth_phone', None)
+                
+                # Очищаем счетчик неудачных попыток
+                auth_cache.clear_failed_attempts(user.id)
+                
+                # Обновляем глобальный кэш авторизованных пользователей
+                await asyncio.to_thread(refresh_authorized_cache)
+                
+                logger.info(f'✅ Mobile authorization successful for user {user.id}')
+                
+                # Отправляем успешное сообщение
+                await query.edit_message_text(
+                    '✅ <b>Авторизация прошла успешно!</b>\n\n'
+                    '🎉 Добро пожаловать в систему!',
+                    parse_mode='HTML'
+                )
+                
+                # Предлагаем открыть личный кабинет
+                menu_url = get_web_app_url('SPA_MENU')
+                keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+                await query.message.reply_text(
+                    '💡 Откройте личный кабинет для выбора раздела:',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                
+                # Добавляем постоянную клавиатуру
+                persistent_keyboard = create_persistent_keyboard()
+                await query.message.reply_text(
+                    '💡 Совет: Используйте кнопку "🚀 Личный кабинет" для быстрого доступа',
+                    reply_markup=persistent_keyboard
+                )
+                
+            except Exception as e:
+                logger.error(f'❌ Error updating mobile auth status for user {user.id}: {e}')
+                await query.edit_message_text('❌ Ошибка при сохранении авторизации. Попробуйте позже.')
+                return
+        else:
+            # ❌ Неудачная попытка авторизации
+            is_blocked, block_duration = auth_cache.add_failed_attempt(user.id)
+            attempts_left = auth_cache.get_attempts_left(user.id)
+            
+            logger.warning(f'❌ Failed mobile authorization attempt for user {user.id}. Attempts left: {attempts_left}')
+            
+            if is_blocked:
+                hours = block_duration // 3600
+                if hours > 24:
+                    days = hours // 24
+                    time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
+                else:
+                    time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
+                await query.edit_message_text(f'❌ Превышен лимит попыток авторизации. Доступ заблокирован на {time_text}.')
+            else:
+                # Предлагаем попробовать еще раз
+                keyboard = [
+                    [InlineKeyboardButton('🔄 Попробовать снова', callback_data='mobile_auth:code')],
+                    [InlineKeyboardButton('❌ Отмена', callback_data='mobile_auth:cancel')]
+                ]
+                await query.edit_message_text(
+                    f'❌ <b>Неверные данные или аккаунт неактивен</b>\n\n'
+                    f'⚠️ Осталось попыток: {attempts_left}\n\n'
+                    f'💡 Проверьте правильность ввода кода партнера и телефона из системы КОСМОС\n\n'
+                    f'🔑 Введенный код: <code>{code}</code>\n'
+                    f'📞 Введенный телефон: <code>{phone_digits}</code>',
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            
+    except Exception as e:
+        logger.error(f'❌ Error during mobile auth lookup for user {user.id}: {e}')
+        await query.edit_message_text('❌ Ошибка проверки данных. Попробуйте позже.')
+
+async def handle_mobile_auth_callback(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, data: str):
+    """Обрабатывает callback'и мобильной авторизации"""
+    user = query.from_user
+    action = data.split(':', 1)[1]
+    
+    logger.info(f'📱 Мобильная авторизация callback от пользователя {user.id}: {action}')
+    
+    if action == 'code':
+        # Запрашиваем ввод кода партнера
+        await query.edit_message_text(
+            '🔑 <b>Введите код партнера</b>\n\n'
+            '📝 Отправьте код партнера из системы КОСМОС\n\n'
+            '💡 Пример: <code>111098</code>',
+            parse_mode='HTML'
+        )
+        # Сохраняем состояние в контексте
+        context.user_data['mobile_auth_state'] = 'waiting_code'
+        
+    elif action == 'phone':
+        # Запрашиваем ввод телефона
+        await query.edit_message_text(
+            '📞 <b>Введите номер телефона</b>\n\n'
+            '📝 Отправьте номер телефона из системы КОСМОС\n\n'
+            '💡 Пример: <code>89827701055</code>',
+            parse_mode='HTML'
+        )
+        # Сохраняем состояние в контексте
+        context.user_data['mobile_auth_state'] = 'waiting_phone'
+        
+    elif action == 'confirm':
+        # Проверяем, есть ли все необходимые данные
+        code = context.user_data.get('mobile_auth_code')
+        phone = context.user_data.get('mobile_auth_phone')
+        
+        if not code or not phone:
+            await query.edit_message_text(
+                '❌ <b>Не все данные введены</b>\n\n'
+                f'🔑 Код партнера: {code or "❌ не введен"}\n'
+                f'📞 Телефон: {phone or "❌ не введен"}\n\n'
+                '💡 Сначала введите код и телефон, затем подтвердите авторизацию',
+                parse_mode='HTML'
+            )
+            return
+        
+        # Выполняем авторизацию
+        await perform_mobile_auth(query, context, code, phone)
+        
+    elif action == 'cancel':
+        # Отменяем авторизацию
+        context.user_data.pop('mobile_auth_state', None)
+        context.user_data.pop('mobile_auth_code', None)
+        context.user_data.pop('mobile_auth_phone', None)
+        
+        await query.edit_message_text(
+            '❌ <b>Авторизация отменена</b>\n\n'
+            '💡 Для повторной авторизации используйте команду /mobile_auth',
+            parse_mode='HTML'
+        )
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data or ''
+    
+    # Обработка мобильной авторизации
+    if data.startswith('mobile_auth:'):
+        await handle_mobile_auth_callback(query, context, data)
+        return
+    
     # Кнопка вызова меню миниапп
     if data == 'show_menu':
         keyboard = [[InlineKeyboardButton(section, callback_data=f"menu:{section}")] for section in SECTIONS]
@@ -256,6 +441,74 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await query.edit_message_text('Неизвестное действие.')
     
+
+async def handle_mobile_auth_input(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
+    """Обрабатывает ввод данных для мобильной авторизации. Возвращает True, если сообщение обработано."""
+    user = update.effective_user
+    mobile_auth_state = context.user_data.get('mobile_auth_state')
+    
+    if not mobile_auth_state:
+        return False
+    
+    logger.info(f'📱 Мобильная авторизация: состояние {mobile_auth_state} от пользователя {user.id}')
+    
+    if mobile_auth_state == 'waiting_code':
+        # Ожидаем ввод кода партнера
+        if text.isdigit() and len(text) >= 4:
+            context.user_data['mobile_auth_code'] = text
+            context.user_data['mobile_auth_state'] = 'waiting_phone'
+            
+            await update.message.reply_text(
+                '✅ <b>Код партнера принят!</b>\n\n'
+                f'🔑 Код: <code>{text}</code>\n\n'
+                '📞 Теперь введите номер телефона из системы КОСМОС',
+                parse_mode='HTML'
+            )
+            return True
+        else:
+            await update.message.reply_text(
+                '❌ <b>Неверный формат кода!</b>\n\n'
+                '📝 Код должен содержать только цифры (минимум 4 символа)\n\n'
+                '💡 Пример: <code>111098</code>',
+                parse_mode='HTML'
+            )
+            return True
+    
+    elif mobile_auth_state == 'waiting_phone':
+        # Ожидаем ввод телефона
+        phone_digits = ''.join(filter(str.isdigit, text))
+        if len(phone_digits) == 11:
+            context.user_data['mobile_auth_phone'] = phone_digits
+            context.user_data['mobile_auth_state'] = 'ready'
+            
+            code = context.user_data.get('mobile_auth_code', '')
+            
+            # Создаем клавиатуру для подтверждения
+            keyboard = [
+                [InlineKeyboardButton('✅ Подтвердить авторизацию', callback_data='mobile_auth:confirm')],
+                [InlineKeyboardButton('🔄 Ввести заново', callback_data='mobile_auth:code')],
+                [InlineKeyboardButton('❌ Отмена', callback_data='mobile_auth:cancel')]
+            ]
+            
+            await update.message.reply_text(
+                '✅ <b>Телефон принят!</b>\n\n'
+                f'🔑 Код партнера: <code>{code}</code>\n'
+                f'📞 Телефон: <code>{phone_digits}</code>\n\n'
+                '💡 Теперь подтвердите авторизацию',
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return True
+        else:
+            await update.message.reply_text(
+                '❌ <b>Неверный формат телефона!</b>\n\n'
+                '📝 Введите 11 цифр без пробелов и символов\n\n'
+                '💡 Пример: <code>89827701055</code>',
+                parse_mode='HTML'
+            )
+            return True
+    
+    return False
 
 async def handle_text_auth(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
     """Обрабатывает текстовые сообщения с данными авторизации. Возвращает True, если сообщение обработано."""
@@ -397,6 +650,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_user_authorized(user.id, context):
         # Пытаемся обработать как текстовую авторизацию
         if await handle_text_auth(update, context, text):
+            return
+        
+        # Проверяем, не является ли сообщение вводом данных для мобильной авторизации
+        if await handle_mobile_auth_input(update, context, text):
             return
         else:
             await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
@@ -557,6 +814,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f'Completed processing message {message_id} from user {user.id}')
 
 # Обработчики
+async def mobile_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Специальная команда для мобильной авторизации: /mobile_auth"""
+    user = update.effective_user
+    logger.info(f'📱 Команда /mobile_auth от пользователя {user.id} ({user.first_name})')
+    
+    # Проверяем, не авторизован ли уже пользователь
+    if await is_user_authorized(user.id, context):
+        await update.message.reply_text('✅ Вы уже авторизованы в системе!')
+        return
+    
+    # Создаем интерактивную клавиатуру для мобильной авторизации
+    keyboard = [
+        [InlineKeyboardButton('🔑 Ввести код партнера', callback_data='mobile_auth:code')],
+        [InlineKeyboardButton('📞 Ввести телефон', callback_data='mobile_auth:phone')],
+        [InlineKeyboardButton('✅ Подтвердить авторизацию', callback_data='mobile_auth:confirm')],
+        [InlineKeyboardButton('❌ Отмена', callback_data='mobile_auth:cancel')]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        '📱 <b>Мобильная авторизация</b>\n\n'
+        '🔐 Для авторизации в системе выполните следующие шаги:\n\n'
+        '1️⃣ <b>Введите код партнера</b> из системы КОСМОС\n'
+        '2️⃣ <b>Введите номер телефона</b> из системы КОСМОС\n'
+        '3️⃣ <b>Подтвердите авторизацию</b>\n\n'
+        '💡 Используйте кнопки ниже для пошаговой авторизации',
+        parse_mode='HTML',
+        reply_markup=reply_markup
+    )
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     logger.info(f'/start от {user.id} ({user.first_name})')
@@ -1828,6 +2116,7 @@ def main():
 
         app.add_handler(CommandHandler('start', start))
         app.add_handler(CommandHandler('auth', auth_command))
+        app.add_handler(CommandHandler('mobile_auth', mobile_auth_command))
         app.add_handler(CommandHandler('new_chat', new_chat))
         app.add_handler(CommandHandler('reply', reply_command))
         app.add_handler(CommandHandler('setstatus', setstatus_command))
