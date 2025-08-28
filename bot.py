@@ -487,6 +487,10 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
             return False, "Не указан URL мини-приложения"
         return True, ""
     
+    elif data_type == 'contact_specialist':
+        # Никакой дополнительной валидации не требуется для contact_specialist
+        return True, ""
+    
     else:
         # Проверяем данные авторизации
         code = payload.get('code')
@@ -559,6 +563,9 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data_type == 'direct_webapp':
         logger.info(f'Routing to direct webapp handler')
         await handle_direct_webapp(update, context, payload)
+    elif data_type == 'contact_specialist':
+        logger.info(f'Routing to contact specialist handler')
+        await handle_contact_specialist(update, context, payload)
     else:
         logger.info(f'Routing to authorization handler')
         await handle_authorization(update, context, payload)
@@ -1387,6 +1394,71 @@ def _fix_telegram_id_worker(new_id: int) -> int:
         return updated_count
     except Exception:
         return 0
+
+async def handle_contact_specialist(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
+    """Обрабатывает запрос на связь со специалистом."""
+    user = update.effective_user
+    
+    # Проверяем авторизацию
+    is_auth = await is_user_authorized(user.id, context)
+    if not is_auth:
+        logger.warning(f'User {user.id} not authorized for contact specialist request')
+        await update.message.reply_text('❌ Вы не авторизованы. Сначала пройдите авторизацию.')
+        return
+    
+    logger.info(f'User {user.id} requested contact with specialist')
+    
+    # Создаем тикет для связи со специалистом
+    try:
+        if tickets_client and tickets_client.sheet:
+            telegram_id = str(user.id)
+            code = context.user_data.get('partner_code', '')
+            phone = context.user_data.get('phone', '')
+            fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
+            
+            ticket_text = "Запрос на связь со специалистом"
+            
+            await asyncio.to_thread(
+                tickets_client.upsert_ticket, 
+                telegram_id, code, phone, fio, 
+                ticket_text, 'в работе', 'user', False
+            )
+            
+            logger.info(f'Created contact specialist ticket for user {user.id}')
+    except Exception as e:
+        logger.error(f'Не удалось создать тикет для связи со специалистом: {e}')
+    
+    await update.message.reply_text('✅ Ваша заявка на связь со специалистом принята!\n\nМы свяжемся с вами в ближайшее время.')
+    
+    # Уведомляем администраторов
+    try:
+        admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
+        for aid in admin_ids:
+            try:
+                await context.bot.send_message(
+                    chat_id=int(aid), 
+                    text=f'🆕 Запрос на связь со специалистом от {user.first_name or user.id}\n\n👤 ID: {user.id}'
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает возврат в главное меню."""
+    user = update.effective_user
+    
+    # Убираем проверку авторизации для навигации
+    # Пользователь уже авторизован в основном меню
+    
+    # Открываем главное меню
+    menu_url = get_web_app_url('SPA_MENU')
+    keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+    await update.message.reply_text('Возвращаюсь в главное меню:', reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # Добавляем persistent keyboard
+    persistent_keyboard = create_persistent_keyboard()
+    await update.message.reply_text('Используйте кнопку "🚀 Личный кабинет" для быстрого доступа:', reply_markup=persistent_keyboard)
 
 # Запуск
 def main():

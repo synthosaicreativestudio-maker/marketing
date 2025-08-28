@@ -216,13 +216,16 @@
             // Показываем экран раздела
             let sectionScreen;
             
-            // Специальная обработка для разделов с пробелами
+            // Специальная обработка для всех разделов
             switch(sectionName) {
-                case 'Регламенты и обучение':
-                    sectionScreen = document.getElementById('reglamenty-i-obuchenie-screen');
+                case 'Агрегаторы':
+                    sectionScreen = document.getElementById('agregatory-screen');
                     break;
-                case 'Акции и мероприятия':
-                    sectionScreen = document.getElementById('aktsii-i-meropriyatiya-screen');
+                case 'Контент':
+                    sectionScreen = document.getElementById('content-screen');
+                    break;
+                case 'Финансы':
+                    sectionScreen = document.getElementById('finance-screen');
                     break;
                 case 'Технические проблемы':
                     sectionScreen = document.getElementById('tech-screen');
@@ -230,10 +233,19 @@
                 case 'Дизайн и материалы':
                     sectionScreen = document.getElementById('design-screen');
                     break;
+                case 'Регламенты и обучение':
+                    sectionScreen = document.getElementById('reglamenty-i-obuchenie-screen');
+                    break;
+                case 'Акции и мероприятия':
+                    sectionScreen = document.getElementById('aktsii-i-meropriyatiya-screen');
+                    break;
+                case 'Аналитика':
+                    sectionScreen = document.getElementById('analitika-screen');
+                    break;
                 default:
-                    // Для остальных разделов используем стандартную логику
-                    const sectionId = sectionName.toLowerCase().replace(/\s+/g, '-') + '-screen';
-                    sectionScreen = document.getElementById(sectionId);
+                    console.error('Неизвестный раздел:', sectionName);
+                    goToMain();
+                    return;
             }
             
             if (sectionScreen) {
@@ -252,12 +264,36 @@
             const subsections = SUBSECTIONS[sectionName] || [];
             console.log('Найдены подразделы:', subsections);
             
-            // Ищем grid по ID или по классу
-            let grid = screen.querySelector('.menu-grid');
-            if (!grid) {
-                // Если не нашли по классу, ищем по ID
-                const sectionId = sectionName.toLowerCase().replace(/\s+/g, '-') + '-grid';
-                grid = document.getElementById(sectionId);
+            // Ищем grid по ID для конкретного раздела
+            let grid;
+            switch(sectionName) {
+                case 'Агрегаторы':
+                    grid = document.getElementById('agregatory_grid');
+                    break;
+                case 'Контент':
+                    grid = document.getElementById('content_grid');
+                    break;
+                case 'Финансы':
+                    grid = document.getElementById('finance_grid');
+                    break;
+                case 'Технические проблемы':
+                    grid = document.getElementById('tech_grid');
+                    break;
+                case 'Дизайн и материалы':
+                    grid = document.getElementById('design_grid');
+                    break;
+                case 'Регламенты и обучение':
+                    grid = document.getElementById('reglamenty_i_obuchenie_grid');
+                    break;
+                case 'Акции и мероприятия':
+                    grid = document.getElementById('aktsii_i_meropriyatiya_grid');
+                    break;
+                case 'Аналитика':
+                    grid = document.getElementById('analitika_grid');
+                    break;
+                default:
+                    // Fallback: ищем по классу
+                    grid = screen.querySelector('.menu-grid');
             }
             
             if (!grid) {
