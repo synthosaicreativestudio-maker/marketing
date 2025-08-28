@@ -829,75 +829,7 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
                 f'💡 Проверьте правильность ввода кода партнера и телефона из системы КОСМОС.',
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-    
-    code = payload.get('code')
-    phone = payload.get('phone')
-    
-    if not code or not phone:
-        await update.message.reply_text('❌ Необходимо указать код партнера и телефон.')
-        return
-    
-    logger.info(f'Authorization attempt: code={code}, phone={phone[-4:] if phone else None}***')
-    
-    # Отправляем подтверждение
-    await update.message.reply_text('Проверяю данные...')
-    
-    # Проверяем доступность Google Sheets
-    if not sheets_client or not sheets_client.sheet:
-        logger.error('Google Sheets client not available')
-        await update.message.reply_text('База недоступна. Свяжитесь с админом.')
-        return
-    
-    # Выполняем проверку авторизации
-    try:
-        logger.info(f'Looking up user credentials in Google Sheets...')
-        row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone)
-        logger.info(f'Credentials lookup result: row={row}')
-    except Exception as e:
-        logger.error(f'Error during credentials lookup: {e}')
-        await update.message.reply_text('Ошибка проверки данных. Попробуйте позже.')
-        return
-    
-    if row:
-        # Успешная авторизация
-        try:
-            logger.info(f'Updating auth status for user {user.id} in row {row}')
-            await asyncio.to_thread(sheets_client.update_user_auth_status, row, update.effective_user.id)
-            
-            # Обновляем данные пользователя
-            context.user_data['is_authorized'] = True
-            context.user_data['partner_code'] = code
-            context.user_data['phone'] = phone
-            context.user_data['auth_timestamp'] = time.time()
-            
-            auth_cache.clear_failed_attempts(user.id)
-            
-            # Обновляем глобальный кэш авторизованных пользователей
-            await asyncio.to_thread(refresh_authorized_cache)
-            
-            logger.info(f'Authorization successful for user {user.id}')
-            await update.message.reply_text('✅ Авторизация прошла успешно!')
-            
-            # Показываем кнопку для открытия личного кабинета
-            web_app_base = get_web_app_url('SPA_MENU')
-            menu_url = web_app_base
-            await update.message.reply_text(
-                'Откройте личный кабинет для выбора раздела, или напишите в чат',
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]])
-            )
-            
-            # Добавляем постоянную reply клавиатуру с кнопкой menu
-            persistent_keyboard = create_persistent_keyboard()
-            await update.message.reply_text(
-                'Используйте кнопку "menu" для быстрого доступа к личному кабинету',
-                reply_markup=persistent_keyboard
-            )
-            
-        except Exception as e:
-            logger.error(f'Error updating auth status: {e}')
-            await update.message.reply_text('Ошибка при сохранении авторизации. Попробуйте позже.')
-            return
-    else:
+
         # Неудачная попытка авторизации
         is_blocked, block_duration = auth_cache.add_failed_attempt(user.id)
         attempts_left = auth_cache.get_attempts_left(user.id)
@@ -911,10 +843,13 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
                 time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
             await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Авторизация заблокирована на {time_text}.')
         else:
-            web_app_url = get_web_app_url('MAIN')
-            keyboard = create_auth_button(web_app_url)
+            # Предлагаем попробовать еще раз
+            auth_url = get_web_app_url('MAIN')
+            keyboard = [[InlineKeyboardButton('🔄 Попробовать еще раз', web_app=WebAppInfo(url=auth_url))]]
             await update.message.reply_text(
-                f'❌ Неверные данные или аккаунт неактивен.\nОсталось попыток: {attempts_left}',
+                f'❌ Неверные данные или аккаунт неактивен.\n\n'
+                f'⚠️ Осталось попыток: {attempts_left}\n\n'
+                f'💡 Проверьте правильность ввода кода партнера и телефона из системы КОСМОС.',
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
