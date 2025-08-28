@@ -90,7 +90,7 @@
                         <img src="logo_marketing.png" alt="Marketing Logo">
                     </div>
                     <div class="brand-text">
-                        <h1>ЛИЧНЫЙ КАБИНЕТ</h1>
+                <h1>ЛИЧНЫЙ КАБИНЕТ</h1>
                     </div>
                 </div>
                 <div class="menu-grid" id="main_menu_grid"></div>
@@ -105,7 +105,7 @@
                         <img src="logo_marketing.png" alt="Marketing Logo">
                     </div>
                     <div class="brand-text">
-                        <h1>АГРЕГАТОРЫ</h1>
+                <h1>АГРЕГАТОРЫ</h1>
                     </div>
                 </div>
                 <div class="menu-grid" id="agregatory_grid"></div>
@@ -121,7 +121,7 @@
                         <img src="logo_marketing.png" alt="Marketing Logo">
                     </div>
                     <div class="brand-text">
-                        <h1>КОНТЕНТ</h1>
+                <h1>КОНТЕНТ</h1>
                     </div>
                 </div>
                 <div class="menu-grid" id="content_grid"></div>
@@ -137,7 +137,7 @@
                         <img src="logo_marketing.png" alt="Marketing Logo">
                     </div>
                     <div class="brand-text">
-                        <h1>ФИНАНСЫ</h1>
+                <h1>ФИНАНСЫ</h1>
                     </div>
                 </div>
                 <div class="menu-grid" id="finance_grid"></div>
@@ -153,7 +153,7 @@
                         <img src="logo_marketing.png" alt="Marketing Logo">
                     </div>
                     <div class="brand-text">
-                        <h1>ТЕХНИЧЕСКИЕ ПРОБЛЕМЫ</h1>
+                <h1>ТЕХНИЧЕСКИЕ ПРОБЛЕМЫ</h1>
                     </div>
                 </div>
                 <div class="menu-grid" id="tech_grid"></div>
@@ -169,7 +169,7 @@
                         <img src="logo_marketing.png" alt="Marketing Logo">
                     </div>
                     <div class="brand-text">
-                        <h1>ДИЗАЙН И МАТЕРИАЛЫ</h1>
+                <h1>ДИЗАЙН И МАТЕРИАЛЫ</h1>
                     </div>
                 </div>
                 <div class="menu-grid" id="design_grid"></div>
@@ -227,8 +227,19 @@
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.ready();
+        const tg = window.Telegram?.WebApp;
+        
+        // Проверяем доступность Telegram WebApp API
+        if (tg) {
+            try {
+                tg.ready();
+                console.log('Telegram WebApp успешно инициализирован');
+            } catch (e) {
+                console.error('Ошибка инициализации Telegram WebApp:', e);
+            }
+        } else {
+            console.warn('Telegram WebApp API недоступен');
+        }
 
         const SECTIONS = [
             'Агрегаторы',
@@ -299,41 +310,54 @@
             }
             
             grid.innerHTML = '';
-            
             SECTIONS.forEach(section => {
                 const btn = document.createElement('button');
                 btn.className = 'menu-btn';
                 btn.textContent = section;
-                btn.onclick = () => {
-                    console.log('Клик по разделу:', section);
-                    showSection(section);
+                
+                // Улучшенная обработка кликов для мобильных
+                const handleClick = () => {
+                    try {
+                        // Хаптик для мобильных
+                        if (tg?.HapticFeedback) {
+                            tg.HapticFeedback.impactOccurred('light');
+                        }
+                        
+                        console.log('Main menu button clicked:', section);
+                        goToSection(section);
+                        
+                    } catch (e) {
+                        console.error('Error in main menu click handler:', e);
+                        if (tg?.HapticFeedback) {
+                            tg.HapticFeedback.notificationOccurred('error');
+                        }
+                        showError('Ошибка при переходе. Попробуйте ещё раз.');
+                    }
                 };
+                
+                // Поддержка как click, так и touch событий
+                btn.onclick = handleClick;
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    handleClick();
+                });
+                
                 grid.appendChild(btn);
             });
             
-            console.log('Главное меню создано, кнопок:', SECTIONS.length);
+            console.log('Главное меню создано');
         }
 
-        function showSection(sectionName) {
-            console.log('Показываем экран для раздела:', sectionName);
-            // Специальная обработка для "Связаться со специалистом"
-            if (sectionName === 'Связаться со специалистом') {
-                // Отправляем данные в Telegram Bot
-                const data = {
-                    type: 'contact_specialist',
-                    action: 'contact_specialist'
-                };
-                tg.sendData(JSON.stringify(data));
-                return;
-            }
+        function goToSection(sectionName) {
+            console.log('Переходим к разделу:', sectionName);
             
-            // Скрываем главное меню
-            document.getElementById('main-screen').classList.remove('active');
+            // Скрываем все экраны
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active', 'prev');
+            });
             
-            // Показываем экран раздела
+            // Определяем какой экран показать
             let sectionScreen;
-            
-            // Специальная обработка для всех разделов
             switch(sectionName) {
                 case 'Агрегаторы':
                     sectionScreen = document.getElementById('agregatory-screen');
@@ -351,10 +375,10 @@
                     sectionScreen = document.getElementById('design-screen');
                     break;
                 case 'Регламенты и обучение':
-                    sectionScreen = document.getElementById('reglamenty-i-obuchenie-screen');
+                    sectionScreen = document.getElementById('reglamenty_i_obuchenie-screen');
                     break;
                 case 'Акции и мероприятия':
-                    sectionScreen = document.getElementById('aktsii-i-meropriyatiya-screen');
+                    sectionScreen = document.getElementById('aktsii_i_meropriyatiya-screen');
                     break;
                 case 'Аналитика':
                     sectionScreen = document.getElementById('analitika-screen');
@@ -425,7 +449,34 @@
                 const btn = document.createElement('button');
                 btn.className = 'menu-btn';
                 btn.textContent = subsection;
-                btn.onclick = () => handleSubsectionClick(sectionName, subsection);
+                
+                // Улучшенная обработка кликов для мобильных
+                const handleClick = () => {
+                    try {
+                        // Хаптик для мобильных
+                        if (tg?.HapticFeedback) {
+                            tg.HapticFeedback.impactOccurred('light');
+                        }
+                        
+                        console.log('Subsection clicked:', subsection);
+                        handleSubsectionClick(sectionName, subsection);
+                        
+                    } catch (e) {
+                        console.error('Error in subsection click handler:', e);
+                        if (tg?.HapticFeedback) {
+                            tg.HapticFeedback.notificationOccurred('error');
+                        }
+                        showError('Ошибка при выборе. Попробуйте ещё раз.');
+                    }
+                };
+                
+                // Поддержка как click, так и touch событий
+                btn.onclick = handleClick;
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    handleClick();
+                });
+                
                 grid.appendChild(btn);
             });
             
@@ -433,6 +484,8 @@
         }
 
         function handleSubsectionClick(section, subsection) {
+            console.log('Обрабатываем клик по подразделу:', section, subsection);
+            
             // Отправляем данные в Telegram Bot
             const data = {
                 type: 'subsection_selection',
@@ -440,7 +493,57 @@
                 subsection: subsection
             };
             
-            tg.sendData(JSON.stringify(data));
+            if (tg && typeof tg.sendData === 'function') {
+                try {
+                    tg.sendData(JSON.stringify(data));
+                    console.log('Данные отправлены через Telegram API');
+                    
+                    // Хаптик подтверждения
+                    if (tg?.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred('success');
+                    }
+                    
+                    showSuccess('Запрос отправлен!');
+                    
+                    // Закрываем WebApp через некоторое время
+                    setTimeout(() => {
+                        if (tg?.close) {
+                            tg.close();
+                        }
+                    }, 1500);
+                    
+                } catch (error) {
+                    console.error('Ошибка отправки через Telegram API:', error);
+                    showError('Ошибка отправки. Попробуйте ещё раз.');
+                }
+            } else {
+                // Fallback: отправляем через HTTP
+                console.log('Telegram API недоступен, используем HTTP fallback');
+                sendSubsectionViaHTTP(section, subsection);
+            }
+        }
+
+        // HTTP fallback для подразделов
+        async function sendSubsectionViaHTTP(section, subsection) {
+            try {
+                const response = await fetch('/subsection', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({section, subsection})
+                });
+                
+                if (response.ok) {
+                    console.log('Подраздел отправлен через HTTP');
+                    showSuccess('Запрос отправлен через HTTP!');
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                console.error('HTTP fallback failed:', error);
+                showError('Ошибка отправки данных. Попробуйте позже.');
+            }
         }
 
         function goToMain() {
@@ -451,6 +554,22 @@
             
             // Показываем главное меню
             document.getElementById('main-screen').classList.add('active');
+        }
+
+        function showError(message) {
+            if (tg?.showAlert) {
+                tg.showAlert(message);
+            } else {
+                alert(message);
+            }
+        }
+
+        function showSuccess(message) {
+            if (tg?.showAlert) {
+                tg.showAlert(message);
+            } else {
+                alert(message);
+            }
         }
 
         // Инициализация при загрузке

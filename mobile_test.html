@@ -105,6 +105,14 @@
         </div>
         
         <div class="test-item">
+            <strong>🔧 Тест функций Telegram WebApp:</strong>
+            <button onclick="testMainButton()">Тест MainButton</button>
+            <button onclick="testHaptic()">Тест HapticFeedback</button>
+            <button onclick="testShowAlert()">Тест showAlert</button>
+            <button onclick="testExpand()">Тест expand</button>
+        </div>
+        
+        <div class="test-item">
             <strong>📋 Лог событий:</strong>
             <div id="log"></div>
         </div>
@@ -130,16 +138,23 @@
         function checkEnvironment() {
             const env = document.getElementById('environment');
             const isMobile = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent);
-            const isTelegram = window.location.href.includes('telegram');
+            const isTelegram = window.location.href.includes('telegram') || 
+                              window.location.href.includes('t.me') ||
+                              window.location.href.includes('web.telegram.org');
+            const isSecure = window.location.protocol === 'https:';
+            const hasTouch = 'ontouchstart' in window;
             
             env.innerHTML = `
                 Мобильное устройство: ${getStatus(isMobile)}<br>
                 Платформа: ${navigator.platform}<br>
                 User Agent: ${navigator.userAgent.substring(0, 50)}...<br>
-                Открыто в Telegram: ${getStatus(isTelegram)}
+                Открыто в Telegram: ${getStatus(isTelegram)}<br>
+                HTTPS соединение: ${getStatus(isSecure)}<br>
+                Touch поддержка: ${getStatus(hasTouch)}<br>
+                Viewport: ${window.innerWidth}x${window.innerHeight}
             `;
             
-            log(`Окружение: мобильное=${isMobile}, платформа=${navigator.platform}`);
+            log(`Окружение: мобильное=${isMobile}, платформа=${navigator.platform}, telegram=${isTelegram}, secure=${isSecure}`);
         }
         
         function checkTelegramAPI() {
@@ -148,12 +163,18 @@
             const hasWebApp = !!window.Telegram?.WebApp;
             const hasSendData = typeof tg?.sendData === 'function';
             const hasHaptic = !!tg?.HapticFeedback;
+            const hasMainButton = !!tg?.MainButton;
+            const hasShowAlert = !!tg?.showAlert;
+            const hasClose = !!tg?.close;
             
             api.innerHTML = `
                 window.Telegram: ${getStatus(hasTelegram)}<br>
                 WebApp: ${getStatus(hasWebApp)}<br>
                 sendData(): ${getStatus(hasSendData)}<br>
                 HapticFeedback: ${getStatus(hasHaptic)}<br>
+                MainButton: ${getStatus(hasMainButton)}<br>
+                showAlert: ${getStatus(hasShowAlert)}<br>
+                close: ${getStatus(hasClose)}<br>
                 Версия: ${tg?.version || 'неизвестно'}
             `;
             
@@ -219,11 +240,96 @@
             }
         }
         
+        function testMainButton() {
+            if (!tg || !tg.MainButton) {
+                log('❌ MainButton недоступен');
+                return;
+            }
+            
+            try {
+                tg.MainButton.setText('Тест кнопки');
+                tg.MainButton.show();
+                log('✅ MainButton показан');
+                
+                setTimeout(() => {
+                    tg.MainButton.hide();
+                    log('✅ MainButton скрыт');
+                }, 3000);
+                
+            } catch (error) {
+                log(`❌ Ошибка MainButton: ${error.message}`);
+            }
+        }
+        
+        function testHaptic() {
+            if (!tg || !tg.HapticFeedback) {
+                log('❌ HapticFeedback недоступен');
+                return;
+            }
+            
+            try {
+                tg.HapticFeedback.impactOccurred('light');
+                log('✅ Light haptic');
+                
+                setTimeout(() => {
+                    tg.HapticFeedback.impactOccurred('medium');
+                    log('✅ Medium haptic');
+                }, 500);
+                
+                setTimeout(() => {
+                    tg.HapticFeedback.impactOccurred('heavy');
+                    log('✅ Heavy haptic');
+                }, 1000);
+                
+            } catch (error) {
+                log(`❌ Ошибка HapticFeedback: ${error.message}`);
+            }
+        }
+        
+        function testShowAlert() {
+            if (!tg || !tg.showAlert) {
+                log('❌ showAlert недоступен');
+                return;
+            }
+            
+            try {
+                tg.showAlert('Тестовое сообщение');
+                log('✅ showAlert работает');
+            } catch (error) {
+                log(`❌ Ошибка showAlert: ${error.message}`);
+            }
+        }
+        
+        function testExpand() {
+            if (!tg || !tg.expand) {
+                log('❌ expand недоступен');
+                return;
+            }
+            
+            try {
+                tg.expand();
+                log('✅ expand выполнен');
+            } catch (error) {
+                log(`❌ Ошибка expand: ${error.message}`);
+            }
+        }
+        
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             log('🚀 Страница загружена');
             checkEnvironment();
             checkTelegramAPI();
+            
+            // Автоматические тесты
+            setTimeout(() => {
+                if (tg) {
+                    log('🔍 Запускаем автоматические тесты...');
+                    testMainButton();
+                    testHaptic();
+                    testShowAlert();
+                    testExpand();
+                }
+            }, 1000);
         });
         
         // Отслеживание событий
@@ -235,8 +341,22 @@
             log(`Touch start: ${e.target.tagName}`);
         });
         
+        document.addEventListener('touchend', (e) => {
+            log(`Touch end: ${e.target.tagName}`);
+        });
+        
         window.addEventListener('error', (e) => {
             log(`JavaScript ошибка: ${e.message}`);
+        });
+        
+        // Отслеживание изменений размера экрана
+        window.addEventListener('resize', () => {
+            log(`Размер экрана изменен: ${window.innerWidth}x${window.innerHeight}`);
+        });
+        
+        // Отслеживание ориентации
+        window.addEventListener('orientationchange', () => {
+            log(`Ориентация изменена: ${window.orientation}`);
         });
     </script>
 </body>
