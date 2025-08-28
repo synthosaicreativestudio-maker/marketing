@@ -1,0 +1,27 @@
+[Unit]
+Description=Marketing Bot Telegram Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=verakoroleva
+WorkingDirectory=/Users/verakoroleva/Desktop/@marketing
+Environment=PATH=/Users/verakoroleva/Desktop/@marketing/.venv/bin
+ExecStart=/Users/verakoroleva/Desktop/@marketing/.venv/bin/python /Users/verakoroleva/Desktop/@marketing/bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Автоматический перезапуск при сбоях
+Restart=on-failure
+RestartSec=30
+
+# Ограничения ресурсов
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
+
