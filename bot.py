@@ -2067,38 +2067,140 @@ async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE
     persistent_keyboard = create_persistent_keyboard()
     await update.message.reply_text('Используйте кнопку "🚀 Личный кабинет" для быстрого доступа:', reply_markup=persistent_keyboard)
 
+# Функция для проверки целостности блокировки
+def check_lock_integrity(context, lock_file, expected_pid):
+    """Периодически проверяет целостность файла блокировки"""
+    try:
+        if not os.path.exists(lock_file):
+            logger.error('Файл блокировки потерян! Завершаю работу...')
+            context.application.stop()
+            return
+        
+        with open(lock_file, 'r') as f:
+            content = f.read().strip()
+        
+        if not content:
+            logger.error('Файл блокировки пуст! Завершаю работу...')
+            context.application.stop()
+            return
+        
+        parts = content.split('|')
+        if len(parts) != 2:
+            logger.error('Некорректный формат блокировки! Завершаю работу...')
+            context.application.stop()
+            return
+        
+        stored_pid, timestamp = parts[0], parts[1]
+        if not stored_pid.isdigit() or not timestamp.isdigit():
+            logger.error('Некорректные данные в блокировке! Завершаю работу...')
+            context.application.stop()
+            return
+        
+        pid = int(stored_pid)
+        lock_time = int(timestamp)
+        current_time = int(time.time())
+        
+        # Проверяем, что блокировка принадлежит нам
+        if pid != expected_pid:
+            logger.error(f'Блокировка захвачена другим процессом (PID: {pid})! Завершаю работу...')
+            context.application.stop()
+            return
+        
+        # Проверяем, не устарела ли блокировка
+        if current_time - lock_time > 300:  # 5 минут
+            logger.error(f'Блокировка устарела ({current_time - lock_time}с)! Завершаю работу...')
+            context.application.stop()
+            return
+        
+        # Обновляем временную метку
+        try:
+            with open(lock_file, 'w') as f:
+                f.write(f'{expected_pid}|{current_time}')
+        except Exception as e:
+            logger.warning(f'Не удалось обновить временную метку блокировки: {e}')
+            
+    except Exception as e:
+        logger.error(f'Ошибка проверки блокировки: {e}, завершаю работу...')
+        context.application.stop()
+
 # Запуск
 def main():
-    # Улучшенная блокировка через файл с проверкой PID
+    # Улучшенная блокировка через файл с проверкой PID и временной меткой
     lock_file = 'bot.lock'
+    current_pid = os.getpid()
     
-    # Проверяем существующую блокировку
-    if os.path.exists(lock_file):
+    logger.info(f'Запуск бота с PID: {current_pid}')
+    
+    # Функция для проверки и очистки блокировки
+    def check_and_clean_lock():
+        if not os.path.exists(lock_file):
+            return True
+            
         try:
             with open(lock_file, 'r') as f:
-                stored_pid = f.read().strip()
+                content = f.read().strip()
             
-            # Проверяем, действительно ли процесс с этим PID запущен
-            if stored_pid.isdigit():
-                pid = int(stored_pid)
-                try:
-                    # Проверяем, существует ли процесс
-                    os.kill(pid, 0)  # Сигнал 0 не убивает процесс, только проверяет существование
-                    logger.error(f'Бот уже запущен (PID: {pid})')
-                    return
-                except OSError:
-                    # Процесс не существует, удаляем мертвую блокировку
-                    logger.warning(f'Найдена мертвая блокировка (PID: {pid} не существует), удаляю...')
-                    os.remove(lock_file)
+            if not content:
+                logger.warning('Файл блокировки пуст, удаляю...')
+                os.remove(lock_file)
+                return True
+            
+            # Парсим PID и временную метку
+            parts = content.split('|')
+            if len(parts) != 2:
+                logger.warning('Неверный формат файла блокировки, удаляю...')
+                os.remove(lock_file)
+                return True
+            
+            stored_pid, timestamp = parts[0], parts[1]
+            
+            if not stored_pid.isdigit() or not timestamp.isdigit():
+                logger.warning('Некорректные данные в файле блокировки, удаляю...')
+                os.remove(lock_file)
+                return True
+            
+            pid = int(stored_pid)
+            lock_time = int(timestamp)
+            current_time = int(time.time())
+            
+            # Проверяем, не устарела ли блокировка (больше 5 минут)
+            if current_time - lock_time > 300:  # 5 минут
+                logger.warning(f'Блокировка устарела (PID: {pid}, время: {current_time - lock_time}с назад), удаляю...')
+                os.remove(lock_file)
+                return True
+            
+            # Проверяем, существует ли процесс
+            try:
+                os.kill(pid, 0)  # Сигнал 0 не убивает процесс, только проверяет существование
+                logger.error(f'Бот уже запущен (PID: {pid})')
+                return False
+            except OSError:
+                # Процесс не существует, удаляем мертвую блокировку
+                logger.warning(f'Найдена мертвая блокировка (PID: {pid} не существует), удаляю...')
+                os.remove(lock_file)
+                return True
+                
         except Exception as e:
             logger.warning(f'Ошибка чтения файла блокировки: {e}, удаляю...')
-            os.remove(lock_file)
+            try:
+                os.remove(lock_file)
+            except:
+                pass
+            return True
     
-    # Создаем новую блокировку
-    with open(lock_file, 'w') as f:
-        f.write(str(os.getpid()))
+    # Проверяем и очищаем блокировку
+    if not check_and_clean_lock():
+        logger.error('Не удалось получить блокировку, завершаю работу')
+        return
     
-    logger.info(f'Создана блокировка для PID: {os.getpid()}')
+    # Создаем новую блокировку с временной меткой
+    try:
+        with open(lock_file, 'w') as f:
+            f.write(f'{current_pid}|{int(time.time())}')
+        logger.info(f'Создана блокировка для PID: {current_pid}')
+    except Exception as e:
+        logger.error(f'Не удалось создать файл блокировки: {e}')
+        return
     
     # Регистрируем обработчики сигналов для корректного завершения
     signal.signal(signal.SIGINT, cleanup_and_exit)   # Ctrl+C
@@ -2147,6 +2249,15 @@ def main():
                 first=10      # первый запуск через 10 секунд
             )
             logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
+        
+        # Запускаем периодическую проверку блокировки
+        if job_queue:
+            job_queue.run_repeating(
+                lambda context: check_lock_integrity(context, lock_file, current_pid),
+                interval=60,  # каждую минуту
+                first=30      # первый запуск через 30 секунд
+            )
+            logger.info('Запущена периодическая проверка блокировки (каждую минуту)')
                         
         logger.info('Бот запущен...')
                         
@@ -2168,6 +2279,34 @@ def main():
         retry_delay = 3
         while True:
             try:
+                # Дополнительная проверка блокировки перед запуском
+                if not os.path.exists(lock_file):
+                    logger.error('Файл блокировки потерян, завершаю работу')
+                    break
+                
+                # Проверяем, что блокировка все еще наша
+                try:
+                    with open(lock_file, 'r') as f:
+                        content = f.read().strip()
+                    
+                    if content:
+                        parts = content.split('|')
+                        if len(parts) == 2 and parts[0].isdigit():
+                            stored_pid = int(parts[0])
+                            if stored_pid != current_pid:
+                                logger.error(f'Блокировка захвачена другим процессом (PID: {stored_pid}), завершаю работу')
+                                break
+                        else:
+                            logger.error('Некорректный формат блокировки, завершаю работу')
+                            break
+                    else:
+                        logger.error('Файл блокировки пуст, завершаю работу')
+                        break
+                        
+                except Exception as e:
+                    logger.error(f'Ошибка проверки блокировки: {e}, завершаю работу')
+                    break
+                
                 app.run_polling(drop_pending_updates=True)
                 break
             except telegram.error.Conflict as e:
@@ -2196,8 +2335,31 @@ def cleanup_and_exit(signum=None, frame=None):
     lock_file = 'bot.lock'
     if os.path.exists(lock_file):
         try:
-            os.remove(lock_file)
-            logger.info('Файл блокировки удален')
+            # Проверяем, что это наша блокировка
+            with open(lock_file, 'r') as f:
+                content = f.read().strip()
+            
+            if content:
+                parts = content.split('|')
+                if len(parts) == 2 and parts[0].isdigit():
+                    stored_pid = int(parts[0])
+                    current_pid = os.getpid()
+                    
+                    # Удаляем только если это наша блокировка
+                    if stored_pid == current_pid:
+                        os.remove(lock_file)
+                        logger.info('Файл блокировки удален')
+                    else:
+                        logger.warning(f'Блокировка принадлежит другому процессу (PID: {stored_pid}), не удаляю')
+                else:
+                    # Некорректный формат, удаляем
+                    os.remove(lock_file)
+                    logger.info('Файл блокировки с некорректным форматом удален')
+            else:
+                # Пустой файл, удаляем
+                os.remove(lock_file)
+                logger.info('Пустой файл блокировки удален')
+                
         except Exception as e:
             logger.error(f'Ошибка при удалении файла блокировки: {e}')
     
