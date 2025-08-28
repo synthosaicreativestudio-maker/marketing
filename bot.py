@@ -112,19 +112,19 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
     
     # Получаем актуальные данные из Google Sheets
     try:
-    authorized_ids = await asyncio.to_thread(get_authorized_ids)
-    if authorized_ids is None:
-        logger.warning(f'No access to sheets for user {user_id}')
-        return False
+        authorized_ids = await asyncio.to_thread(get_authorized_ids)
+        if authorized_ids is None:
+            logger.warning(f'No access to sheets for user {user_id}')
+            return False
         
         logger.info(f'Checking authorization for user {user_id}. Available IDs: {list(authorized_ids)[:5] if authorized_ids else []}')
-    is_auth = str(user_id) in authorized_ids
+        is_auth = str(user_id) in authorized_ids
             
         # Обновляем кэш
         auth_cache.set_user_authorized(user_id, is_auth)
             
-    logger.info(f'User {user_id} authorization result: {is_auth}')
-    return is_auth
+        logger.info(f'User {user_id} authorization result: {is_auth}')
+        return is_auth
 
     except Exception as e:
         logger.error(f'Error checking authorization for user {user_id}: {e}')
@@ -257,18 +257,150 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text('Неизвестное действие.')
     
 
+async def handle_text_auth(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
+    """Обрабатывает текстовые сообщения с данными авторизации. Возвращает True, если сообщение обработано."""
+    user = update.effective_user
+    
+    import re
+    
+    # Проверяем различные форматы текстовой авторизации
+    auth_patterns = [
+        # "Авторизация код 111098 телефон 89827701055"
+        r'авторизация\s+код\s+(\d+)\s+телефон\s+(\d+)',
+        # "Код 111098 телефон 89827701055"
+        r'код\s+(\d+)\s+телефон\s+(\d+)',
+        # "111098 89827701055"
+        r'^(\d+)\s+(\d{11})$',
+        # "Код: 111098, Телефон: 89827701055"
+        r'код:\s*(\d+).*?телефон:\s*(\d+)'
+    ]
+    
+    for pattern in auth_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            code = match.group(1)
+            phone = match.group(2)
+            
+            logger.info(f'🔐 Текстовая авторизация от пользователя {user.id}: код={code}, телефон={phone[:3]}***')
+            
+            # Валидация телефона
+            phone_digits = ''.join(filter(str.isdigit, phone))
+            if len(phone_digits) != 11:
+                await update.message.reply_text('❌ Неверный формат телефона! Введите 11 цифр.')
+                return True
+            
+            # Отправляем подтверждение
+            await update.message.reply_text('🔍 Проверяю данные...')
+            
+            # Проверяем доступность Google Sheets
+            if not sheets_client or not sheets_client.sheet:
+                logger.error('❌ Google Sheets client not available for text auth')
+                await update.message.reply_text('❌ База недоступна. Свяжитесь с админом.')
+                return True
+            
+            try:
+                # Выполняем проверку авторизации
+                logger.info(f'🔍 Looking up credentials for text auth user {user.id}')
+                row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone_digits)
+                logger.info(f'✅ Text auth credentials lookup result for user {user.id}: row={row}')
+                
+                if row:
+                    # ✅ Успешная авторизация
+                    try:
+                        logger.info(f'🔄 Updating text auth status for user {user.id} in row {row}')
+                        await asyncio.to_thread(sheets_client.update_user_auth_status, row, user.id)
+                        
+                        # Обновляем данные пользователя в контексте
+                        context.user_data['is_authorized'] = True
+                        context.user_data['partner_code'] = code
+                        context.user_data['phone'] = phone_digits
+                        context.user_data['auth_timestamp'] = time.time()
+                        context.user_data['platform'] = {'platform': 'text_message'}
+                        
+                        # Очищаем счетчик неудачных попыток
+                        auth_cache.clear_failed_attempts(user.id)
+                        
+                        # Обновляем глобальный кэш авторизованных пользователей
+                        await asyncio.to_thread(refresh_authorized_cache)
+                        
+                        logger.info(f'✅ Text authorization successful for user {user.id}')
+                        
+                        # Отправляем успешное сообщение
+                        await update.message.reply_text('✅ Авторизация прошла успешно!')
+                        
+                        # Предлагаем открыть личный кабинет
+                        menu_url = get_web_app_url('SPA_MENU')
+                        keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+                        await update.message.reply_text(
+                            '🎉 Добро пожаловать! Откройте личный кабинет для выбора раздела:',
+                            reply_markup=InlineKeyboardMarkup(keyboard)
+                        )
+                        
+                        # Добавляем постоянную клавиатуру
+                        persistent_keyboard = create_persistent_keyboard()
+                        await update.message.reply_text(
+                            '💡 Совет: Используйте кнопку "🚀 Личный кабинет" для быстрого доступа',
+                            reply_markup=persistent_keyboard
+                        )
+                        
+                        return True
+                        
+                    except Exception as e:
+                        logger.error(f'❌ Error updating text auth status for user {user.id}: {e}')
+                        await update.message.reply_text('❌ Ошибка при сохранении авторизации. Попробуйте позже.')
+                        return True
+                else:
+                    # ❌ Неудачная попытка авторизации
+                    is_blocked, block_duration = auth_cache.add_failed_attempt(user.id)
+                    attempts_left = auth_cache.get_attempts_left(user.id)
+                    
+                    logger.warning(f'❌ Failed text authorization attempt for user {user.id}. Attempts left: {attempts_left}')
+                    
+                    if is_blocked:
+                        hours = block_duration // 3600
+                        if hours > 24:
+                            days = hours // 24
+                            time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
+                        else:
+                            time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
+                        await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Доступ заблокирован на {time_text}.')
+                    else:
+                        await update.message.reply_text(
+                            f'❌ Неверные данные или аккаунт неактивен.\n\n'
+                            f'⚠️ Осталось попыток: {attempts_left}\n\n'
+                            f'💡 Проверьте правильность ввода кода партнера и телефона из системы КОСМОС.\n\n'
+                            f'📝 Форматы:\n'
+                            f'• <code>/auth код телефон</code>\n'
+                            f'• <code>Авторизация код 111098 телефон 89827701055</code>\n'
+                            f'• <code>111098 89827701055</code>',
+                            parse_mode='HTML'
+                        )
+                    return True
+                
+            except Exception as e:
+                logger.error(f'❌ Error during text auth lookup for user {user.id}: {e}')
+                await update.message.reply_text('❌ Ошибка проверки данных. Попробуйте позже.')
+                return True
+    
+    # Сообщение не является авторизацией
+    return False
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     message_id = update.message.message_id
-    logger.info(f'Processing message {message_id} from user {user.id}: {update.message.text[:50]}...')
+    text = update.message.text.strip()
+    logger.info(f'Processing message {message_id} from user {user.id}: {text[:50]}...')
     
     persistent_keyboard = create_persistent_keyboard()
     
+    # Проверяем, не является ли сообщение текстовой авторизацией
     if not await is_user_authorized(user.id, context):
-        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
-        return
-    
-    text = update.message.text
+        # Пытаемся обработать как текстовую авторизацию
+        if await handle_text_auth(update, context, text):
+            return
+        else:
+            await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+            return
     
     # Убираем обработку команды menu, так как теперь используется WebApp кнопка
     
@@ -440,6 +572,149 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = create_auth_button(auth_url)
     await update.message.reply_text(f'Привет, {user.first_name}! Нажми кнопку чтобы авторизоваться.', reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для мобильной авторизации: /auth код телефон"""
+    user = update.effective_user
+    text = update.message.text.strip()
+    
+    logger.info(f'🔐 Команда /auth от пользователя {user.id}: {text}')
+    
+    # Проверяем, не авторизован ли уже пользователь
+    if await is_user_authorized(user.id, context):
+        await update.message.reply_text('✅ Вы уже авторизованы в системе!')
+        return
+    
+    # Парсим команду: /auth код телефон
+    parts = text.split()
+    if len(parts) < 3:
+        await update.message.reply_text(
+            '❌ Неверный формат команды!\n\n'
+            '💡 Используйте: <code>/auth код телефон</code>\n\n'
+            '📝 Пример: <code>/auth 111098 89827701055</code>',
+            parse_mode='HTML'
+        )
+        return
+    
+    # Извлекаем код и телефон
+    code = parts[1].strip()
+    phone = ''.join(parts[2:])  # Объединяем все части после кода как телефон
+    
+    logger.info(f'🔍 Мобильная авторизация: код={code}, телефон={phone[:3]}***')
+    
+    # Валидация телефона
+    phone_digits = ''.join(filter(str.isdigit, phone))
+    if len(phone_digits) != 11:
+        await update.message.reply_text(
+            '❌ Неверный формат телефона!\n\n'
+            '💡 Введите 11 цифр без пробелов и символов\n\n'
+            '📝 Пример: <code>/auth 111098 89827701055</code>',
+            parse_mode='HTML'
+        )
+        return
+    
+    # Отправляем подтверждение
+    await update.message.reply_text('🔍 Проверяю данные...')
+    
+    # Проверяем доступность Google Sheets
+    if not sheets_client or not sheets_client.sheet:
+        logger.error('❌ Google Sheets client not available for mobile authorization')
+        await update.message.reply_text('❌ База недоступна. Свяжитесь с админом.')
+        return
+    
+    # Выполняем проверку авторизации
+    try:
+        logger.info(f'🔍 Looking up credentials in Google Sheets for mobile user {user.id}')
+        row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone_digits)
+        logger.info(f'✅ Mobile credentials lookup result for user {user.id}: row={row}')
+        
+        if row:
+            logger.info(f'🎯 Mobile user found in row {row}, checking current status...')
+            # Получаем текущий статус пользователя
+            current_status = await asyncio.to_thread(lambda: sheets_client.sheet.cell(row, 4).value)
+            current_telegram_id = await asyncio.to_thread(lambda: sheets_client.sheet.cell(row, 5).value)
+            logger.info(f'📊 Mobile current status: "{current_status}", Telegram ID: "{current_telegram_id}"')
+            
+            # Проверяем, не авторизован ли уже пользователь
+            if str(current_status).strip() == "авторизован" and str(current_telegram_id).strip():
+                logger.info(f'✅ Mobile user {user.id} already authorized in system')
+                await update.message.reply_text('✅ Вы уже авторизованы в системе!')
+                return
+        else:
+            logger.warning(f'❌ Mobile user not found with code={code}, phone={phone_digits[:3]}***')
+        
+    except Exception as e:
+        logger.error(f'❌ Error during mobile credentials lookup for user {user.id}: {e}')
+        await update.message.reply_text('❌ Ошибка проверки данных. Попробуйте позже.')
+        return
+    
+    if row:
+        # ✅ Успешная авторизация
+        try:
+            logger.info(f'🔄 Updating mobile auth status for user {user.id} in row {row}')
+            await asyncio.to_thread(sheets_client.update_user_auth_status, row, user.id)
+            
+            # Обновляем данные пользователя в контексте
+            context.user_data['is_authorized'] = True
+            context.user_data['partner_code'] = code
+            context.user_data['phone'] = phone_digits
+            context.user_data['auth_timestamp'] = time.time()
+            context.user_data['platform'] = {'platform': 'mobile_command'}
+            
+            # Очищаем счетчик неудачных попыток
+            auth_cache.clear_failed_attempts(user.id)
+            
+            # Обновляем глобальный кэш авторизованных пользователей
+            await asyncio.to_thread(refresh_authorized_cache)
+            
+            logger.info(f'✅ Mobile authorization successful for user {user.id}')
+            
+            # Отправляем успешное сообщение
+            await update.message.reply_text('✅ Авторизация прошла успешно!')
+            
+            # Предлагаем открыть личный кабинет
+            menu_url = get_web_app_url('SPA_MENU')
+            keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
+            await update.message.reply_text(
+                '🎉 Добро пожаловать! Откройте личный кабинет для выбора раздела:',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+            # Добавляем постоянную клавиатуру
+            persistent_keyboard = create_persistent_keyboard()
+            await update.message.reply_text(
+                '💡 Совет: Используйте кнопку "🚀 Личный кабинет" для быстрого доступа',
+                reply_markup=persistent_keyboard
+            )
+            
+        except Exception as e:
+            logger.error(f'❌ Error updating mobile auth status for user {user.id}: {e}')
+            await update.message.reply_text('❌ Ошибка при сохранении авторизации. Попробуйте позже.')
+            return
+    else:
+        # ❌ Неудачная попытка авторизации
+        is_blocked, block_duration = auth_cache.add_failed_attempt(user.id)
+        attempts_left = auth_cache.get_attempts_left(user.id)
+        
+        logger.warning(f'❌ Failed mobile authorization attempt for user {user.id}. Attempts left: {attempts_left}')
+        
+        if is_blocked:
+            hours = block_duration // 3600
+            if hours > 24:
+                days = hours // 24
+                time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
+            else:
+                time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
+            await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Доступ заблокирован на {time_text}.')
+        else:
+            # Предлагаем попробовать еще раз
+            await update.message.reply_text(
+                f'❌ Неверные данные или аккаунт неактивен.\n\n'
+                f'⚠️ Осталось попыток: {attempts_left}\n\n'
+                f'💡 Проверьте правильность ввода кода партнера и телефона из системы КОСМОС.\n\n'
+                f'📝 Формат: <code>/auth код телефон</code>',
+                parse_mode='HTML'
+            )
+
 def validate_payload(payload: dict) -> tuple[bool, str]:
     """Валидирует входящие данные от веб-приложения. Возвращает (валидно, сообщение об ошибке)."""
     
@@ -574,7 +849,7 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор раздела меню от пользователя."""
-        user = update.effective_user
+    user = update.effective_user
     section = payload.get('section')
     
     # Проверяем авторизацию
@@ -582,38 +857,38 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
     if not is_auth:
         logger.warning(f'User {user.id} not authorized for menu selection: {section}')
         await update.message.reply_text('❌ Вы не авторизованы. Сначала пройдите авторизацию.')
-            return
+        return
     
     logger.info(f'User {user.id} selected menu section: {section}')
     
     # Создаем тикет для раздела без подпунктов
-        try:
-            if tickets_client and tickets_client.sheet:
-                telegram_id = str(user.id)
-                code = context.user_data.get('partner_code', '')
-                phone = context.user_data.get('phone', '')
-                fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    try:
+        if tickets_client and tickets_client.sheet:
+            telegram_id = str(user.id)
+            code = context.user_data.get('partner_code', '')
+            phone = context.user_data.get('phone', '')
+            fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
         
             await asyncio.to_thread(
                 tickets_client.upsert_ticket, 
                 telegram_id, code, phone, fio, 
                 f"Запрос: {section}", 'в работе', 'user', False
             )
-        except Exception as e:
-            logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
+    except Exception as e:
+        logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
 
-        await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
+    await update.message.reply_text(f'Вы выбрали раздел: {section}. Мы получили вашу заявку и скоро свяжемся.')
 
     # Уведомляем администраторов
-        try:
-            admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
-            for aid in admin_ids:
-                try:
-                    await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
-                except Exception:
-                    pass
-        except Exception:
-            pass
+    try:
+        admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID','').split(',') if s.strip()]
+        for aid in admin_ids:
+            try:
+                await context.bot.send_message(chat_id=int(aid), text=f'Пользователь {user.id} выбрал раздел: {section}')
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 async def handle_subsection_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор подраздела от пользователя."""
@@ -706,65 +981,81 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # Логируем информацию о платформе пользователя
     platform_info = payload.get('platform', {})
-    logger.info(f'Authorization attempt from user {user.id}')
-    logger.info(f'Platform info: {platform_info}')
+    logger.info(f'🔐 Authorization attempt from user {user.id}')
+    logger.info(f'📱 Platform info: {platform_info}')
+    logger.info(f'📋 Full payload: {payload}')
     
     # Проверяем блокировку
-    is_blocked, seconds_left = auth_cache.is_user_blocked(user.id)
+    is_blocked, block_duration = auth_cache.is_user_blocked(user.id)
     if is_blocked:
-        hours = seconds_left // 3600
-        minutes = (seconds_left % 3600) // 60
+        hours = block_duration // 3600
         if hours > 24:
             days = hours // 24
             time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
-        elif hours > 0:
-            time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
         else:
-            time_text = f"{minutes} минут"
-        await update.message.reply_text(f'❌ Авторизация заблокирована на {time_text}.')
+            time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
+        await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Доступ заблокирован на {time_text}.')
         return
     
     # Получаем данные авторизации
     code = payload.get('code', '').strip()
     phone = payload.get('phone', '').strip()
     
+    logger.info(f'📝 Auth data received - code: "{code}", phone: "{phone}"')
+    
     if not code or not phone:
-        logger.warning(f'Missing auth data from user {user.id}: code={bool(code)}, phone={bool(phone)}')
+        logger.warning(f'❌ Missing auth data from user {user.id}: code={bool(code)}, phone={bool(phone)}')
         await update.message.reply_text('❌ Необходимо указать код партнера и телефон.')
         return
     
     # Валидация телефона
     phone_digits = ''.join(filter(str.isdigit, phone))
     if len(phone_digits) != 11:
-        logger.warning(f'Invalid phone format from user {user.id}: {phone_digits}')
+        logger.warning(f'❌ Invalid phone format from user {user.id}: {phone_digits}')
         await update.message.reply_text('❌ Неверный формат телефона. Введите 11 цифр.')
         return
     
-    logger.info(f'Processing authorization: user_id={user.id}, code={code}, phone={phone_digits[:3]}***')
+    logger.info(f'🔍 Processing authorization: user_id={user.id}, code={code}, phone={phone_digits[:3]}***')
     
     # Отправляем подтверждение
     await update.message.reply_text('🔍 Проверяю данные...')
     
     # Проверяем доступность Google Sheets
     if not sheets_client or not sheets_client.sheet:
-        logger.error('Google Sheets client not available for authorization')
+        logger.error('❌ Google Sheets client not available for authorization')
         await update.message.reply_text('❌ База недоступна. Свяжитесь с админом.')
         return
     
     # Выполняем проверку авторизации
     try:
-        logger.info(f'Looking up credentials in Google Sheets for user {user.id}')
+        logger.info(f'🔍 Looking up credentials in Google Sheets for user {user.id}')
         row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone_digits)
-        logger.info(f'Credentials lookup result for user {user.id}: row={row}')
+        logger.info(f'✅ Credentials lookup result for user {user.id}: row={row}')
+        
+        if row:
+            logger.info(f'🎯 User found in row {row}, checking current status...')
+            # Получаем текущий статус пользователя
+            current_status = await asyncio.to_thread(lambda: sheets_client.sheet.cell(row, 4).value)
+            current_telegram_id = await asyncio.to_thread(lambda: sheets_client.sheet.cell(row, 5).value)
+            logger.info(f'📊 Current status: "{current_status}", Telegram ID: "{current_telegram_id}"')
+            
+            # Проверяем, не авторизован ли уже пользователь
+            if str(current_status).strip() == "авторизован" and str(current_telegram_id).strip():
+                logger.info(f'✅ User {user.id} already authorized in system')
+                await update.message.reply_text('✅ Вы уже авторизованы в системе!')
+                return
+        else:
+            logger.warning(f'❌ User not found with code={code}, phone={phone_digits[:3]}***')
+        
     except Exception as e:
-        logger.error(f'Error during credentials lookup for user {user.id}: {e}')
+        logger.error(f'❌ Error during credentials lookup for user {user.id}: {e}')
         await update.message.reply_text('❌ Ошибка проверки данных. Попробуйте позже.')
         return
     
     if row:
         # ✅ Успешная авторизация
         try:
-            logger.info(f'Updating auth status for user {user.id} in row {row}')
+            logger.info(f'🔄 Updating auth status for user {user.id} in row {row}')
             await asyncio.to_thread(sheets_client.update_user_auth_status, row, user.id)
             
             # Обновляем данные пользователя в контексте
@@ -801,7 +1092,7 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             
         except Exception as e:
-            logger.error(f'Error updating auth status for user {user.id}: {e}')
+            logger.error(f'❌ Error updating auth status for user {user.id}: {e}')
             await update.message.reply_text('❌ Ошибка при сохранении авторизации. Попробуйте позже.')
             return
     else:
@@ -809,7 +1100,7 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
         is_blocked, block_duration = auth_cache.add_failed_attempt(user.id)
         attempts_left = auth_cache.get_attempts_left(user.id)
         
-        logger.warning(f'Failed authorization attempt for user {user.id}. Attempts left: {attempts_left}')
+        logger.warning(f'❌ Failed authorization attempt for user {user.id}. Attempts left: {attempts_left}')
         
         if is_blocked:
             hours = block_duration // 3600
@@ -819,29 +1110,6 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
             await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Доступ заблокирован на {time_text}.')
-        else:
-            # Предлагаем попробовать еще раз
-            auth_url = get_web_app_url('MAIN')
-            keyboard = [[InlineKeyboardButton('🔄 Попробовать еще раз', web_app=WebAppInfo(url=auth_url))]]
-        await update.message.reply_text(
-                f'❌ Неверные данные или аккаунт неактивен.\n\n'
-                f'⚠️ Осталось попыток: {attempts_left}\n\n'
-                f'💡 Проверьте правильность ввода кода партнера и телефона из системы КОСМОС.',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-
-        # Неудачная попытка авторизации
-        is_blocked, block_duration = auth_cache.add_failed_attempt(user.id)
-        attempts_left = auth_cache.get_attempts_left(user.id)
-        
-        if is_blocked:
-            hours = block_duration // 3600
-            if hours > 24:
-                days = hours // 24
-                time_text = f"{days} дн{'я' if days < 5 else 'ей'}"
-            else:
-                time_text = f"{hours} час{'а' if hours < 5 else 'ов'}"
-            await update.message.reply_text(f'❌ Превышен лимит попыток авторизации. Авторизация заблокирована на {time_text}.')
         else:
             # Предлагаем попробовать еще раз
             auth_url = get_web_app_url('MAIN')
@@ -929,8 +1197,8 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=f'✉️ Ответ специалиста (код {code}):\n{reply_text}'
             )
             logger.info(f'Ответ специалиста отправлен пользователю {telegram_id}')
-            except Exception as e:
-                logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
+        except Exception as e:
+            logger.error(f'Не удалось отправить сообщение пользователю {telegram_id}: {e}')
             await update.message.reply_text('Ответ записан, но не удалось отправить пользователю.')
             return
         
@@ -1463,7 +1731,7 @@ async def handle_contact_specialist(update: Update, context: ContextTypes.DEFAUL
     try:
         if tickets_client and tickets_client.sheet:
             telegram_id = str(user.id)
-                    code = context.user_data.get('partner_code', '')
+            code = context.user_data.get('partner_code', '')
             phone = context.user_data.get('phone', '')
             fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
             
@@ -1476,7 +1744,7 @@ async def handle_contact_specialist(update: Update, context: ContextTypes.DEFAUL
             )
             
             logger.info(f'Created contact specialist ticket for user {user.id}')
-            except Exception as e:
+    except Exception as e:
         logger.error(f'Не удалось создать тикет для связи со специалистом: {e}')
     
     await update.message.reply_text('✅ Ваша заявка на связь со специалистом принята!\n\nМы свяжемся с вами в ближайшее время.')
@@ -1490,9 +1758,9 @@ async def handle_contact_specialist(update: Update, context: ContextTypes.DEFAUL
                     chat_id=int(aid), 
                     text=f'🆕 Запрос на связь со специалистом от {user.first_name or user.id}\n\n👤 ID: {user.id}'
                 )
-                except Exception:
+            except Exception:
                 pass
-        except Exception:
+    except Exception:
         pass
 
 async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1529,7 +1797,7 @@ def main():
                     # Проверяем, существует ли процесс
                     os.kill(pid, 0)  # Сигнал 0 не убивает процесс, только проверяет существование
                     logger.error(f'Бот уже запущен (PID: {pid})')
-        return
+                    return
                 except OSError:
                     # Процесс не существует, удаляем мертвую блокировку
                     logger.warning(f'Найдена мертвая блокировка (PID: {pid} не существует), удаляю...')
@@ -1559,6 +1827,7 @@ def main():
         app = Application.builder().token(token).build()
 
         app.add_handler(CommandHandler('start', start))
+        app.add_handler(CommandHandler('auth', auth_command))
         app.add_handler(CommandHandler('new_chat', new_chat))
         app.add_handler(CommandHandler('reply', reply_command))
         app.add_handler(CommandHandler('setstatus', setstatus_command))

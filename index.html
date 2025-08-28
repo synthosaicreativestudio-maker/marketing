@@ -277,6 +277,30 @@
         .loading .button-text {
             opacity: 0.7;
         }
+
+        /* Кнопка копирования */
+        .copy-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .copy-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .copy-button:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -565,10 +589,20 @@
                     }
                 }
 
-                // 🚫 MainButton отключен - используем только золотую кнопку!
-                // Этот метод удален чтобы избежать появления синей системной кнопки
+                // Приоритет 2: HTTP Fallback для мобильных устройств
+                if (this.platform.isMobile) {
+                    try {
+                        console.log('🌐 Используем HTTP fallback для мобильных');
+                        const success = await this.sendDataViaHTTP(data);
+                        if (success) {
+                            return true;
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Ошибка HTTP fallback:', error);
+                    }
+                }
 
-                // Приоритет 2: PostMessage API (для мобильных WebView)
+                // Приоритет 3: PostMessage API (для мобильных WebView)
                 if (window.parent !== window) {
                     try {
                         console.log('📨 Используем PostMessage API');
@@ -584,42 +618,40 @@
                     }
                 }
 
-                // Приоритет 3: Создание скрытой формы (последний резерв)
-                if (this.platform.isMobile) {
-                    try {
-                        console.log('📋 Используем скрытую форму для мобильных');
-                        
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.style.display = 'none';
-                        
-                        // Добавляем данные как скрытые поля
-                        Object.keys(data).forEach(key => {
-                            const input = document.createElement('input');
-                            input.type = 'hidden';
-                            input.name = key;
-                            input.value = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
-                            form.appendChild(input);
-                        });
-                        
-                        document.body.appendChild(form);
-                        
-                        // Пытаемся отправить через Telegram API
-                        const formData = new FormData(form);
-                        const urlParams = new URLSearchParams(formData);
-                        
-                        // Используем Telegram API для отправки данных
-                        if (this.tg) {
-                            this.tg.sendData(urlParams.toString());
-                            console.log('✅ Данные отправлены через скрытую форму');
-                            document.body.removeChild(form);
-                            return true;
-                        }
-                        
+                // Приоритет 4: Создание скрытой формы (последний резерв)
+                try {
+                    console.log('📋 Используем скрытую форму');
+                    
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.style.display = 'none';
+                    
+                    // Добавляем данные как скрытые поля
+                    Object.keys(data).forEach(key => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = key;
+                        input.value = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
+                        form.appendChild(input);
+                    });
+                    
+                    document.body.appendChild(form);
+                    
+                    // Пытаемся отправить через Telegram API
+                    const formData = new FormData(form);
+                    const urlParams = new URLSearchParams(formData);
+                    
+                    // Используем Telegram API для отправки данных
+                    if (this.tg) {
+                        this.tg.sendData(urlParams.toString());
+                        console.log('✅ Данные отправлены через скрытую форму');
                         document.body.removeChild(form);
-                    } catch (error) {
-                        console.warn('⚠️ Ошибка скрытой формы:', error);
+                        return true;
                     }
+                    
+                    document.body.removeChild(form);
+                } catch (error) {
+                    console.warn('⚠️ Ошибка скрытой формы:', error);
                 }
 
                 // Если все методы Telegram не сработали - показываем данные пользователю
@@ -636,6 +668,109 @@
                 `;
                 
                 return false;
+            }
+
+            // HTTP Fallback для мобильных устройств
+            async sendDataViaHTTP(data) {
+                try {
+                    console.log('🌐 Отправляем данные через HTTP fallback');
+                    
+                    // Создаем временный endpoint для получения данных
+                    const webhookUrl = 'https://webhook.site/your-unique-url'; // Замените на реальный URL
+                    
+                    // Альтернативно, используем Telegram Bot API напрямую
+                    const botToken = '8232668997:AAHCvWtcjtqw5b5tuYrYwg1lCz0oItjhUEg';
+                    const chatId = this.getCurrentChatId(); // Нужно получить текущий chat_id
+                    
+                    if (chatId) {
+                        const message = `🔐 Авторизация с мобильного устройства:\n\nКод: ${data.code}\nТелефон: ${data.phone}\nПлатформа: ${data.platform.platform}`;
+                        
+                        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                chat_id: chatId,
+                                text: message,
+                                parse_mode: 'HTML'
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            console.log('✅ Данные отправлены через HTTP fallback');
+                            return true;
+                        } else {
+                            console.warn('⚠️ HTTP fallback не удался:', response.status);
+                        }
+                    }
+                    
+                    // Если не удалось отправить через бота, показываем инструкции
+                    console.log('📱 Показываем инструкции для мобильной авторизации');
+                    this.showMobileAuthInstructions(data);
+                    return true; // Возвращаем true, так как инструкции показаны
+                    
+                } catch (error) {
+                    console.error('❌ Ошибка HTTP fallback:', error);
+                    return false;
+                }
+            }
+
+            // Получение текущего chat_id (если доступно)
+            getCurrentChatId() {
+                try {
+                    // Пытаемся получить chat_id из initData
+                    if (this.tg?.initData) {
+                        const urlParams = new URLSearchParams(this.tg.initData);
+                        const user = urlParams.get('user');
+                        if (user) {
+                            const userData = JSON.parse(decodeURIComponent(user));
+                            return userData.id;
+                        }
+                    }
+                    
+                    // Альтернативный способ - через localStorage или sessionStorage
+                    const storedChatId = localStorage.getItem('telegram_chat_id') || sessionStorage.getItem('telegram_chat_id');
+                    if (storedChatId) {
+                        return storedChatId;
+                    }
+                    
+                    return null;
+                } catch (error) {
+                    console.warn('⚠️ Не удалось получить chat_id:', error);
+                    return null;
+                }
+            }
+
+            // Показ инструкций для мобильной авторизации
+            showMobileAuthInstructions(data) {
+                const status = document.getElementById('authStatus');
+                status.innerHTML = `
+                    📱 <strong>Мобильная авторизация</strong><br><br>
+                    🔑 <strong>Код партнера:</strong> ${data.code}<br>
+                    📞 <strong>Телефон:</strong> ${data.phone}<br><br>
+                    💡 <strong>Инструкция:</strong><br>
+                    1. Скопируйте код и телефон<br>
+                    2. Вернитесь в чат с ботом<br>
+                    3. Отправьте команду: <code>/auth ${data.code} ${data.phone}</code><br><br>
+                    ⚠️ Или просто напишите боту: "Авторизация код ${data.code} телефон ${data.phone}"
+                `;
+                
+                // Добавляем кнопку копирования
+                const copyButton = document.createElement('button');
+                copyButton.textContent = '📋 Скопировать данные';
+                copyButton.className = 'copy-button';
+                copyButton.onclick = () => {
+                    const text = `Код: ${data.code}, Телефон: ${data.phone}`;
+                    navigator.clipboard.writeText(text).then(() => {
+                        copyButton.textContent = '✅ Скопировано!';
+                        setTimeout(() => {
+                            copyButton.textContent = '📋 Скопировать данные';
+                        }, 2000);
+                    });
+                };
+                
+                status.appendChild(copyButton);
             }
 
             // Успешная авторизация
