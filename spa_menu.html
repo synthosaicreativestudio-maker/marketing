@@ -232,7 +232,7 @@
         // Проверяем доступность Telegram WebApp API
         if (tg) {
             try {
-                tg.ready();
+        tg.ready();
                 console.log('Telegram WebApp успешно инициализирован');
             } catch (e) {
                 console.error('Ошибка инициализации Telegram WebApp:', e);
@@ -446,9 +446,9 @@
             
             grid.innerHTML = '';
             subsections.forEach(subsection => {
-                const btn = document.createElement('button');
-                btn.className = 'menu-btn';
-                btn.textContent = subsection;
+                    const btn = document.createElement('button');
+                    btn.className = 'menu-btn';
+                    btn.textContent = subsection;
                 
                 // Улучшенная обработка кликов для мобильных
                 const handleClick = () => {
@@ -506,9 +506,9 @@
                     showSuccess('Запрос отправлен!');
                     
                     // Закрываем WebApp через некоторое время
-                    setTimeout(() => {
+                            setTimeout(() => {
                         if (tg?.close) {
-                            tg.close();
+                                tg.close();
                         }
                     }, 1500);
                     

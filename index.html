@@ -306,7 +306,7 @@
                         autocomplete="off"
                         inputmode="text"
                     >
-                </div>
+            </div>
 
                 <div class="input-group">
                     <label for="partnerPhone" class="input-label">Телефон партнёра (из КОСМОС)</label>
@@ -319,7 +319,7 @@
                         autocomplete="tel"
                         inputmode="tel"
                     >
-                </div>
+            </div>
 
                 <button type="submit" id="authButton" class="auth-button">
                     <span class="loading-spinner"></span>
@@ -367,7 +367,7 @@
                 if (isTelegram) {
                     if (isMobile) {
                         telegramClientType = isIOS ? 'telegram_ios' : (isAndroid ? 'telegram_android' : 'telegram_mobile');
-                    } else {
+            } else {
                         telegramClientType = 'telegram_desktop';
                     }
                 }
@@ -476,7 +476,7 @@
                 const value = input.value.replace(/\D/g, '');
                 if (!value) {
                     input.value = '';
-                    return;
+                return;
                 }
                 
                 let formatted = '8';
@@ -534,7 +534,7 @@
                         throw new Error('Не удалось отправить данные');
                     }
 
-                } catch (error) {
+            } catch (error) {
                     console.error('❌ Ошибка авторизации:', error);
                     status.textContent = '❌ Ошибка отправки. Попробуйте еще раз.';
                     this.handleError(error);
