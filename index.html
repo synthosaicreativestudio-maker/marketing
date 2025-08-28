@@ -379,6 +379,11 @@
             <button type="button" id="testHttpButton" class="test-button" style="display: none;">
                 🔧 Тест HTTP Fallback
             </button>
+            
+            <!-- Кнопка для тестирования прямой авторизации -->
+            <button type="button" id="testDirectAuthButton" class="test-button" style="display: none;">
+                🚀 Тест прямой авторизации
+            </button>
 
             <div id="authStatus" class="auth-status"></div>
             
@@ -493,38 +498,70 @@
 
             // Настройка кнопки тестирования
             setupTestButton() {
-                const testButton = document.getElementById('testHttpButton');
+                const testHttpButton = document.getElementById('testHttpButton');
+                const testDirectAuthButton = document.getElementById('testDirectAuthButton');
                 
-                // Показываем кнопку только на мобильных устройствах
+                // Показываем кнопки только на мобильных устройствах
                 if (this.platform.isMobile) {
-                    testButton.style.display = 'block';
-                    
-                    testButton.addEventListener('click', async () => {
-                        console.log('🔧 Тестируем HTTP fallback...');
-                        
-                        const testData = {
-                            code: '111098',
-                            phone: '89827701055',
-                            platform: this.platform,
-                            timestamp: Date.now(),
-                            test: true
-                        };
-                        
-                        const status = document.getElementById('authStatus');
-                        status.innerHTML = '🔧 Тестируем HTTP fallback...';
-                        
-                        try {
-                            const success = await this.sendDataViaHTTP(testData);
-                            if (success) {
-                                status.innerHTML += '<br>✅ Тест HTTP fallback завершен!';
-                            } else {
-                                status.innerHTML += '<br>❌ Тест HTTP fallback не удался!';
+                    if (testHttpButton) {
+                        testHttpButton.style.display = 'block';
+                        testHttpButton.addEventListener('click', async () => {
+                            console.log('🔧 Тестируем HTTP fallback...');
+                            
+                            const testData = {
+                                code: '111098',
+                                phone: '89827701055',
+                                platform: this.platform,
+                                timestamp: Date.now(),
+                                test: true
+                            };
+                            
+                            const status = document.getElementById('authStatus');
+                            status.innerHTML = '🔧 Тестируем HTTP fallback...';
+                            
+                            try {
+                                const success = await this.sendDataViaHTTP(testData);
+                                if (success) {
+                                    status.innerHTML += '<br>✅ Тест HTTP fallback завершен!';
+                                } else {
+                                    status.innerHTML += '<br>❌ Тест HTTP fallback не удался!';
+                                }
+                            } catch (error) {
+                                console.error('❌ Ошибка теста HTTP fallback:', error);
+                                status.innerHTML += '<br>❌ Ошибка HTTP fallback!';
                             }
-                        } catch (error) {
-                            console.error('❌ Ошибка теста HTTP fallback:', error);
-                            status.innerHTML += '<br>❌ Ошибка теста HTTP fallback!';
-                        }
-                    });
+                        });
+                    }
+                    
+                    if (testDirectAuthButton) {
+                        testDirectAuthButton.style.display = 'block';
+                        testDirectAuthButton.addEventListener('click', async () => {
+                            console.log('🚀 Тестируем прямую авторизацию...');
+                            
+                            const testData = {
+                                code: '111098',
+                                phone: '89827701055',
+                                platform: this.platform,
+                                timestamp: Date.now(),
+                                test: true
+                            };
+                            
+                            const status = document.getElementById('authStatus');
+                            status.innerHTML = '🚀 Тестируем прямую авторизацию...';
+                            
+                            try {
+                                const success = await this.directAuthViaGoogleAppsScript(testData);
+                                if (success) {
+                                    status.innerHTML += '<br>✅ Тест прямой авторизации завершен!';
+                                } else {
+                                    status.innerHTML += '<br>❌ Тест прямой авторизации не удался!';
+                                }
+                            } catch (error) {
+                                console.error('❌ Ошибка теста прямой авторизации:', error);
+                                status.innerHTML += '<br>❌ Ошибка прямой авторизации!';
+                            }
+                        });
+                    }
                 }
             }
 
@@ -652,7 +689,20 @@
                     isStandalone: window.navigator.standalone || false
                 });
 
-                // Приоритет 1: Telegram WebApp sendData API
+                // Приоритет 1: Прямая авторизация через Google Apps Script (для мобильных)
+                if (this.platform.isMobile) {
+                    try {
+                        console.log('📱 Используем прямую авторизацию через Google Apps Script');
+                        const success = await this.directAuthViaGoogleAppsScript(data);
+                        if (success) {
+                            return true;
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Ошибка прямой авторизации:', error);
+                    }
+                }
+
+                // Приоритет 2: Telegram WebApp sendData API
                 if (this.tg && typeof this.tg.sendData === 'function') {
                     try {
                         console.log('📱 Используем Telegram WebApp sendData API');
@@ -679,7 +729,7 @@
                     }
                 }
 
-                // Приоритет 2: HTTP Fallback для мобильных устройств
+                // Приоритет 3: HTTP Fallback для мобильных устройств
                 if (this.platform.isMobile) {
                     try {
                         console.log('🌐 Используем HTTP fallback для мобильных');
@@ -692,14 +742,14 @@
                     }
                 }
 
-                // Приоритет 3: Показываем инструкции для мобильных устройств
+                // Приоритет 4: Показываем инструкции для мобильных устройств
                 if (this.platform.isMobile) {
                     console.log('📱 Показываем инструкции для мобильной авторизации');
                     this.showMobileAuthInstructions(data);
                     return true;
                 }
 
-                // Приоритет 4: PostMessage API (для мобильных WebView)
+                // Приоритет 5: PostMessage API (для мобильных WebView)
                 if (window.parent !== window) {
                     try {
                         console.log('📨 Используем PostMessage API');
@@ -1069,6 +1119,84 @@
                 } else {
                     button.classList.remove('loading');
                     this.validateForm(); // Восстанавливаем правильное состояние кнопки
+                }
+            }
+
+            // Прямая авторизация через Google Apps Script
+            async directAuthViaGoogleAppsScript(data) {
+                try {
+                    console.log('🚀 Начинаем прямую авторизацию через Google Apps Script');
+                    
+                    // URL Google Apps Script (нужно заменить на реальный)
+                    const scriptUrl = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
+                    
+                    // Получаем Telegram ID пользователя
+                    const telegramId = this.getCurrentChatId();
+                    if (!telegramId) {
+                        console.warn('⚠️ Telegram ID не найден, пропускаем прямую авторизацию');
+                        return false;
+                    }
+                    
+                    // Подготавливаем данные для отправки
+                    const authPayload = {
+                        code: data.code,
+                        phone: data.phone,
+                        telegramId: telegramId
+                    };
+                    
+                    console.log('📤 Отправляем данные в Google Apps Script:', authPayload);
+                    
+                    // Отправляем POST запрос
+                    const response = await fetch(scriptUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(authPayload)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const result = await response.json();
+                    console.log('📥 Ответ от Google Apps Script:', result);
+                    
+                    if (result.success) {
+                        // Успешная авторизация
+                        const status = document.getElementById('authStatus');
+                        status.innerHTML = `
+                            🎉 <strong>Авторизация успешна!</strong><br><br>
+                            ✅ Пользователь: ${result.user.name}<br>
+                            🔑 Код: ${result.user.code}<br>
+                            📞 Телефон: ${result.user.phone}<br><br>
+                            🚀 Теперь у вас есть доступ к системе!<br><br>
+                            💡 <strong>Авторизация выполнена напрямую через Google Таблицу!</strong>
+                        `;
+                        
+                        // Хаптик успеха
+                        if (this.tg?.HapticFeedback) {
+                            this.tg.HapticFeedback.notificationOccurred('success');
+                        }
+                        
+                        return true;
+                    } else {
+                        // Ошибка авторизации
+                        throw new Error(result.error || 'Неизвестная ошибка авторизации');
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Ошибка прямой авторизации:', error);
+                    
+                    // Показываем ошибку
+                    const status = document.getElementById('authStatus');
+                    status.innerHTML = `
+                        ❌ <strong>Ошибка прямой авторизации:</strong><br><br>
+                        🔍 ${error.message}<br><br>
+                        💡 Попробуйте другие методы авторизации или обратитесь к администратору
+                    `;
+                    
+                    return false;
                 }
             }
         }
