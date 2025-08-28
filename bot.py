@@ -114,7 +114,8 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
         if authorized_ids is None:
             logger.warning(f'No access to sheets for user {user_id}')
             return False
-            
+        
+        logger.info(f'Checking authorization for user {user_id}. Available IDs: {list(authorized_ids)[:5] if authorized_ids else []}')
         is_auth = str(user_id) in authorized_ids
             
         # Обновляем кэш
@@ -133,13 +134,16 @@ def get_authorized_ids():
     """Возвращает множество строк с авторизованными Telegram ID или None, если Sheets недоступен."""
     cached_ids = auth_cache.get_authorized_ids()
     if cached_ids is not None:
+        logger.info(f'Using cached authorized IDs: {list(cached_ids)[:5] if cached_ids else []}')
         return cached_ids
     
     # Обновляем кэш
     try:
         if not sheets_client or not sheets_client.sheet:
+            logger.warning('Sheets client not available')
             return None
         ids = sheets_client.get_all_authorized_user_ids()
+        logger.info(f'Retrieved {len(ids)} authorized IDs from sheets: {list(ids)[:5] if ids else []}')
         auth_cache.set_authorized_ids(set(str(i) for i in ids if i))
         return auth_cache.get_authorized_ids()
     except Exception as e:
@@ -564,9 +568,14 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
     user = update.effective_user
     section = payload.get('section')
     
-    if not await is_user_authorized(user.id, context):
-        await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+    # Проверяем авторизацию
+    is_auth = await is_user_authorized(user.id, context)
+    if not is_auth:
+        logger.warning(f'User {user.id} not authorized for menu selection: {section}')
+        await update.message.reply_text('❌ Вы не авторизованы. Сначала пройдите авторизацию.')
         return
+    
+    logger.info(f'User {user.id} selected menu section: {section}')
     
     # Создаем тикет для раздела без подпунктов
     try:
@@ -603,8 +612,14 @@ async def handle_subsection_selection(update: Update, context: ContextTypes.DEFA
     section = payload.get('section')
     subsection = payload.get('subsection')
     
-    # Убираем проверку авторизации для миниаппов
-    # Пользователь уже авторизован в основном меню
+    # Проверяем авторизацию
+    is_auth = await is_user_authorized(user.id, context)
+    if not is_auth:
+        logger.warning(f'User {user.id} not authorized for subsection selection: {section} → {subsection}')
+        await update.message.reply_text('❌ Вы не авторизованы. Сначала пройдите авторизацию.')
+        return
+    
+    logger.info(f'User {user.id} selected subsection: {section} → {subsection}')
     
     # Создаем тикет для выбранного подраздела
     try:
