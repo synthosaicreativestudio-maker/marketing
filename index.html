@@ -788,7 +788,8 @@
                             ✅ <strong>Данные отправлены!</strong><br><br>
                             📱 Ваши данные авторизации отправлены в чат с ботом.<br>
                             🔍 Проверьте чат - там должно появиться сообщение о проверке данных.<br><br>
-                            💡 Если авторизация прошла успешно, вы получите уведомление.
+                            💡 Если авторизация прошла успешно, вы получите уведомление.<br><br>
+                            🚀 <strong>Рекомендуем использовать команду /mobile_auth для удобной авторизации!</strong>
                         `;
                         
                         return true;
@@ -899,11 +900,16 @@
                     💡 <strong>Инструкция:</strong><br>
                     1. Скопируйте код и телефон<br>
                     2. Вернитесь в чат с ботом<br>
-                    3. Отправьте команду: <code>/auth ${data.code} ${data.phone}</code><br><br>
-                    ⚠️ Или просто напишите боту: "Авторизация код ${data.code} телефон ${data.phone}"
+                    3. Отправьте команду: <code>/mobile_auth</code><br>
+                    4. Следуйте пошаговым инструкциям бота<br><br>
+                    ⚠️ Или используйте команду: <code>/auth ${data.code} ${data.phone}</code>
                 `;
                 
-                // Добавляем кнопку копирования
+                // Добавляем кнопки
+                const buttonContainer = document.createElement('div');
+                buttonContainer.style.marginTop = '16px';
+                
+                // Кнопка копирования
                 const copyButton = document.createElement('button');
                 copyButton.textContent = '📋 Скопировать данные';
                 copyButton.className = 'copy-button';
@@ -917,7 +923,31 @@
                     });
                 };
                 
-                status.appendChild(copyButton);
+                // Кнопка открытия чата
+                const chatButton = document.createElement('button');
+                chatButton.textContent = '💬 Открыть чат с ботом';
+                chatButton.className = 'copy-button';
+                chatButton.style.marginLeft = '8px';
+                chatButton.style.background = 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
+                chatButton.onclick = () => {
+                    // Пытаемся открыть чат с ботом
+                    if (this.tg?.openTelegramLink) {
+                        this.tg.openTelegramLink(`https://t.me/marketingvera_bot`);
+                    } else {
+                        // Fallback - показываем ссылку
+                        const link = `https://t.me/marketingvera_bot`;
+                        navigator.clipboard.writeText(link).then(() => {
+                            chatButton.textContent = '✅ Ссылка скопирована!';
+                            setTimeout(() => {
+                                chatButton.textContent = '💬 Открыть чат с ботом';
+                            }, 2000);
+                        });
+                    }
+                };
+                
+                buttonContainer.appendChild(copyButton);
+                buttonContainer.appendChild(chatButton);
+                status.appendChild(buttonContainer);
             }
 
             // Успешная авторизация
