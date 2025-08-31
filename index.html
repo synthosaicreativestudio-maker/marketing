@@ -142,6 +142,18 @@
             if (tg.setHeaderColor) tg.setHeaderColor('#0b1226');
             if (tg.setBackgroundColor) tg.setBackgroundColor('#071028');
             
+            // ✅ Проверяем MainButton
+            if (tg.MainButton) {
+                console.log('MainButton доступен');
+                // Инициализируем MainButton
+                tg.MainButton.setText('Авторизоваться');
+                tg.MainButton.color = '#d4af37';
+                tg.MainButton.textColor = '#000000';
+                console.log('MainButton инициализирован');
+            } else {
+                console.error('MainButton НЕ доступен!');
+            }
+            
         } catch (error) {
             console.error('Ошибка инициализации Telegram WebApp:', error);
         }
@@ -172,11 +184,25 @@
 
         function updateMainButtonState(){
             const phoneDigits = phoneInput.value.replace(/\D/g,'');
+            console.log('updateMainButtonState called:', {
+                code: codeInput.value.trim(),
+                phoneLength: phoneDigits.length,
+                mainButtonAvailable: !!tg.MainButton
+            });
+            
             if(codeInput.value.trim() !== '' && phoneDigits.length === 11){
-                tg.MainButton.setText('Подтвердить данные');
-                tg.MainButton.show();
+                if (tg.MainButton) {
+                    tg.MainButton.setText('Авторизоваться');
+                    tg.MainButton.show();
+                    console.log('MainButton показан');
+                } else {
+                    console.error('tg.MainButton недоступен!');
+                }
             } else {
-                tg.MainButton.hide();
+                if (tg.MainButton) {
+                    tg.MainButton.hide();
+                    console.log('MainButton скрыт');
+                }
             }
         }
 
