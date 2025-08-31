@@ -125,7 +125,26 @@
 
     <script>
         let tg = window.Telegram.WebApp;
-        tg.ready();
+        
+        // ✅ Проверяем доступность Telegram WebApp API
+        if (!tg) {
+            console.error('Telegram WebApp API не доступен!');
+            alert('Ошибка: Telegram WebApp API не доступен');
+            return;
+        }
+        
+        // ✅ Инициализируем WebApp
+        try {
+            tg.ready();
+            console.log('Telegram WebApp готов к работе');
+            
+            // Настраиваем цвета для лучшего отображения
+            if (tg.setHeaderColor) tg.setHeaderColor('#0b1226');
+            if (tg.setBackgroundColor) tg.setBackgroundColor('#071028');
+            
+        } catch (error) {
+            console.error('Ошибка инициализации Telegram WebApp:', error);
+        }
 
         const codeInput = document.getElementById('code_input');
         const phoneInput = document.getElementById('phone_input');
@@ -183,10 +202,17 @@
                     tg.MainButton.enable();
                 }catch(e){}
                 clearTimeout(emergencyTimeout);
-                // НЕ показываем всплывающее окно - бот ответит в чате
-                // try{ tg.showAlert('Данные отправлены. Проверьте чат с ботом.'); }catch(e){}
-                // Закрываем WebApp сразу после отправки данных
-                try{ tg.close(); }catch(e){}
+                
+                // ✅ КРИТИЧНО: Закрываем WebApp после отправки данных
+                // Без этого на мобильных устройствах данные могут не уйти
+                setTimeout(() => {
+                    try {
+                        tg.close();
+                        console.log('WebApp closed successfully after main button click');
+                    } catch (closeError) {
+                        console.error('Error closing WebApp:', closeError);
+                    }
+                }, 500); // Небольшая задержка для гарантии отправки
             }catch (error) {
                 console.error('Error in mainButtonClicked handler:', error);
                 try{ tg.MainButton.showProgress(false); tg.MainButton.enable(); }catch(e){}
@@ -209,18 +235,37 @@
             
             console.log('Sending to bot:', {code, phone: phone.substring(0,3) + '***'});
             
-            // Проверяем доступность tg.sendData
+            // ✅ Проверяем доступность tg.sendData
             if (typeof tg.sendData !== 'function') {
                 console.error('tg.sendData is not available!');
                 tg.showAlert('Ошибка: функция отправки недоступна');
                 return;
             }
             
+            // ✅ Дополнительная проверка для мобильных устройств
+            console.log('Platform info:', {
+                platform: navigator.platform,
+                userAgent: navigator.userAgent,
+                isMobile: /Mobile|Android|iPhone|iPad/.test(navigator.userAgent)
+            });
+            
             try {
                 const data = JSON.stringify({code, phone});
                 console.log('Data to send:', data);
                 tg.sendData(data);
                 console.log('Data sent successfully');
+                
+                // ✅ КРИТИЧНО: Закрываем WebApp после отправки данных
+                // Без этого на мобильных устройствах данные могут не уйти
+                setTimeout(() => {
+                    try {
+                        tg.close();
+                        console.log('WebApp closed successfully');
+                    } catch (closeError) {
+                        console.error('Error closing WebApp:', closeError);
+                    }
+                }, 500); // Небольшая задержка для гарантии отправки
+                
             } catch (error) {
                 console.error('Error sending data:', error);
                 tg.showAlert('Ошибка при отправке: ' + error.message);
