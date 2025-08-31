@@ -142,17 +142,30 @@
             if (tg.setHeaderColor) tg.setHeaderColor('#0b1226');
             if (tg.setBackgroundColor) tg.setBackgroundColor('#071028');
             
-            // ✅ Проверяем MainButton
-            if (tg.MainButton) {
-                console.log('MainButton доступен');
-                // Инициализируем MainButton
-                tg.MainButton.setText('Авторизоваться');
-                tg.MainButton.color = '#d4af37';
-                tg.MainButton.textColor = '#000000';
-                console.log('MainButton инициализирован');
-            } else {
-                console.error('MainButton НЕ доступен!');
-            }
+                    // ✅ Проверяем MainButton
+        if (tg.MainButton) {
+            console.log('MainButton доступен');
+            // Инициализируем MainButton
+            tg.MainButton.setText('Авторизоваться');
+            tg.MainButton.color = '#d4af37';
+            tg.MainButton.textColor = '#000000';
+            
+            // Принудительно показываем кнопку для тестирования
+            setTimeout(() => {
+                try {
+                    tg.MainButton.show();
+                    console.log('MainButton принудительно показан');
+                } catch (e) {
+                    console.error('Ошибка показа MainButton:', e);
+                }
+            }, 1000);
+            
+            console.log('MainButton инициализирован');
+        } else {
+            console.error('MainButton НЕ доступен!');
+            // Создаем обычную HTML кнопку как запасной вариант
+            createFallbackButton();
+        }
             
         } catch (error) {
             console.error('Ошибка инициализации Telegram WebApp:', error);
@@ -160,8 +173,40 @@
 
         const codeInput = document.getElementById('code_input');
         const phoneInput = document.getElementById('phone_input');
-    const menuScreen = document.getElementById('menu_screen');
-    const menuGrid = document.getElementById('menu_grid');
+        const menuScreen = document.getElementById('menu_screen');
+        const menuGrid = document.getElementById('menu_grid');
+        
+        // Создаем запасную HTML кнопку если MainButton недоступен
+        function createFallbackButton() {
+            console.log('Создаю запасную HTML кнопку');
+            const fallbackButton = document.createElement('button');
+            fallbackButton.id = 'fallback_auth_button';
+            fallbackButton.textContent = 'Авторизоваться';
+            fallbackButton.className = 'fallback-button';
+            fallbackButton.style.cssText = `
+                width: 100%;
+                padding: 15px;
+                background: linear-gradient(90deg, #d4af37, #f6e7a0);
+                color: #000;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: 600;
+                margin-top: 20px;
+                cursor: pointer;
+            `;
+            
+            fallbackButton.addEventListener('click', function() {
+                console.log('Fallback button clicked');
+                sendData();
+            });
+            
+            // Вставляем кнопку после полей ввода
+            const divider = document.querySelector('.divider');
+            divider.parentNode.insertBefore(fallbackButton, divider.nextSibling);
+            
+            console.log('Запасная кнопка создана');
+        }
 
         // Phone mask (keeps behaviour)
         function formatPhone(raw){

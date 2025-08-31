@@ -1378,7 +1378,7 @@ def main():
         app.add_handler(CommandHandler('table_info', table_info_command))
         app.add_handler(CommandHandler('update_headers', update_headers_command))
         app.add_handler(CallbackQueryHandler(handle_callback_query))
-        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
+        app.add_handler(MessageHandler(filters.WEB_APP_DATA, web_app_data))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         app.add_handler(CommandHandler('menu', menu_command))
         app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
