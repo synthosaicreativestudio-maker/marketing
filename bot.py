@@ -1392,34 +1392,10 @@ def main():
                         
         logger.info('Бот запущен...')
                         
-        # Global error handler
-        async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-            err = getattr(context, 'error', None)
-            try:
-                if isinstance(err, telegram.error.Conflict):
-                    logger.warning(f'GetUpdates conflict (caught in error handler): {err} — sleeping briefly and will let polling retry.')
-                    await asyncio.sleep(5)
-                    return
-            except Exception:
-                logger.exception('Error in global error handler')
-            logger.exception(f'Unhandled exception in update handling: {err}')
+        # Убираем проблемный error handler
 
-        app.add_error_handler(_global_error_handler)
-
-                # Run polling with retry/backoff
-        retry_delay = 3
-        while True:
-            try:
-                app.run_polling(drop_pending_updates=True)
-                break
-            except telegram.error.Conflict as e:
-                logger.error(f'GetUpdates conflict detected (outer loop): {e}. Retrying in {retry_delay}s...')
-                time.sleep(retry_delay)
-                retry_delay = min(60, retry_delay * 2)
-                continue
-            except Exception as e:
-                logger.exception(f'Unexpected error in polling loop: {e}')
-                break
+        # Простой запуск без сложной обработки ошибок
+        app.run_polling(drop_pending_updates=True)
                                 
     except Exception as e:
         logger.error(f'Error starting bot: {e}')
