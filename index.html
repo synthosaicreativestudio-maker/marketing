@@ -131,7 +131,7 @@
             <div class="divider"></div>
             
             <!-- Статическая HTML кнопка авторизации -->
-            <button id="static_auth_button" class="auth-button" style="display: none;">
+            <button id="static_auth_button" class="auth-button">
                 Авторизоваться
             </button>
             
@@ -167,7 +167,7 @@
             if (tg.setHeaderColor) tg.setHeaderColor('#0b1226');
             if (tg.setBackgroundColor) tg.setBackgroundColor('#071028');
             
-                    // ✅ Проверяем MainButton
+                    // ✅ Настраиваем MainButton если доступен
         if (tg.MainButton) {
             console.log('MainButton доступен');
             // Инициализируем MainButton
@@ -187,10 +187,11 @@
             
             console.log('MainButton инициализирован');
         } else {
-            console.error('MainButton НЕ доступен!');
-            // Показываем статическую HTML кнопку
-            showStaticButton();
+            console.log('MainButton недоступен, используем HTML кнопку');
         }
+        
+        // ✅ ВСЕГДА настраиваем HTML кнопку как основной вариант
+        setupStaticButton();
             
         } catch (error) {
             console.error('Ошибка инициализации Telegram WebApp:', error);
@@ -201,19 +202,19 @@
         const menuScreen = document.getElementById('menu_screen');
         const menuGrid = document.getElementById('menu_grid');
         
-        // Показываем статическую HTML кнопку если MainButton недоступен
-        function showStaticButton() {
-            console.log('Показываю статическую HTML кнопку');
+        // Настраиваем HTML кнопку как основной вариант авторизации
+        function setupStaticButton() {
+            console.log('Настраиваю HTML кнопку авторизации');
             const staticButton = document.getElementById('static_auth_button');
             if (staticButton) {
-                staticButton.style.display = 'block';
+                // Кнопка уже видна (убрали display: none)
                 staticButton.addEventListener('click', function() {
-                    console.log('Static button clicked');
+                    console.log('HTML кнопка авторизации нажата');
                     sendData();
                 });
-                console.log('Статическая кнопка показана и настроена');
+                console.log('HTML кнопка настроена и готова к работе');
             } else {
-                console.error('Статическая кнопка не найдена!');
+                console.error('HTML кнопка не найдена!');
             }
         }
 
