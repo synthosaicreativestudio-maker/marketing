@@ -71,6 +71,25 @@
         .divider{height:1px;background:linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);margin:18px 0;border-radius:2px}
         .cta{display:flex;align-items:center;gap:12px}
         .muted-small{font-size:12px;color:rgba(255,255,255,0.6)}
+        
+        .auth-button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(90deg, #d4af37, #f6e7a0);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .auth-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(212, 175, 55, 0.3);
+        }
         /* responsive */
         @media (max-width:720px){
             .shell{padding:20px;margin-top:-80px;margin-left:-3%}
@@ -110,6 +129,12 @@
             </div>
 
             <div class="divider"></div>
+            
+            <!-- Статическая HTML кнопка авторизации -->
+            <button id="static_auth_button" class="auth-button" style="display: none;">
+                Авторизоваться
+            </button>
+            
             <div style="display:flex;justify-content:flex-start;align-items:center;width:100%">
                 <div style="color:#d4af37;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Produced by SYNTHOS AI®</div>
             </div>
@@ -163,8 +188,8 @@
             console.log('MainButton инициализирован');
         } else {
             console.error('MainButton НЕ доступен!');
-            // Создаем обычную HTML кнопку как запасной вариант
-            createFallbackButton();
+            // Показываем статическую HTML кнопку
+            showStaticButton();
         }
             
         } catch (error) {
@@ -176,36 +201,20 @@
         const menuScreen = document.getElementById('menu_screen');
         const menuGrid = document.getElementById('menu_grid');
         
-        // Создаем запасную HTML кнопку если MainButton недоступен
-        function createFallbackButton() {
-            console.log('Создаю запасную HTML кнопку');
-            const fallbackButton = document.createElement('button');
-            fallbackButton.id = 'fallback_auth_button';
-            fallbackButton.textContent = 'Авторизоваться';
-            fallbackButton.className = 'fallback-button';
-            fallbackButton.style.cssText = `
-                width: 100%;
-                padding: 15px;
-                background: linear-gradient(90deg, #d4af37, #f6e7a0);
-                color: #000;
-                border: none;
-                border-radius: 8px;
-                font-size: 16px;
-                font-weight: 600;
-                margin-top: 20px;
-                cursor: pointer;
-            `;
-            
-            fallbackButton.addEventListener('click', function() {
-                console.log('Fallback button clicked');
-                sendData();
-            });
-            
-            // Вставляем кнопку после полей ввода
-            const divider = document.querySelector('.divider');
-            divider.parentNode.insertBefore(fallbackButton, divider.nextSibling);
-            
-            console.log('Запасная кнопка создана');
+        // Показываем статическую HTML кнопку если MainButton недоступен
+        function showStaticButton() {
+            console.log('Показываю статическую HTML кнопку');
+            const staticButton = document.getElementById('static_auth_button');
+            if (staticButton) {
+                staticButton.style.display = 'block';
+                staticButton.addEventListener('click', function() {
+                    console.log('Static button clicked');
+                    sendData();
+                });
+                console.log('Статическая кнопка показана и настроена');
+            } else {
+                console.error('Статическая кнопка не найдена!');
+            }
         }
 
         // Phone mask (keeps behaviour)
