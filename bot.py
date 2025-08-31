@@ -25,7 +25,10 @@ from config import SECTIONS, get_web_app_url, get_ticket_status, SUBSECTIONS
 from auth_cache import auth_cache
 from openai_client import openai_client
 
-# Загрузка .env. Если TELEGRAM_TOKEN не задан, попробуем загрузить `bot.env`
+# ✅ Загрузка .env файла
+load_dotenv()
+if not os.getenv('TELEGRAM_TOKEN') and os.path.exists('bot.env'):
+    load_dotenv('bot.env', override=True)
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /menu - показывает persistent keyboard с кнопкой личного кабинета"""
@@ -48,9 +51,6 @@ async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text('Пожалуйста, опишите вашу проблему, и специалист свяжется с вами.')
     else:
         await query.edit_message_text(f'Вы выбрали раздел: {section}. Здесь вы можете задать вопрос или получить информацию.')
-load_dotenv()
-if not os.getenv('TELEGRAM_TOKEN') and os.path.exists('bot.env'):
-    load_dotenv('bot.env', override=True)
 
 # Логирование
 logging.basicConfig(
@@ -163,8 +163,11 @@ if TICKETS_SHEET_URL and os.path.exists('credentials.json'):
         
         # Устанавливаем фиксированные размеры для колонки с обращений (колонка E: ширина 600px, высота строк 100px)
         if tickets_client and tickets_client.sheet:
-            tickets_client.set_tickets_column_width(600, 100)
-            logger.info('Установлены размеры: ширина 600px, высота 100px для колонки обращений')
+            try:
+                tickets_client.set_tickets_column_width(600, 100)
+                logger.info('Установлены размеры: ширина 600px, высота 100px для колонки обращений')
+            except Exception as e:
+                logger.warning(f'Не удалось установить размеры колонок: {e}')
     except Exception as e:
         logger.error(f'Ошибка инициализации tickets GoogleSheetsClient: {e}')
 else:
