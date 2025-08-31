@@ -73,17 +73,22 @@
         .muted-small{font-size:12px;color:rgba(255,255,255,0.6)}
         
         .auth-button {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(90deg, #d4af37, #f6e7a0);
-            color: #000;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            margin-top: 20px;
-            cursor: pointer;
-            transition: all 0.3s ease;
+            width: 100% !important;
+            padding: 15px !important;
+            background: linear-gradient(90deg, #d4af37, #f6e7a0) !important;
+            color: #000 !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            margin-top: 20px !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            z-index: 1000 !important;
+            position: relative !important;
         }
         
         .auth-button:hover {
@@ -192,6 +197,9 @@
         
         // ✅ ВСЕГДА настраиваем HTML кнопку как основной вариант
         setupStaticButton();
+        
+        // ✅ ПРИНУДИТЕЛЬНО показываем кнопку
+        forceShowButton();
             
         } catch (error) {
             console.error('Ошибка инициализации Telegram WebApp:', error);
@@ -215,6 +223,42 @@
                 console.log('HTML кнопка настроена и готова к работе');
             } else {
                 console.error('HTML кнопка не найдена!');
+            }
+        }
+        
+        // Принудительно показываем кнопку
+        function forceShowButton() {
+            console.log('Принудительно показываю кнопку авторизации');
+            const button = document.getElementById('static_auth_button');
+            if (button) {
+                button.style.display = 'block !important';
+                button.style.visibility = 'visible !important';
+                button.style.opacity = '1 !important';
+                button.style.zIndex = '1000 !important';
+                button.style.position = 'relative !important';
+                
+                // Дополнительно через CSS
+                button.setAttribute('style', `
+                    width: 100% !important;
+                    padding: 15px !important;
+                    background: linear-gradient(90deg, #d4af37, #f6e7a0) !important;
+                    color: #000 !important;
+                    border: none !important;
+                    border-radius: 8px !important;
+                    font-size: 16px !important;
+                    font-weight: 600 !important;
+                    margin-top: 20px !important;
+                    cursor: pointer !important;
+                    display: block !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    z-index: 1000 !important;
+                    position: relative !important;
+                `);
+                
+                console.log('Кнопка принудительно показана');
+            } else {
+                console.error('Кнопка не найдена для принудительного показа!');
             }
         }
 
