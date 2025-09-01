@@ -28,6 +28,7 @@ from openai_client import openai_client
 from mcp_context_v7 import mcp_context
 from error_handler import safe_execute
 from performance_monitor import monitor_performance
+from validator import validator
 
 # ✅ Загрузка .env файла
 load_dotenv()
@@ -511,89 +512,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = create_auth_button(auth_url)
     await update.message.reply_text(f'Привет, {user.first_name}! Нажми кнопку чтобы авторизоваться.', reply_markup=InlineKeyboardMarkup(keyboard))
 
-def validate_payload(payload: dict) -> tuple[bool, str]:
-    """Валидирует входящие данные от веб-приложения. Возвращает (валидно, сообщение об ошибке)."""
-    logger.info(f'DEBUG: Validating payload: {payload}')
-    
-    if not isinstance(payload, dict):
-        logger.warning(f'Payload is not a dict: {type(payload)}')
-        return False, "Неверный формат данных"
-    
-    # Проверяем тип данных
-    data_type = payload.get('type', '').strip()  # Очищаем от пробелов
-    logger.info(f'DEBUG: Payload type detected: "{data_type}"')
-    logger.info(f'DEBUG: All payload keys: {list(payload.keys())}')
-    
-    # Проверяем, что в payload есть section и webapp_url (для direct_webapp)
-    if 'section' in payload and 'webapp_url' in payload and not data_type:
-        logger.info('DEBUG: Detected direct_webapp payload without explicit type')
-        data_type = 'direct_webapp'
-    
-    if data_type == 'menu_selection':
-        logger.info('DEBUG: Processing menu_selection')
-        # Проверяем данные выбора раздела
-        section = payload.get('section')
-        if not section or not isinstance(section, str):
-            return False, "Не указан раздел меню"
-        if section not in SECTIONS:
-            return False, f"Неизвестный раздел: {section}"
-        return True, ""
-    
-    elif data_type == 'subsection_selection':
-        logger.info('DEBUG: Processing subsection_selection')
-        # Проверяем данные выбора подраздела
-        section = payload.get('section')
-        subsection = payload.get('subsection')
-        if not section or not isinstance(section, str):
-            return False, "Не указан раздел"
-        if not subsection or not isinstance(subsection, str):
-            return False, "Не указан подраздел"
-        if section in SUBSECTIONS and subsection not in SUBSECTIONS[section]:
-            return False, f"Неизвестный подраздел: {subsection}"
-        return True, ""
-    
-    elif data_type == 'back_to_main':
-        logger.info('DEBUG: Processing back_to_main')
-        # Никакой дополнительной валидации не требуется
-        return True, ""
-    
-    elif data_type == 'direct_webapp':
-        logger.info('DEBUG: Processing direct_webapp')
-        # Проверяем данные для прямого открытия мини-приложения
-        section = payload.get('section')
-        webapp_url = payload.get('webapp_url')
-        logger.info(f'DEBUG: direct_webapp section="{section}", webapp_url="{webapp_url}"')
-        if not section or not isinstance(section, str):
-            return False, "Не указан раздел"
-        if not webapp_url or not isinstance(webapp_url, str):
-            return False, "Не указан URL мини-приложения"
-        logger.info('DEBUG: direct_webapp validation passed')
-        return True, ""
-    
-    else:
-        logger.info(f'DEBUG: Processing as authorization data (type="{data_type}")')
-        # Проверяем данные авторизации
-        code = payload.get('code')
-        phone = payload.get('phone')
-        
-        logger.info(f'Auth validation: code={code}, phone={phone}')
-        
-        if not code or not isinstance(code, str):
-            logger.warning(f'Invalid code: {code} (type: {type(code)})')
-            return False, "Не указан код партнера"
-        if not phone or not isinstance(phone, str):
-            logger.warning(f'Invalid phone: {phone} (type: {type(phone)})')
-            return False, "Не указан номер телефона"
-        if len(code.strip()) < 3:
-            logger.warning(f'Code too short: {code}')
-            return False, "Код партнера слишком короткий"
-        if len(phone.strip()) < 10:
-            logger.warning(f'Phone too short: {phone}')
-            return False, "Номер телефона слишком короткий"
-
-        logger.info('Payload validation successful')
-        return True, ""
-
 @safe_execute('web_app_data')
 @monitor_performance('web_app_data')
 async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -609,30 +527,50 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Ошибка: данные от Web App не получены')
         return
     
-    try:
-        raw_data = update.message.web_app_data.data
-        logger.info(f'Raw web app data: {raw_data}')
-        payload = json.loads(raw_data)
-        logger.info(f'Parsed web app payload: {payload}')
-    except Exception as e:
-        logger.error(f'Failed to parse web app data: {e}')
-        logger.error(f'Raw data was: {update.message.web_app_data.data if hasattr(update.message, "web_app_data") else "No web_app_data"}')
+    # Парсим JSON от веб-приложения
+    is_valid_json, payload, error_message = validator.validate_web_app_data(update.message.web_app_data.data)
+    if not is_valid_json:
+        logger.error(f'Failed to parse web app data: {error_message}')
         await update.message.reply_text('Не удалось прочитать данные от Web App')
         return
     
-    # Валидируем входящие данные
-    is_valid, error_message = validate_payload(payload)
+    # Определяем тип данных и валидируем
+    data_type = payload.get('type', '').strip()
+    if 'section' in payload and 'webapp_url' in payload and not data_type:
+        data_type = 'direct_webapp'
+
+    is_valid = False
+    error_message = "Неизвестный тип данных от веб-приложения."
+
+    if data_type == 'menu_selection':
+        is_valid, error_message = validator.validate_menu_selection(payload)
+    
+    elif data_type == 'subsection_selection':
+        is_valid, error_message = validator.validate_subsection_selection(payload)
+
+    elif data_type in ('back_to_main', 'direct_webapp'):
+        is_valid = True
+        error_message = ""
+
+    else: # Валидация данных авторизации
+        code = payload.get('code')
+        phone = payload.get('phone')
+        code_valid, code_error = validator.validate_partner_code(code)
+        if not code_valid:
+            error_message = code_error
+        else:
+            phone_valid, phone_error = validator.validate_phone(phone)
+            if not phone_valid:
+                error_message = phone_error
+            else:
+                is_valid = True
+
     if not is_valid:
         logger.warning(f'Invalid payload from user {user.id}: {error_message}')
         await update.message.reply_text(f'❌ Ошибка в данных: {error_message}')
         return
     
-    # Определяем тип данных и направляем в соответствующий обработчик
-    data_type = payload.get('type', '').strip()
-    # Проверяем, что в payload есть section и webapp_url (для direct_webapp)
-    if 'section' in payload and 'webapp_url' in payload and not data_type:
-        data_type = 'direct_webapp'
-        
+    # Направляем в соответствующий обработчик
     if data_type == 'menu_selection':
         logger.info('Routing to menu selection handler')
         await handle_menu_selection(update, context, payload)

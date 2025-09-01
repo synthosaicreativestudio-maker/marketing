@@ -1,91 +1,90 @@
 #!/bin/bash
 
-# Единый скрипт для управления Marketing Bot
+# Unified script for managing the Marketing Bot
 #
-# Команды:
-#   start   - Безопасно запустить бота
-#   stop    - Остановить бота
-#   restart - Перезапустить бота
-#   status  - Проверить статус
-#   logs    - Показать последние логи
+# Commands:
+#   start   - Safely start the bot
+#   stop    - Stop the bot
+#   restart - Restart the bot
+#   status  - Check the status
+#   logs    - Show the latest logs
 
-# --- Настройки ---
+# --- Settings ---
 BOT_NAME="marketing_bot"
-# Используем директорию проекта для lock и log файлов для простоты
+# Use project directory for lock and log files for simplicity
 LOCK_FILE="bot.lock"
 LOG_FILE="bot.log"
 PYTHON_CMD="python3"
 BOT_SCRIPT="bot.py"
 
-# --- Функции ---
+# --- Functions ---
 
-# Функция для остановки всех процессов бота
+# Function to stop all bot processes
 stop_bot() {
-    echo "🛑 Останавливаю все процессы бота..."
+    echo "Stopping all bot processes..."
     
-    # 1. По PID из lock-файла (самый безопасный способ)
+    # 1. By PID from lock file (safest method)
     if [ -f "$LOCK_FILE" ]; then
         BOT_PID=$(cat "$LOCK_FILE")
         if [ -n "$BOT_PID" ] && ps -p $BOT_PID > /dev/null 2>&1; then
-            echo "   - Останавливаю процесс с PID $BOT_PID..."
+            echo "   - Stopping process with PID $BOT_PID..."
             kill $BOT_PID
             sleep 1
         fi
         rm -f "$LOCK_FILE"
-        echo "   - Lock-файл удален."
+        echo "   - Lock file removed."
     fi
 
-    # 2. По имени процесса (запасной вариант)
+    # 2. By process name (fallback)
     PIDS=$(ps aux | grep -E "($PYTHON_CMD.*$BOT_SCRIPT)" | grep -v grep | awk '{print $2}')
     if [ -n "$PIDS" ]; then
-        echo "   - Найдены и остановлены процессы по имени: $PIDS"
+        echo "   - Found and stopped processes by name: $PIDS"
         pkill -f "$PYTHON_CMD.*$BOT_SCRIPT" 2>/dev/null
         sleep 1
     fi
     
-    # 3. Принудительная остановка (самый крайний случай)
+    # 3. Force stop (last resort)
     PIDS=$(ps aux | grep -E "($PYTHON_CMD.*$BOT_SCRIPT)" | grep -v grep | awk '{print $2}')
     if [ -n "$PIDS" ]; then
-        echo "   - ⚡ Принудительно останавливаю оставшиеся процессы: $PIDS"
+        echo "   - Forcibly stopping remaining processes: $PIDS"
         kill -9 $PIDS 2>/dev/null
     fi
 
-    echo "✅ Процессы бота остановлены."
+    echo "Bot processes stopped."
 }
 
-# --- Логика скрипта ---
+# --- Script Logic ---
 
-# Получаем команду от пользователя
+# Get command from user
 COMMAND=$1
 
 case "$COMMAND" in
     start)
-        echo "🚀 Запускаю бота..."
+        echo "Starting bot..."
         
-        # Проверяем, не запущен ли уже бот
+        # Check if bot is already running
         if [ -f "$LOCK_FILE" ]; then
             BOT_PID=$(cat "$LOCK_FILE")
             if [ -n "$BOT_PID" ] && ps -p $BOT_PID > /dev/null 2>&1; then
-                echo "⚠️  Бот уже запущен с PID $BOT_PID. Для перезапуска используйте: ./manage.sh restart"
+                echo "Warning: Bot is already running with PID $BOT_PID. To restart, use: ./manage.sh restart"
                 exit 1
             else
-                # Если процесс мертв, а lock-файл остался
-                echo "   - Найден неактуальный lock-файл. Удаляю..."
+                # If process is dead but lock file remains
+                echo "   - Found stale lock file. Removing..."
                 rm -f "$LOCK_FILE"
             fi
         fi
 
-        # Запускаем бота в фоновом режиме
-        # nohup python3 bot.py > bot.log 2>&1 &
+        # Start the bot in the background
         nohup $PYTHON_CMD $BOT_SCRIPT >> "$LOG_FILE" 2>&1 & 
         
-        # Получаем PID запущенного процесса
+        # Get the PID of the started process
         BOT_PID=$!
         echo "$BOT_PID" > "$LOCK_FILE"
         
-        echo "✅ Бот успешно запущен с PID: $BOT_PID"
-        echo "   - Логи пишутся в файл: $LOG_FILE"
-        echo "   - Lock-файл создан: $LOCK_FILE"
+        echo "Bot started successfully with PID: $BOT_PID"
+        echo "   - Logs are written to: $LOG_FILE"
+        echo "   - Lock file created: $LOCK_FILE"
         ;;
 
     stop)
@@ -93,44 +92,44 @@ case "$COMMAND" in
         ;;
 
     restart)
-        echo "🔄 Перезапускаю бота..."
+        echo "Restarting bot..."
         stop_bot
         sleep 1
-        # Вызываем start в этом же скрипте
+        # Call start in this same script
         bash "$0" start
         ;;
 
     status)
-        echo "🔍 Проверка статуса бота..."
+        echo "Checking bot status..."
         if [ -f "$LOCK_FILE" ]; then
             BOT_PID=$(cat "$LOCK_FILE")
             if [ -n "$BOT_PID" ] && ps -p $BOT_PID > /dev/null 2>&1; then
-                echo "✅ Бот работает. PID: $BOT_PID"
-                echo "📊 Детали процесса:"
+                echo "Bot is running. PID: $BOT_PID"
+                echo "Process details:"
                 ps -p $BOT_PID -o pid,ppid,cmd,etime,pcpu,pmem
             else
-                echo "❌ Бот не работает (но есть lock-файл)."
-                echo "   - Рекомендуется выполнить: ./manage.sh stop, а затем ./manage.sh start"
+                echo "Error: Bot is not running (but lock file exists)."
+                echo "   - Recommendation: Run ./manage.sh stop and then ./manage.sh start"
             fi
         else
-            echo "❌ Бот не работает (lock-файл не найден)."
+            echo "Error: Bot is not running (lock file not found)."
         fi
         ;;
 
     logs)
-        echo "📝 Последние 15 строк лога ($LOG_FILE):"
+        echo "Last 15 lines of log ($LOG_FILE):"
         tail -n 15 "$LOG_FILE"
         ;;
 
     *)
-        echo "Неизвестная команда: '$COMMAND'"
+        echo "Unknown command: '$COMMAND'"
         echo ""
-        echo "Доступные команды:"
-        echo "  start   - Безопасно запустить бота"
-        echo "  stop    - Остановить бота"
-        echo "  restart - Перезапустить бота"
-        echo "  status  - Проверить статус"
-        echo "  logs    - Показать последние логи"
+        echo "Available commands:"
+        echo "  start   - Safely start the bot"
+        echo "  stop    - Stop the bot"
+        echo "  restart - Restart the bot"
+        echo "  status  - Check the status"
+        echo "  logs    - Show the latest logs"
         exit 1
         ;;
 esac
