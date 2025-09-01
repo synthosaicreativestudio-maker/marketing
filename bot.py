@@ -11,6 +11,7 @@ import logging
 import os
 import asyncio
 import functools
+import nest_asyncio
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
@@ -27,6 +28,9 @@ from mcp_context_v7 import mcp_context
 from error_handler import safe_execute
 from performance_monitor import monitor_performance
 from validator import validator
+
+# Инициализируем nest_asyncio для совместимости
+nest_asyncio.apply()
 
 # Загрузка .env файла
 load_dotenv()
