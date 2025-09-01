@@ -173,28 +173,65 @@
             }
 
             try {
-                const data = JSON.stringify({ code, phone });
                 authButton.textContent = 'Отправляем...';
                 authButton.disabled = true;
                 
-                // Проверяем, что Telegram WebApp API доступен
-                if (typeof tg.sendData !== 'function') {
-                    throw new Error('Telegram WebApp API недоступен');
+                // Используем новый метод - отправка команды через чат
+                const authCommand = `/auth ${code} ${phone}`;
+                
+                // Проверяем доступность API
+                if (typeof tg.sendData === 'function') {
+                    // Пробуем через WebApp API (основной метод)
+                    try {
+                        const data = JSON.stringify({ code, phone, type: 'auth_request' });
+                        tg.sendData(data);
+                        
+                        setTimeout(() => {
+                            if (typeof tg.close === 'function') {
+                                tg.close();
+                            }
+                        }, 500);
+                        return;
+                    } catch (webAppError) {
+                        console.log('WebApp API недоступен, используем резервный метод');
+                    }
                 }
                 
-                tg.sendData(data);
+                // Резервный метод - отправка через команду в чат
+                if (typeof tg.MainButton !== 'undefined') {
+                    tg.MainButton.setText('Отправить команду в чат');
+                    tg.MainButton.show();
+                    tg.MainButton.onClick(() => {
+                        // Пользователь должен будет скопировать команду
+                        navigator.clipboard.writeText(authCommand).then(() => {
+                            tg.showAlert(`Команда скопирована! Вставьте в чат: ${authCommand}`);
+                        }).catch(() => {
+                            tg.showAlert(`Отправьте в чат команду: ${authCommand}`);
+                        });
+                        
+                        if (typeof tg.close === 'function') {
+                            tg.close();
+                        }
+                    });
+                } else {
+                    // Если MainButton недоступен, показываем alert с командой
+                    tg.showAlert(`Отправьте в чат команду: ${authCommand}`);
+                    
+                    setTimeout(() => {
+                        if (typeof tg.close === 'function') {
+                            tg.close();
+                        }
+                    }, 2000);
+                }
                 
-                // Закрытие WebApp после отправки данных для лучшей совместимости
-                setTimeout(() => {
-                    if (typeof tg.close === 'function') {
-                        tg.close();
-                    }
-                }, 500);
             } catch (error) {
                 console.error('Ошибка при отправке данных:', error);
                 authButton.textContent = 'Авторизоваться';
                 authButton.disabled = false;
-                tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
+                
+                // Показываем команду для ручного ввода
+                const authCommand = `/auth ${code} ${phone}`;
+                tg.showAlert(`Произошла ошибка. Отправьте в чат: ${authCommand}`);
             }
         });
 

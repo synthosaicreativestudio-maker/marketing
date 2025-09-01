@@ -103,6 +103,7 @@ class Bot:
         self.application.add_handler(CommandHandler('menu', self.menu_command))
         self.application.add_handler(CommandHandler('new_chat', self.new_chat))
         self.application.add_handler(CommandHandler('reply', self.reply_command))
+        self.application.add_handler(CommandHandler('auth', self.auth_command))
         self.application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, self.web_app_data))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
@@ -241,6 +242,84 @@ class Bot:
             '💼 Используйте кнопку "🚀 Личный кабинет" для быстрого доступа к личному кабинету:',
             reply_markup=persistent_keyboard
         )
+
+    @safe_execute('auth_command')
+    @monitor_performance('auth_command')
+    async def auth_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Обработчик команды /auth для авторизации через чат.
+        Формат: /auth <код_партнера> <телефон>
+        """
+        user = update.effective_user
+        args = context.args
+        
+        logger.info(f"Команда /auth от пользователя {user.id} с аргументами: {args}")
+        
+        # Проверяем количество аргументов
+        if len(args) != 2:
+            await update.message.reply_text(
+                '❌ Неверный формат команды.\n\n'
+                '📝 Правильный формат:\n'
+                '`/auth <код_партнера> <телефон>`\n\n'
+                '📍 Пример:\n'
+                '`/auth PARTNER123 89991234567`',
+                parse_mode='Markdown'
+            )
+            return
+        
+        code = args[0].strip()
+        phone = args[1].strip()
+        
+        # Валидация кода партнера
+        if not code or len(code) < 3:
+            await update.message.reply_text('❌ Код партнера должен содержать минимум 3 символа.')
+            return
+        
+        # Валидация телефона
+        phone_digits = ''.join(filter(str.isdigit, phone))
+        if len(phone_digits) not in [10, 11]:
+            await update.message.reply_text(
+                '❌ Некорректный номер телефона.\n\n'
+                '📱 Допустимые форматы:\n'
+                '• `89991234567` (11 цифр)\n'
+                '• `9991234567` (10 цифр)',
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Нормализуем телефон до 11 цифр
+        if len(phone_digits) == 10:
+            phone_digits = '8' + phone_digits
+        
+        # Проверяем блокировку попыток авторизации
+        is_blocked, seconds_left = auth_cache.is_user_blocked(user.id)
+        if is_blocked:
+            time_text = self._format_block_time(seconds_left)
+            await update.message.reply_text(f'❌ Авторизация заблокирована на {time_text}.')
+            return
+        
+        await update.message.reply_text('🔍 Проверяю данные авторизации...')
+        
+        # Проверяем доступность Google Sheets
+        if not self.sheets_client or not self.sheets_client.sheet:
+            logger.error('Google Sheets client не доступен для команды /auth')
+            await update.message.reply_text('❌ База данных недоступна. Обратитесь к администратору.')
+            return
+        
+        try:
+            # Ищем пользователя в таблице по коду и телефону
+            row = await self.run_blocking(self.sheets_client.find_user_by_credentials, code, phone_digits)
+        except Exception as e:
+            logger.error(f"Ошибка при проверке данных авторизации: {e}")
+            await update.message.reply_text('❌ Ошибка при проверке данных. Попробуйте позже.')
+            return
+        
+        if row:
+            # Успешная авторизация
+            await self._handle_successful_authorization(update, context, row, code, phone_digits)
+        else:
+            # Неудачная авторизация
+            await self._handle_failed_authorization(update, context)
 
     @safe_execute('handle_message')
     @monitor_performance('handle_message')
@@ -463,6 +542,7 @@ class Bot:
             'subsection_selection': self._handle_subsection_selection,
             'back_to_main': self._handle_back_to_main,
             'direct_webapp': self._handle_direct_webapp,
+            'auth_request': self._handle_authorization,
         }.get(data_type)
 
     async def _handle_menu_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
