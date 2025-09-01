@@ -34,7 +34,8 @@ A **production-ready, enterprise-grade** Telegram bot for marketing teams with G
 
 ### 🔒 **Core Functionality**
 - **User Authentication**: Secure authorization with partner codes and phone numbers
-- **📱 Mobile-Friendly Auth**: Hybrid authentication system with WebApp + chat command fallback
+- **📱 Mobile-Friendly Auth**: Hybrid authentication system with KeyboardButton for full mobile compatibility
+- **🔧 Fixed Mobile WebApp**: Resolved sendData() issues by using ReplyKeyboardMarkup instead of InlineKeyboardMarkup
 - **Google Sheets Integration**: Dual-table architecture for auth and conversations
 - **OpenAI Assistant**: AI-powered responses with conversation context and thread persistence
 - **Web Mini-App**: Telegram WebApp interface for user interactions

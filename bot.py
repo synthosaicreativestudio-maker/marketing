@@ -162,11 +162,15 @@ class Bot:
         )
 
     @staticmethod
-    def create_auth_button(url: str):
+    def create_auth_keyboard(url: str):
         """
-        Создает кнопку для авторизации.
+        Создает клавиатуру для авторизации с KeyboardButton для корректной работы sendData().
         """
-        return [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=url))]]
+        return ReplyKeyboardMarkup(
+            [[KeyboardButton('🔐 Авторизоваться', web_app=WebAppInfo(url=url))]],
+            resize_keyboard=True,
+            one_time_keyboard=False
+        )
 
     async def is_user_authorized(self, user_id: int) -> bool:
         """
@@ -225,10 +229,10 @@ class Bot:
             )
         else:
             auth_url = get_web_app_url('MAIN')
-            keyboard = self.create_auth_button(auth_url)
+            keyboard = self.create_auth_keyboard(auth_url)
             await update.message.reply_text(
-                f'Привет, {user.first_name}! Нажми кнопку чтобы авторизоваться.',
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                f'Привет, {user.first_name}! Нажми кнопку "🔐 Авторизоваться" чтобы авторизоваться.',
+                reply_markup=keyboard
             )
 
     @safe_execute('menu_command')
@@ -726,10 +730,10 @@ class Bot:
         else:
             attempts_left = auth_cache.get_attempts_left(user.id)
             web_app_url = get_web_app_url('MAIN')
-            keyboard = self.create_auth_button(web_app_url)
+            keyboard = self.create_auth_keyboard(web_app_url)
             await update.message.reply_text(
                 f'❌ Неверные данные или аккаунт неактивен.\nОсталось попыток: {attempts_left}',
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                reply_markup=keyboard
             )
 
     async def _notify_admins(self, context: ContextTypes.DEFAULT_TYPE, text: str):
