@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест мобильной авторизации</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ccc;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            background: #333;
+            color: white;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .logs {
+            margin-top: 20px;
+            padding: 15px;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #4CAF50;
+            background: #2a2a2a;
+        }
+        .log-error {
+            border-left-color: #f44336;
+        }
+        .log-warning {
+            border-left-color: #ff9800;
+        }
+    </style>
+</head>
+<body>
+    <h2>🧪 Тест мобильной авторизации</h2>
+    
+    <div class="form-group">
+        <label for="code">Код партнёра</label>
+        <input type="text" id="code" placeholder="TEST123" value="TEST123">
+    </div>
+    
+    <div class="form-group">
+        <label for="phone">Телефон</label>
+        <input type="tel" id="phone" placeholder="89991234567" value="89991234567">
+    </div>
+    
+    <button id="testBtn">🚀 Тестировать авторизацию</button>
+    
+    <div class="logs">
+        <h3>📋 Логи диагностики:</h3>
+        <div id="logContainer"></div>
+    </div>
+
+    <script>
+        const logContainer = document.getElementById('logContainer');
+        
+        function addLog(message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        addLog('Начинаем диагностику...');
+        
+        // Проверяем доступность Telegram WebApp
+        addLog(`Telegram WebApp объект: ${typeof window.Telegram}`);
+        addLog(`window.Telegram.WebApp: ${typeof window.Telegram?.WebApp}`);
+        
+        const tg = window.Telegram?.WebApp;
+        if (!tg) {
+            addLog('❌ Telegram WebApp недоступен!', 'error');
+        } else {
+            addLog('✅ Telegram WebApp доступен');
+            
+            try {
+                tg.ready();
+                addLog('✅ WebApp.ready() выполнен');
+            } catch (e) {
+                addLog(`❌ Ошибка в WebApp.ready(): ${e.message}`, 'error');
+            }
+            
+            // Проверяем доступные методы
+            addLog(`sendData доступен: ${typeof tg.sendData === 'function'}`);
+            addLog(`close доступен: ${typeof tg.close === 'function'}`);
+            addLog(`showAlert доступен: ${typeof tg.showAlert === 'function'}`);
+            addLog(`MainButton доступен: ${typeof tg.MainButton}`);
+            
+            // Дополнительная информация
+            addLog(`Platform: ${tg.platform || 'unknown'}`);
+            addLog(`Version: ${tg.version || 'unknown'}`);
+            addLog(`Theme params: ${JSON.stringify(tg.themeParams || {})}`);
+        }
+        
+        document.getElementById('testBtn').addEventListener('click', () => {
+            const code = document.getElementById('code').value.trim();
+            const phone = document.getElementById('phone').value.replace(/\D/g, '');
+            
+            addLog(`Начинаем тест с данными: код="${code}", телефон="${phone}"`);
+            
+            if (!code) {
+                addLog('❌ Код партнёра не указан', 'error');
+                return;
+            }
+            
+            if (phone.length !== 11) {
+                addLog(`❌ Неверная длина телефона: ${phone.length} (ожидается 11)`, 'error');
+                return;
+            }
+            
+            addLog('✅ Валидация пройдена');
+            
+            if (!tg) {
+                addLog('❌ Telegram WebApp недоступен для отправки', 'error');
+                return;
+            }
+            
+            // Тестируем sendData
+            if (typeof tg.sendData === 'function') {
+                try {
+                    const data = JSON.stringify({ code, phone, type: 'auth_request' });
+                    addLog(`📤 Отправляем данные: ${data}`);
+                    
+                    tg.sendData(data);
+                    addLog('✅ sendData выполнен успешно');
+                    
+                    setTimeout(() => {
+                        addLog('🔄 Пытаемся закрыть WebApp...');
+                        if (typeof tg.close === 'function') {
+                            tg.close();
+                            addLog('✅ WebApp закрыт');
+                        } else {
+                            addLog('❌ Метод close недоступен', 'warning');
+                        }
+                    }, 2000);
+                    
+                } catch (error) {
+                    addLog(`❌ Ошибка в sendData: ${error.message}`, 'error');
+                    
+                    // Fallback - показываем команду
+                    const command = `/auth ${code} ${phone}`;
+                    addLog(`🔄 Fallback: показываем команду "${command}"`, 'warning');
+                    
+                    if (typeof tg.showAlert === 'function') {
+                        tg.showAlert(`Команда для отправки в чат: ${command}`);
+                        addLog('✅ showAlert выполнен');
+                    } else {
+                        addLog('❌ showAlert недоступен', 'error');
+                    }
+                }
+            } else {
+                addLog('❌ sendData недоступен', 'error');
+                
+                // Прямой fallback
+                const command = `/auth ${code} ${phone}`;
+                addLog(`🔄 Показываем команду: "${command}"`, 'warning');
+                
+                if (typeof tg.showAlert === 'function') {
+                    tg.showAlert(`Отправьте в чат команду: ${command}`);
+                    addLog('✅ showAlert выполнен (fallback)');
+                } else {
+                    addLog('❌ Никакие методы WebApp недоступны!', 'error');
+                }
+            }
+        });
+        
+        addLog('🎯 Диагностика завершена. Готов к тестированию!');
+    </script>
+</body>
+</html>

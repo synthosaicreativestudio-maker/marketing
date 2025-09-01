@@ -133,16 +133,32 @@
     </div>
 
     <script>
+        console.log('Script started loading...');
+        
         const tg = window.Telegram.WebApp;
+        console.log('Telegram WebApp object:', tg);
+        
         tg.ready();
+        console.log('WebApp ready called');
 
         // Настраиваем цвета для лучшего отображения
-        tg.setHeaderColor('#0b1226');
-        tg.setBackgroundColor('#071028');
+        try {
+            tg.setHeaderColor('#0b1226');
+            tg.setBackgroundColor('#071028');
+            console.log('Colors set successfully');
+        } catch (e) {
+            console.log('Error setting colors:', e);
+        }
 
         const codeInput = document.getElementById('code_input');
         const phoneInput = document.getElementById('phone_input');
         const authButton = document.getElementById('auth_button');
+        
+        console.log('Elements found:', {
+            codeInput: !!codeInput,
+            phoneInput: !!phoneInput, 
+            authButton: !!authButton
+        });
 
         // Форматирование телефона по маске
         phoneInput.addEventListener('input', e => {
@@ -157,84 +173,82 @@
             e.target.value = result;
         });
 
-        // Обработчик нажатия кнопки
+        // Простой и надежный обработчик нажатия кнопки
         authButton.addEventListener('click', () => {
+            console.log('Auth button clicked!');
+            
             const code = codeInput.value.trim();
             const phone = phoneInput.value.replace(/\D/g, '');
+            
+            console.log('Form data:', { code, phone });
 
             if (!code) {
+                console.log('No code provided');
                 tg.showAlert('Пожалуйста, введите код партнёра.');
                 return;
             }
             
             if (phone.length !== 11) {
+                console.log('Invalid phone length:', phone.length);
                 tg.showAlert('Пожалуйста, введите корректный номер телефона.');
                 return;
             }
 
-            try {
-                authButton.textContent = 'Отправляем...';
-                authButton.disabled = true;
-                
-                // Используем новый метод - отправка команды через чат
-                const authCommand = `/auth ${code} ${phone}`;
-                
-                // Проверяем доступность API
-                if (typeof tg.sendData === 'function') {
-                    // Пробуем через WebApp API (основной метод)
-                    try {
-                        const data = JSON.stringify({ code, phone, type: 'auth_request' });
-                        tg.sendData(data);
-                        
-                        setTimeout(() => {
-                            if (typeof tg.close === 'function') {
-                                tg.close();
-                            }
-                        }, 500);
-                        return;
-                    } catch (webAppError) {
-                        console.log('WebApp API недоступен, используем резервный метод');
-                    }
-                }
-                
-                // Резервный метод - отправка через команду в чат
-                if (typeof tg.MainButton !== 'undefined') {
-                    tg.MainButton.setText('Отправить команду в чат');
-                    tg.MainButton.show();
-                    tg.MainButton.onClick(() => {
-                        // Пользователь должен будет скопировать команду
-                        navigator.clipboard.writeText(authCommand).then(() => {
-                            tg.showAlert(`Команда скопирована! Вставьте в чат: ${authCommand}`);
-                        }).catch(() => {
-                            tg.showAlert(`Отправьте в чат команду: ${authCommand}`);
-                        });
-                        
-                        if (typeof tg.close === 'function') {
-                            tg.close();
-                        }
-                    });
-                } else {
-                    // Если MainButton недоступен, показываем alert с командой
-                    tg.showAlert(`Отправьте в чат команду: ${authCommand}`);
+            console.log('Validation passed, starting auth process...');
+            authButton.textContent = 'Отправляем...';
+            authButton.disabled = true;
+            
+            // Проверяем доступность sendData
+            console.log('sendData available:', typeof tg.sendData);
+            
+            if (typeof tg.sendData === 'function') {
+                try {
+                    console.log('Attempting to send via WebApp API...');
+                    const data = JSON.stringify({ code, phone, type: 'auth_request' });
+                    console.log('Sending data:', data);
                     
+                    tg.sendData(data);
+                    console.log('Data sent successfully via WebApp API');
+                    
+                    // Закрываем WebApp после отправки
                     setTimeout(() => {
+                        console.log('Attempting to close WebApp...');
                         if (typeof tg.close === 'function') {
                             tg.close();
                         }
-                    }, 2000);
+                    }, 500);
+                    return;
+                } catch (error) {
+                    console.error('WebApp API failed:', error);
                 }
-                
-            } catch (error) {
-                console.error('Ошибка при отправке данных:', error);
-                authButton.textContent = 'Авторизоваться';
-                authButton.disabled = false;
-                
-                // Показываем команду для ручного ввода
-                const authCommand = `/auth ${code} ${phone}`;
-                tg.showAlert(`Произошла ошибка. Отправьте в чат: ${authCommand}`);
             }
+            
+            // Резервный метод - показать команду пользователю
+            console.log('Using fallback method - showing command');
+            const authCommand = `/auth ${code} ${phone}`;
+            
+            // Пытаемся скопировать в буфер обмена
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(authCommand).then(() => {
+                    console.log('Command copied to clipboard');
+                    tg.showAlert(`✅ Команда скопирована в буфер обмена!\n\nВставьте её в чат с ботом:\n${authCommand}`);
+                }).catch((error) => {
+                    console.log('Clipboard copy failed:', error);
+                    tg.showAlert(`📋 Скопируйте и отправьте эту команду в чат с ботом:\n\n${authCommand}`);
+                });
+            } else {
+                console.log('Clipboard API not available');
+                tg.showAlert(`📋 Скопируйте и отправьте эту команду в чат с ботом:\n\n${authCommand}`);
+            }
+            
+            // Сбрасываем состояние кнопки
+            setTimeout(() => {
+                authButton.textContent = 'Команда готова!';
+                authButton.disabled = false;
+            }, 1000);
         });
-
+        
+        console.log('Script fully loaded and ready!');
     </script>
 
 </body>

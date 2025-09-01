@@ -510,27 +510,41 @@ class Bot:
         Обработчик данных от веб-приложения.
         """
         user = update.effective_user
-        logger.info(f"Получены данные от веб-приложения от пользователя {user.id}")
+        logger.info(f"📱 Получены данные от WebApp от пользователя {user.id} ({user.first_name})")
 
+        # Проверяем наличие web_app_data
         if not hasattr(update, 'message') or not hasattr(update.message, 'web_app_data'):
-            logger.error(f"Нет web_app_data в обновлении: {update}")
-            await update.message.reply_text('Ошибка: данные от Web App не получены')
+            logger.error(f"❌ Нет web_app_data в обновлении: {update}")
+            await update.message.reply_text('❌ Ошибка: данные от Web App не получены')
             return
 
-        is_valid_json, payload, error_message = validator.validate_web_app_data(update.message.web_app_data.data)
+        # Логируем сырые данные
+        raw_data = update.message.web_app_data.data
+        logger.info(f"📄 Сырые данные WebApp: {raw_data}")
+
+        # Валидация JSON
+        is_valid_json, payload, error_message = validator.validate_web_app_data(raw_data)
         if not is_valid_json:
-            logger.error(f"Не удалось разобрать данные от веб-приложения: {error_message}")
-            await update.message.reply_text('Не удалось прочитать данные от Web App')
+            logger.error(f"❌ Не удалось разобрать JSON: {error_message}")
+            await update.message.reply_text('❌ Не удалось прочитать данные от Web App')
             return
 
+        logger.info(f"✅ JSON парсинг успешен: {payload}")
+
+        # Определяем тип данных
         data_type = payload.get('type', '').strip()
         if 'section' in payload and 'webapp_url' in payload and not data_type:
             data_type = 'direct_webapp'
+            
+        logger.info(f"🏷️ Тип данных: '{data_type}'")
 
+        # Находим обработчик
         handler = self._get_web_app_handler(data_type)
         if handler:
+            logger.info(f"🏹 Найден обработчик: {handler.__name__}")
             await handler(update, context, payload)
         else:
+            logger.info(f"🔄 Обработчик не найден, используем обработчик авторизации")
             await self._handle_authorization(update, context, payload)
 
     def _get_web_app_handler(self, data_type: str):
