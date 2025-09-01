@@ -1,0 +1,61 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/verakoroleva/Desktop/@marketing"],
+      "description": "File system access for the marketing bot project"
+    },
+    "sqlite": {
+      "command": "npx", 
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "--db-path", "/Users/verakoroleva/Desktop/@marketing/bot_data.db"],
+      "description": "SQLite database for bot data persistence"
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      },
+      "description": "Web search capabilities for research and information gathering"
+    },
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "/Users/verakoroleva/Desktop/@marketing"],
+      "description": "Git repository access for version control operations"
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "GitHub integration for issue tracking and repository management"
+    }
+  },
+  "tools": {
+    "allowed": [
+      "read_file",
+      "write_file", 
+      "create_directory",
+      "list_directory",
+      "search_files",
+      "git_log",
+      "git_diff",
+      "git_status",
+      "sqlite_query",
+      "sqlite_execute",
+      "brave_web_search",
+      "github_create_issue",
+      "github_list_issues"
+    ],
+    "security": {
+      "read_only_paths": ["/etc", "/usr", "/bin"],
+      "forbidden_extensions": [".exe", ".bat", ".cmd"],
+      "max_file_size": "10MB"
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "/Users/verakoroleva/Desktop/@marketing/mcp.log"
+  }
+}

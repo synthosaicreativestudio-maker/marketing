@@ -393,7 +393,9 @@ class Bot:
         """
         Отправляет ответ пользователю.
         """
-        text = text.replace('annotations value', 'Вера')
+        # Remove any potential annotation artifacts from OpenAI response
+        if 'annotations value' in text:
+            text = text.replace('annotations value', '')
         logger.info(f"Отправка ответа пользователю. Наличие кнопок: {buttons is not None}. Сообщение: {text[:100]}...")
         reply_markup = InlineKeyboardMarkup(buttons) if buttons else self.create_persistent_keyboard()
         await update.message.reply_text(text, reply_markup=reply_markup)
@@ -636,10 +638,18 @@ class Bot:
         """
         Уведомляет администраторов.
         """
-        admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID', '').split(',') if s.strip()]
+        admin_ids_str = os.getenv('ADMIN_TELEGRAM_ID', '')
+        if not admin_ids_str.strip():
+            logger.warning('No admin IDs configured')
+            return
+            
+        # Remove duplicates and invalid IDs
+        admin_ids = list(set([s.strip() for s in admin_ids_str.split(',') if s.strip().isdigit()]))
+        
         for aid in admin_ids:
             try:
                 await context.bot.send_message(chat_id=int(aid), text=text)
+                logger.debug(f'Notified admin {aid}')
             except Exception as e:
                 logger.warning(f"Не удалось уведомить админа {aid}: {e}")
 
@@ -726,23 +736,32 @@ class Bot:
                 telegram_id = await self.run_blocking(lambda r=row: self.tickets_client.sheet.cell(r, 4).value)
 
             notified = set()
-            admin_ids = [s.strip() for s in os.getenv('ADMIN_TELEGRAM_ID', '').split(',') if s.strip()]
+            
+            # Получаем список админов с валидацией
+            admin_ids_str = os.getenv('ADMIN_TELEGRAM_ID', '')
+            admin_ids = list(set([s.strip() for s in admin_ids_str.split(',') if s.strip().isdigit()]))
+            
             for aid in admin_ids:
                 if aid and aid not in notified:
                     try:
                         await context.bot.send_message(chat_id=int(aid), text='Ваш вопрос переведен специалисту.')
                         notified.add(aid)
+                        logger.debug(f'Notified admin {aid} about ticket transfer')
                     except Exception as e:
                         logger.debug(f"Не удалось уведомить админа {aid}: {e}")
 
+            # Получаем список авторизованных пользователей
             auth_ids = self.get_authorized_ids() or set()
             for aid in auth_ids:
-                if aid and str(aid) != str(telegram_id) and aid not in notified:
+                if aid and str(aid) != str(telegram_id) and aid not in notified and str(aid).isdigit():
                     try:
                         await context.bot.send_message(chat_id=int(aid), text=f'Новый тикет для специалиста (строка {row}).')
                         notified.add(aid)
+                        logger.debug(f'Notified specialist {aid} about new ticket')
                     except Exception as e:
                         logger.debug(f"Не удалось уведомить специалиста {aid}: {e}")
+                        
+            logger.info(f'Notified {len(notified)} users about ticket in row {row}')
         except Exception as e:
             logger.error(f"Ошибка при уведомлении специалистов: {e}")
 
@@ -855,21 +874,69 @@ def main():
     """
     Основная функция для запуска бота.
     """
-    # Валидация конфигурации
+    logger.info("Starting Marketing Bot...")
+    
+    # Комплексная валидация конфигурации
+    logger.info("Validating configuration...")
+    
+    # Проверяем переменные окружения
+    env_valid, env_errors = validator.validate_environment()
+    if not env_valid:
+        logger.critical("Ошибки переменных окружения:")
+        for error in env_errors:
+            logger.critical(f"  - {error}")
+        return
+    
+    # Проверяем конфигурацию проекта
     is_valid, errors = validate_config()
     if not is_valid:
+        logger.critical("Ошибки конфигурации:")
         for error in errors:
-            logger.error(f"Ошибка конфигурации: {error}")
+            logger.critical(f"  - {error}")
+        return
+    
+    # Проверяем наличие обязательных файлов
+    required_files = ['credentials.json']
+    missing_files = [f for f in required_files if not os.path.exists(f)]
+    if missing_files:
+        logger.critical(f"Отсутствуют обязательные файлы: {missing_files}")
         return
 
-    # Проверка токена
+    # Проверяем токен
     token = os.getenv('TELEGRAM_TOKEN')
     if not token:
         logger.critical("TELEGRAM_TOKEN не найден! Бот не может быть запущен.")
         return
-
-    bot = Bot(token)
-    asyncio.run(bot.run())
+    
+    # Проверяем состояние внешних сервисов
+    logger.info("Checking external services...")
+    
+    # Проверяем OpenAI
+    if openai_client.is_available():
+        logger.info("✓ OpenAI API доступен")
+    else:
+        logger.warning("⚠ OpenAI API недоступен - AI функции отключены")
+    
+    logger.info("✓ Configuration validation completed successfully")
+    
+    # Инициализация и запуск бота
+    try:
+        bot = Bot(token)
+        logger.info("✓ Bot instance created successfully")
+        
+        # Очистка старых данных MCP контекста
+        from mcp_context_v7 import mcp_context
+        mcp_context.cleanup_and_save()
+        logger.info("✓ MCP context initialized")
+        
+        logger.info("🚀 Starting bot polling...")
+        asyncio.run(bot.run())
+        
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot stopped by user")
+    except Exception as e:
+        logger.critical(f"❌ Critical error during bot startup: {e}")
+        raise
 
 if __name__ == '__main__':
     main()

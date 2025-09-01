@@ -151,10 +151,30 @@ class DataValidator:
             value = os.getenv(var)
             if not value:
                 errors.append(f"Отсутствует {description} ({var})")
-            elif var == 'TELEGRAM_TOKEN' and not (len(value) > 40 and ':' in value):
-                errors.append("Некорректный формат токена бота")
-            elif 'SHEET_URL' in var and 'docs.google.com/spreadsheets' not in value:
-                errors.append(f"Некорректный URL Google Sheets для {description}")
+            elif var == 'TELEGRAM_TOKEN':
+                # More strict validation for Telegram token
+                if not (len(value) > 40 and ':' in value and value.count(':') == 1):
+                    errors.append("Некорректный формат токена бота")
+                # Check for potential exposed token
+                if value.startswith('"') and value.endswith('"'):
+                    logger.warning(f'{var} contains quotes - this may indicate exposed credentials')
+            elif 'SHEET_URL' in var:
+                if 'docs.google.com/spreadsheets' not in value:
+                    errors.append(f"Некорректный URL Google Sheets для {description}")
+                elif not value.startswith('https://'):
+                    errors.append(f"Небезопасный URL (HTTP вместо HTTPS) для {description}")
+        
+        # Additional security checks
+        admin_id = os.getenv('ADMIN_TELEGRAM_ID', '')
+        if admin_id:
+            admin_ids = [s.strip() for s in admin_id.split(',') if s.strip()]
+            invalid_ids = [aid for aid in admin_ids if not aid.isdigit()]
+            if invalid_ids:
+                errors.append(f"Некорректные admin ID: {invalid_ids}")
+        
+        openai_key = os.getenv('OPENAI_API_KEY', '')
+        if openai_key and not openai_key.startswith('sk-'):
+            errors.append("Некорректный формат OpenAI API key")
         
         return len(errors) == 0, errors
 

@@ -28,6 +28,8 @@ class OpenAIClient:
         self.client = None
         self.assistant_id = None
         self.semaphore = asyncio.Semaphore(OPENAI_CONFIG['MAX_CONCURRENT'])
+        self._last_request_time = 0
+        self._min_request_interval = 1.0  # Minimum 1 second between requests
         self._initialize_client()
     
     def _initialize_client(self):
@@ -98,6 +100,16 @@ class OpenAIClient:
         if not self.client or not self.assistant_id:
             return None
         
+        # Rate limiting
+        current_time = time.time()
+        time_since_last = current_time - self._last_request_time
+        if time_since_last < self._min_request_interval:
+            sleep_time = self._min_request_interval - time_since_last
+            logger.debug(f'Rate limiting: sleeping for {sleep_time:.2f} seconds')
+            await asyncio.sleep(sleep_time)
+        
+        self._last_request_time = time.time()
+        
         try:
             async with self.semaphore:
                 # 1. Добавляем сообщение пользователя
@@ -162,9 +174,32 @@ class OpenAIClient:
     
     async def get_or_create_thread(self, user_data: Dict[str, Any]) -> Optional[str]:
         """Получает существующий thread или создает новый"""
-        # TODO: Реализовать поиск существующего thread по user_data
-        # Пока просто создаем новый
-        return await self.create_thread()
+        telegram_id = user_data.get('telegram_id')
+        if not telegram_id:
+            logger.warning('No telegram_id provided for thread search')
+            return await self.create_thread()
+        
+        # Try to get existing thread from mcp_context
+        try:
+            from mcp_context_v7 import mcp_context
+            existing_thread = mcp_context.get_thread_for_user(telegram_id)
+            if existing_thread:
+                logger.info(f'Found existing thread {existing_thread} for user {telegram_id}')
+                return existing_thread
+        except Exception as e:
+            logger.debug(f'Could not get existing thread from MCP context: {e}')
+        
+        # Create new thread and register it
+        thread_id = await self.create_thread()
+        if thread_id and telegram_id:
+            try:
+                from mcp_context_v7 import mcp_context
+                mcp_context.register_thread(thread_id, telegram_id)
+                logger.info(f'Created and registered new thread {thread_id} for user {telegram_id}')
+            except Exception as e:
+                logger.debug(f'Could not register thread in MCP context: {e}')
+        
+        return thread_id
     
     def get_model(self) -> str:
         """Получает модель для использования"""

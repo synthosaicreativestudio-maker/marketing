@@ -162,13 +162,39 @@
             const code = codeInput.value.trim();
             const phone = phoneInput.value.replace(/\D/g, '');
 
-            if (code && phone.length === 11) {
+            if (!code) {
+                tg.showAlert('Пожалуйста, введите код партнёра.');
+                return;
+            }
+            
+            if (phone.length !== 11) {
+                tg.showAlert('Пожалуйста, введите корректный номер телефона.');
+                return;
+            }
+
+            try {
                 const data = JSON.stringify({ code, phone });
+                authButton.textContent = 'Отправляем...';
+                authButton.disabled = true;
+                
+                // Проверяем, что Telegram WebApp API доступен
+                if (typeof tg.sendData !== 'function') {
+                    throw new Error('Telegram WebApp API недоступен');
+                }
+                
                 tg.sendData(data);
+                
                 // Закрытие WebApp после отправки данных для лучшей совместимости
-                setTimeout(() => tg.close(), 500);
-            } else {
-                tg.showAlert('Пожалуйста, заполните все поля корректно.');
+                setTimeout(() => {
+                    if (typeof tg.close === 'function') {
+                        tg.close();
+                    }
+                }, 500);
+            } catch (error) {
+                console.error('Ошибка при отправке данных:', error);
+                authButton.textContent = 'Авторизоваться';
+                authButton.disabled = false;
+                tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
             }
         });
 

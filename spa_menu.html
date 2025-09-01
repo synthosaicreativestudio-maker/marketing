@@ -167,9 +167,26 @@
         // Отправка данных в бот
         function sendToBot(data) {
             try {
-                tg.sendData(JSON.stringify(data));
+                // Проверяем доступность Telegram API
+                if (typeof tg.sendData !== 'function') {
+                    console.error('Telegram WebApp API недоступен');
+                    tg.showAlert('Ошибка: Telegram API недоступен');
+                    return false;
+                }
+                
+                // Валидация данных
+                if (!data || typeof data !== 'object') {
+                    console.error('Некорректные данные для отправки:', data);
+                    tg.showAlert('Ошибка: некорректные данные');
+                    return false;
+                }
+                
+                const jsonData = JSON.stringify(data);
+                console.log('Отправка данных:', jsonData);
+                tg.sendData(jsonData);
                 return true;
-            } catch(e) {
+            } catch(error) {
+                console.error('Ошибка при отправке данных:', error);
                 tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
                 return false;
             }

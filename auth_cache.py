@@ -1,8 +1,10 @@
 """
 Модуль для управления кэшем авторизации
-Объединяет все кэши в единую систему
+Объединяет все кэши в единую систему с поддержкой персистентности
 """
 
+import json
+import os
 import time
 import logging
 from typing import Set, Dict, Optional, Tuple
@@ -11,9 +13,9 @@ from config import AUTH_CONFIG
 logger = logging.getLogger(__name__)
 
 class AuthCache:
-    """Единый кэш для авторизации пользователей"""
+    """Единый кэш для авторизации пользователей с поддержкой персистентности"""
     
-    def __init__(self):
+    def __init__(self, persistence_file: str = 'auth_cache.json'):
         self.authorized_ids: Set[str] = set()
         self.auth_timestamp: float = 0
         self.user_cache: Dict[int, Dict] = {}  # user_id -> {is_authorized, timestamp, partner_code, phone}
@@ -24,6 +26,55 @@ class AuthCache:
         self.user_cache_ttl = AUTH_CONFIG['USER_CACHE_TTL']
         self.max_attempts = AUTH_CONFIG['MAX_ATTEMPTS']
         self.block_durations = AUTH_CONFIG['BLOCK_DURATIONS']
+        
+        # Персистентность
+        self.persistence_file = persistence_file
+        self._load_from_file()
+    
+    def _load_from_file(self):
+        """Загружает данные кэша из файла"""
+        if not os.path.exists(self.persistence_file):
+            return
+            
+        try:
+            with open(self.persistence_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Восстанавливаем авторизованные ID
+            self.authorized_ids = set(data.get('authorized_ids', []))
+            self.auth_timestamp = data.get('auth_timestamp', 0)
+            
+            # Восстанавливаем кэш пользователей
+            user_cache_raw = data.get('user_cache', {})
+            self.user_cache = {int(k): v for k, v in user_cache_raw.items()}
+            
+            # Восстанавливаем неудачные попытки
+            failed_attempts_raw = data.get('failed_attempts', {})
+            self.failed_attempts = {int(k): v for k, v in failed_attempts_raw.items()}
+            
+            logger.info(f'Кэш авторизации загружен: {len(self.authorized_ids)} авторизованных пользователей')
+            
+        except Exception as e:
+            logger.warning(f'Ошибка загрузки кэша из {self.persistence_file}: {e}')
+    
+    def _save_to_file(self):
+        """Сохраняет данные кэша в файл"""
+        try:
+            data = {
+                'authorized_ids': list(self.authorized_ids),
+                'auth_timestamp': self.auth_timestamp,
+                'user_cache': {str(k): v for k, v in self.user_cache.items()},
+                'failed_attempts': {str(k): v for k, v in self.failed_attempts.items()},
+                'last_saved': time.time()
+            }
+            
+            with open(self.persistence_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                
+            logger.debug(f'Кэш авторизации сохранён в {self.persistence_file}')
+            
+        except Exception as e:
+            logger.error(f'Ошибка сохранения кэша в {self.persistence_file}: {e}')
     
     def get_authorized_ids(self) -> Optional[Set[str]]:
         """Получает кэшированный список авторизованных ID"""
@@ -39,6 +90,7 @@ class AuthCache:
         self.authorized_ids = set(str(i) for i in ids if i)
         self.auth_timestamp = time.time()
         logger.info(f'Кэш авторизованных пользователей обновлён: {len(self.authorized_ids)} записей')
+        self._save_to_file()
     
     def is_user_authorized(self, user_id: int) -> Optional[bool]:
         """Проверяет авторизацию пользователя из кэша"""
@@ -64,6 +116,7 @@ class AuthCache:
             'partner_code': partner_code,
             'phone': phone
         }
+        self._save_to_file()
     
     def get_user_data(self, user_id: int) -> Optional[Dict]:
         """Получает данные пользователя из кэша"""
@@ -143,6 +196,7 @@ class AuthCache:
         self.user_cache.clear()
         self.failed_attempts.clear()
         logger.info('Все кэши авторизации очищены')
+        self._save_to_file()
     
     def cleanup_expired_data(self):
         """Удаляет устаревшие данные из кэшей"""

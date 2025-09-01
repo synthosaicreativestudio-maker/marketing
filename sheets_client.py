@@ -157,22 +157,15 @@ class GoogleSheetsClient:
             all_statuses = self.sheet.col_values(4)  # Колонка D - статусы авторизации
             all_ids = self.sheet.col_values(5)       # Колонка E - Telegram ID
             
-            logger.info(f"DEBUG: Found {len(all_statuses)} statuses and {len(all_ids)} IDs")
-            logger.info(f"DEBUG: Statuses (col D): {all_statuses[:5]}...")  # Первые 5 статусов
-            logger.info(f"DEBUG: IDs (col E): {all_ids[:5]}...")           # Первые 5 ID
-            
             authorized_ids = set()
             for i in range(1, min(len(all_statuses), len(all_ids))):  # Пропускаем заголовок
                 status = str(all_statuses[i]).strip() if i < len(all_statuses) else ""
                 user_id = str(all_ids[i]).strip() if i < len(all_ids) else ""
                 
-                logger.info(f"DEBUG: Row {i+1}: status='{status}', id='{user_id}'")
-                
                 if (status == "авторизован" and user_id):
                     authorized_ids.add(user_id)
-                    logger.info(f"DEBUG: Added authorized user {user_id} from row {i+1}")
             
-            logger.info(f"DEBUG: Total authorized users found: {len(authorized_ids)}")
+            logger.info(f"Found {len(authorized_ids)} authorized users")
             return authorized_ids
         except Exception as e:
             logger.error(f"Error getting all authorized user IDs: {e}")
