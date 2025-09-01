@@ -136,9 +136,17 @@
             <div class="divider"></div>
             
             <!-- Статическая HTML кнопка авторизации -->
-            <button id="static_auth_button" class="auth-button">
+            <button id="static_auth_button" class="auth-button" onclick="testButtonClick()">
                 Авторизоваться
             </button>
+            
+            <!-- Диагностическая информация -->
+            <div id="debug_info" style="margin-top: 10px; padding: 10px; background: #333; color: #fff; font-size: 12px; border-radius: 5px;">
+                <div>🔍 Диагностика:</div>
+                <div id="tg_status">Telegram WebApp: проверяется...</div>
+                <div id="button_status">Кнопка: проверяется...</div>
+                <div id="click_status">Клик: не было</div>
+            </div>
             
             <div style="display:flex;justify-content:flex-start;align-items:center;width:100%">
                 <div style="color:#d4af37;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Produced by SYNTHOS AI®</div>
@@ -167,10 +175,18 @@
         try {
             // ✅ ДИАГНОСТИКА: Проверяем доступность Telegram WebApp
             console.log('Telegram WebApp объект:', typeof tg !== 'undefined' ? 'доступен' : 'НЕ ДОСТУПЕН');
+            
+            // Обновляем диагностику на странице
             if (typeof tg !== 'undefined') {
                 console.log('tg.sendData:', typeof tg.sendData);
                 console.log('tg.close:', typeof tg.close);
                 console.log('tg.MainButton:', typeof tg.MainButton);
+                
+                document.getElementById('tg_status').textContent = 'Telegram WebApp: ✅ доступен';
+                document.getElementById('button_status').textContent = 'Кнопка: ✅ найдена';
+            } else {
+                document.getElementById('tg_status').textContent = 'Telegram WebApp: ❌ НЕ ДОСТУПЕН';
+                document.getElementById('button_status').textContent = 'Кнопка: ❌ WebApp недоступен';
             }
             
             tg.ready();
@@ -240,6 +256,31 @@
             } else {
                 console.error('HTML кнопка не найдена!');
             }
+        }
+        
+        // ✅ Функция для тестирования кнопки
+        function testButtonClick() {
+            console.log('🎯 Кнопка нажата через onclick!');
+            document.getElementById('click_status').textContent = 'Клик: ✅ было нажатие!';
+            
+            // Проверяем доступность WebApp
+            if (typeof tg === 'undefined') {
+                console.error('❌ tg не определен!');
+                document.getElementById('tg_status').textContent = 'Telegram WebApp: ❌ НЕ ДОСТУПЕН';
+                alert('Telegram WebApp недоступен! Откройте через бота в Telegram.');
+                return;
+            }
+            
+            if (typeof tg.sendData !== 'function') {
+                console.error('❌ tg.sendData не функция!');
+                document.getElementById('tg_status').textContent = 'Telegram WebApp: ❌ sendData недоступен';
+                alert('Функция отправки недоступна!');
+                return;
+            }
+            
+            console.log('✅ WebApp доступен, вызываю sendData()');
+            document.getElementById('tg_status').textContent = 'Telegram WebApp: ✅ доступен';
+            sendData();
         }
         
         // Принудительно показываем кнопку
