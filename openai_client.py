@@ -7,6 +7,7 @@ import os
 import time
 import logging
 import asyncio
+import functools
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -45,6 +46,26 @@ class OpenAIClient:
             logger.info('OpenAI клиент инициализирован')
         except Exception as e:
             logger.error(f'Ошибка инициализации OpenAI клиента: {e}')
+
+    async def _call_thread(self, func, *args, retries: Optional[int] = None, backoff: Optional[float] = None, timeout: Optional[float] = None, **kwargs):
+        """Run a blocking callable in a thread with retries and exponential backoff.
+
+        func may be a bound method; kwargs are supported.
+        """
+        retries = retries if retries is not None else OPENAI_CONFIG.get('MAX_RETRY', 3)
+        backoff = backoff if backoff is not None else OPENAI_CONFIG.get('BACKOFF_BASE', 0.5)
+
+        for attempt in range(1, retries + 1):
+            try:
+                call = functools.partial(func, *args, **kwargs)
+                return await asyncio.wait_for(asyncio.to_thread(call), timeout=timeout)
+            except Exception as e:
+                logger.warning(f'OpenAI call failed (attempt {attempt}/{retries}): {e}')
+                if attempt == retries:
+                    logger.error(f'OpenAI call failed after {retries} attempts: {e}')
+                    raise
+                # exponential backoff
+                await asyncio.sleep(backoff * (2 ** (attempt - 1)))
     
     def is_available(self) -> bool:
         """Проверяет доступность OpenAI API"""
@@ -66,9 +87,7 @@ class OpenAIClient:
         
         try:
             async with self.semaphore:
-                thread = await asyncio.to_thread(
-                    self.client.beta.threads.create
-                )
+                thread = await self._call_thread(self.client.beta.threads.create, retries=self.get_max_retry(), backoff=self.get_backoff_base(), timeout=15)
                 return thread.id
         except Exception as e:
             logger.error(f'Ошибка создания thread: {e}')
@@ -82,19 +101,10 @@ class OpenAIClient:
         try:
             async with self.semaphore:
                 # 1. Добавляем сообщение пользователя
-                await asyncio.to_thread(
-                    self.client.beta.threads.messages.create,
-                    thread_id=thread_id,
-                    role="user",
-                    content=text
-                )
+                await self._call_thread(self.client.beta.threads.messages.create, thread_id=thread_id, role="user", content=text, retries=self.get_max_retry(), backoff=self.get_backoff_base(), timeout=15)
                 
                 # 2. Запускаем ассистента
-                run = await asyncio.to_thread(
-                    self.client.beta.threads.runs.create,
-                    thread_id=thread_id,
-                    assistant_id=self.assistant_id
-                )
+                run = await self._call_thread(self.client.beta.threads.runs.create, thread_id=thread_id, assistant_id=self.assistant_id, retries=self.get_max_retry(), backoff=self.get_backoff_base(), timeout=30)
                 
                 # 3. Ждем завершения
                 response = await self._wait_for_run_completion(thread_id, run.id, max_wait)
@@ -114,11 +124,7 @@ class OpenAIClient:
         
         while time.time() - start_time < max_wait:
             try:
-                run_status = await asyncio.to_thread(
-                    self.client.beta.threads.runs.retrieve,
-                    thread_id=thread_id,
-                    run_id=run_id
-                )
+                run_status = await self._call_thread(self.client.beta.threads.runs.retrieve, thread_id=thread_id, run_id=run_id, retries=self.get_max_retry(), backoff=self.get_backoff_base(), timeout=10)
                 
                 if run_status.status == "completed":
                     return True
@@ -138,10 +144,7 @@ class OpenAIClient:
     async def _extract_assistant_response(self, thread_id: str) -> Optional[str]:
         """Извлекает ответ ассистента из thread"""
         try:
-            messages = await asyncio.to_thread(
-                self.client.beta.threads.messages.list,
-                thread_id=thread_id
-            )
+            messages = await self._call_thread(self.client.beta.threads.messages.list, thread_id=thread_id, retries=self.get_max_retry(), backoff=self.get_backoff_base(), timeout=10)
             
             # Ищем последний ответ ассистента
             for msg in reversed(messages.data):

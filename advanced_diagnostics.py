@@ -480,7 +480,7 @@ def save_report(results):
     try:
         with open('diagnostic_report.json', 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
-        print(f"\n💾 Отчет сохранен в diagnostic_report.json")
+        print("\n💾 Отчет сохранен в diagnostic_report.json")
     except Exception as e:
         print(f"\n❌ Ошибка сохранения отчета: {e}")
 

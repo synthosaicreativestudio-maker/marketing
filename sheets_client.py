@@ -1,7 +1,7 @@
 import logging
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from error_handler import ErrorHandler, safe_execute
+# Removed unused imports (previously: ErrorHandler, safe_execute)
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ class GoogleSheetsClient:
 
     def find_user_by_credentials(self, code: str, phone: str) -> int | None:
         """Finds a user by partner code and phone, returns the row number if found."""
-        if not self.sheet: 
+        if not self.sheet:
             logger.error('Google Sheets not connected')
             return None
         try:
@@ -100,7 +100,8 @@ class GoogleSheetsClient:
                     cleaned_sheet_phone = ''.join(filter(str.isdigit, sheet_phone))
                     cleaned_input_phone = ''.join(filter(str.isdigit, phone))
                     
-                    logger.info(f'Row {i+1}: code="{sheet_code}" vs "{code}", phone="{cleaned_sheet_phone}" vs "{cleaned_input_phone}"')
+                    logger.info(f'Row {i+1}: code compare: "{sheet_code}" vs "{code}"')
+                    logger.info(f'Row {i+1}: phone compare: "{cleaned_sheet_phone}" vs "{cleaned_input_phone}"')
                     
                     if sheet_code == code and cleaned_sheet_phone == cleaned_input_phone:
                         logger.info(f'MATCH FOUND at row {i+1}')
@@ -113,7 +114,7 @@ class GoogleSheetsClient:
 
     def update_user_auth_status(self, row_to_update: int, user_id: int):
         """Updates the auth status and Telegram ID for a user in a specific row."""
-        if not self.sheet: 
+        if not self.sheet:
             logger.error('Google Sheets not connected')
             return
         try:
@@ -150,7 +151,7 @@ class GoogleSheetsClient:
             return []
 
     def get_all_authorized_user_ids(self) -> set[str]:
-        """Returns a set of unique, non-empty Telegram IDs from column E for users with 'авторизован' status in column D."""
+        """Return set of non-empty Telegram IDs from column E for users with 'авторизован' in column D."""
         if not self.sheet: return set()
         try:
             all_statuses = self.sheet.col_values(4)  # Колонка D - статусы авторизации
@@ -213,7 +214,7 @@ class GoogleSheetsClient:
             if row is None and code is not None:
                 row = self.find_row_by_code(code)
             if not row:
-                logger.error(f"Cannot set thread_id; ticket not found for row={row} code={code}")
+                logger.error(f"Cannot set thread_id - ticket not found for row={row} code={code}")
                 return False
             self.sheet.update_cell(row, 8, thread_id or '')
             return True
@@ -283,7 +284,8 @@ class GoogleSheetsClient:
         return False
 
     # --- Ticket sheet helpers ---
-    def upsert_ticket(self, telegram_id: str, code: str, phone: str, fio: str, text: str, status: str = 'в работе', sender_type: str = 'user', handled: bool = False):
+    def upsert_ticket(self, telegram_id: str, code: str, phone: str, fio: str, text: str,
+                      status: str = 'в работе', sender_type: str = 'user', handled: bool = False):
         """Добавляет или обновляет запись обращения для пользователя в таблице обращений.
         НОВАЯ ЛОГИКА:
         - Новые обращения (новые пользователи) → новые строки
@@ -337,7 +339,10 @@ class GoogleSheetsClient:
                     current_status = self.sheet.cell(existing_row, 6).value or ''
                     if current_status.lower() in ('выполнено', 'completed', 'done'):
                         self.sheet.update_cell(existing_row, 6, 'в работе')
-                        logger.info(f'Status changed from "{current_status}" to "в работе" for user {telegram_id} (repeated request)')
+                        logger.info(
+                            f'Status changed from "{current_status}" to "в работе" '
+                            f'for user {telegram_id} (repeated)'
+                        )
                 
                 # Обновляем время последнего обновления
                 self.sheet.update_cell(existing_row, 8, ts)
@@ -392,25 +397,41 @@ class GoogleSheetsClient:
             return False
         
         try:
-            # Устанавливаем ширину колонки E (текст_обращений) - 600px
-            self.sheet.set_column_width(5, width_pixels)  # Колонка E
-            
-            # Устанавливаем ширину колонки G (поле ответа специалиста) - 400px
-            self.sheet.set_column_width(7, 400)  # Колонка G
-            
-            # Устанавливаем высоту строк - 100px
-            self.sheet.set_row_height(1, row_height_pixels)  # Заголовок
-            
-            # Устанавливаем высоту для всех строк с данными
-            all_values = self.sheet.get_all_values()
-            for row_num in range(2, len(all_values) + 1):
-                self.sheet.set_row_height(row_num, row_height_pixels)
-            
-            logger.info(f'Установлена ширина {width_pixels}px для колонки E и {400}px для колонки G, высота {row_height_pixels}px для строк')
+            # Some gspread Worksheet implementations don't implement UI helpers like
+            # set_column_width / set_row_height. Detect support first and skip if
+            # unavailable to avoid raising AttributeError repeatedly in logs.
+            if hasattr(self.sheet, 'set_column_width'):
+                try:
+                    # Устанавливаем ширину колонки E (текст_обращений)
+                    self.sheet.set_column_width(5, width_pixels)  # Колонка E
+                    # Устанавливаем ширину колонки G (поле ответа специалиста)
+                    self.sheet.set_column_width(7, 400)  # Колонка G
+                except Exception as e:
+                    logger.warning(f'Could not set column widths using worksheet methods: {e}')
+            else:
+                logger.info('Worksheet does not support set_column_width(); skipping column resize')
+
+            if hasattr(self.sheet, 'set_row_height'):
+                try:
+                    # Устанавливаем высоту заголовка и всех строк с данными
+                    self.sheet.set_row_height(1, row_height_pixels)  # Заголовок
+                    all_values = self.sheet.get_all_values()
+                    for row_num in range(2, len(all_values) + 1):
+                        try:
+                            self.sheet.set_row_height(row_num, row_height_pixels)
+                        except Exception:
+                            # Individual rows may fail; keep going
+                            continue
+                except Exception as e:
+                    logger.warning(f'Could not set row heights using worksheet methods: {e}')
+            else:
+                logger.info('Worksheet does not support set_row_height(); skipping row height resize')
+
+            logger.info(f'Column/row size operations completed (some operations may be no-ops on this worksheet)')
             return True
             
         except Exception as e:
-            logger.error(f'Ошибка при установке размеров: {e}')
+            logger.warning(f'Ошибка при установке размеров (ignored): {e}')
             return False
 
     def setup_status_dropdown(self):

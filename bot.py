@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 
 """
 Улучшенная версия бота с исправленной архитектурой.
@@ -14,6 +14,7 @@ import os
 import json
 import time
 import asyncio
+import functools
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 import telegram
@@ -24,12 +25,42 @@ from sheets_client import GoogleSheetsClient
 from config import SECTIONS, get_web_app_url, get_ticket_status, SUBSECTIONS
 from auth_cache import auth_cache
 from openai_client import openai_client
+from mcp_context_v7 import mcp_context
+from error_handler import safe_execute
+from performance_monitor import monitor_performance
 
 # ✅ Загрузка .env файла
 load_dotenv()
 if not os.getenv('TELEGRAM_TOKEN') and os.path.exists('bot.env'):
     load_dotenv('bot.env', override=True)
 
+
+# Helper to run blocking IO in a thread with timeout, retries and exponential backoff
+async def run_blocking(func, *args, timeout: int = 15, retries: int = 3, backoff: float = 0.5, **kwargs):
+    """Run a blocking function in a separate thread with timeout, retries and exponential backoff.
+
+    Usage: await run_blocking(some_blocking_fn, arg1, arg2, timeout=10, retries=3, backoff=0.5)
+    """
+    if retries is None or retries < 1:
+        retries = 1
+
+    for attempt in range(1, retries + 1):
+        try:
+            call = functools.partial(func, *args, **kwargs)
+            return await asyncio.wait_for(asyncio.to_thread(call), timeout=timeout)
+        except asyncio.TimeoutError as te:
+            logger.warning(f'Blocking call timed out (attempt {attempt}/{retries}): {te}')
+            if attempt == retries:
+                raise
+            await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+        except Exception as e:
+            logger.warning(f'Blocking call failed (attempt {attempt}/{retries}): {e}')
+            if attempt == retries:
+                raise
+            await asyncio.sleep(backoff * (2 ** (attempt - 1)))
+
+@safe_execute('menu_command')
+@monitor_performance('menu_command')
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /menu - показывает persistent keyboard с кнопкой личного кабинета"""
     # Показываем persistent keyboard с кнопкой личного кабинета
@@ -39,6 +70,8 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=persistent_keyboard
     )
 
+@safe_execute('handle_menu_callback')
+@monitor_performance('handle_menu_callback')
 async def handle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -79,12 +112,12 @@ else:
     logger.info('SHEET_URL не задан или credentials.json отсутствует — Google Sheets отключён')
 # Утилиты
 def is_admin(user_id: int) -> bool:
-    # Временно добавляем ваш ID для тестирования
-    hardcoded_admins = ['284355186']  # Ваш ID из логов
+    """Проверяет, является ли пользователь админом, на основе переменной окружения."""
     admin_ids = os.getenv('ADMIN_TELEGRAM_ID', '')
+    if not admin_ids:
+        return False
     admin_list = [s.strip() for s in admin_ids.split(',') if s.strip()]
-    all_admins = hardcoded_admins + admin_list
-    return str(user_id) in all_admins
+    return str(user_id) in admin_list
 
 def create_persistent_keyboard():
     """Создаёт постоянную reply клавиатуру с кнопкой menu, которая сразу открывает миниапп"""
@@ -100,6 +133,7 @@ def create_auth_button(url: str):
     """Создаёт кнопку для авторизации"""
     return [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=url))]]
 
+@monitor_performance('is_user_authorized')
 async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Проверяет авторизацию пользователя. Использует единый кэш для оптимизации."""
     # Сначала проверяем кэш
@@ -110,16 +144,16 @@ async def is_user_authorized(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
     
     # Получаем актуальные данные из Google Sheets
     try:
-        authorized_ids = await asyncio.to_thread(get_authorized_ids)
+        authorized_ids = await run_blocking(get_authorized_ids)
         if authorized_ids is None:
             logger.warning(f'No access to sheets for user {user_id}')
             return False
-            
+
         is_auth = str(user_id) in authorized_ids
-            
+
         # Обновляем кэш
         auth_cache.set_user_authorized(user_id, is_auth)
-            
+
         logger.info(f'User {user_id} authorization result: {is_auth}')
         return is_auth
 
@@ -161,25 +195,16 @@ if TICKETS_SHEET_URL and os.path.exists('credentials.json'):
     try:
         tickets_client = GoogleSheetsClient(credentials_path='credentials.json', sheet_url=TICKETS_SHEET_URL, worksheet_name=TICKETS_WORKSHEET)
         
-        # Устанавливаем фиксированные размеры для колонки с обращений (колонка E: ширина 600px, высота строк 100px)
-        if tickets_client and tickets_client.sheet:
-            try:
-                tickets_client.set_tickets_column_width(600, 100)
-                logger.info('Установлены размеры: ширина 600px, высота 100px для колонки обращений')
-            except Exception as e:
-                logger.warning(f'Не удалось установить размеры колонок: {e}')
+    # Примечание: не выполняем операции UI/resize на этапе импорта модуля
+    # (могут быть блокирующими у некоторых реализаций Worksheet). Размеры
+    # будут применены безопасно в `main()`.
     except Exception as e:
         logger.error(f'Ошибка инициализации tickets GoogleSheetsClient: {e}')
 else:
     logger.info('TICKETS_SHEET_URL не задан или credentials.json отсутствует — таблица обращений отключена')
 
-# Система мониторинга ответов операторов
-
-
-
-
-
-
+@safe_execute('handle_callback_query')
+@monitor_performance('handle_callback_query')
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -204,12 +229,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         telegram_id = None
         if tickets_client and tickets_client.sheet:
-            telegram_id = await asyncio.to_thread(lambda r: tickets_client.sheet.cell(r, 4).value, row)
+            telegram_id = await run_blocking(lambda r=row: tickets_client.sheet.cell(r, 4).value)
     except Exception:
         telegram_id = None
     if action == 'transfer':
         try:
-            ok = await asyncio.to_thread(tickets_client.set_ticket_status, row, None, 'в работе')
+            ok = await run_blocking(tickets_client.set_ticket_status, row, None, 'в работе')
         except Exception as e:
             logger.error(f'Error setting ticket status to in progress: {e}')
             ok = False
@@ -222,7 +247,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             for aid in admin_ids:
                 if aid and aid not in notified:
                     try:
-                        await context.bot.send_message(chat_id=int(aid), text=f'Ваш вопрос переведен специалисту.')
+                        await context.bot.send_message(chat_id=int(aid), text='Ваш вопрос переведен специалисту.')
                         notified.add(aid)
                     except Exception as e:
                         logger.debug(f'Не удалось уведомить admin {aid}: {e}')
@@ -241,7 +266,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await query.edit_message_text('Не удалось изменить статус (ошибка записи).')
     elif action == 'done':
         try:
-            ok = await asyncio.to_thread(tickets_client.set_ticket_status, row, None, 'выполнено')
+            ok = await run_blocking(tickets_client.set_ticket_status, row, None, 'выполнено')
         except Exception as e:
             logger.error(f'Error setting ticket status to done: {e}')
             ok = False
@@ -253,7 +278,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await query.edit_message_text('Неизвестное действие.')
     
-
+@safe_execute('handle_message')
+@monitor_performance('handle_message')
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     message_id = update.message.message_id
@@ -277,7 +303,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             phone = context.user_data.get('phone', '')
             fio = f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
             
-            await asyncio.to_thread(
+            await run_blocking(
                 tickets_client.upsert_ticket, 
                 str(telegram_id), code, phone, fio, 
                 text, 'в работе', 'user', False
@@ -303,14 +329,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'telegram_id': str(update.effective_user.id)
             }
             
+            # Get or create a thread via OpenAI client and also register it in local MCP context
             thread_id = await openai_client.get_or_create_thread(user_data)
+            if thread_id:
+                try:
+                    mcp_context.register_thread(thread_id, user_data['telegram_id'])
+                except Exception:
+                    # non-fatal: context registration shouldn't break flow
+                    logger.debug('Failed to register thread in MCP context')
             if not thread_id:
                 await update.message.reply_text('Ошибка создания thread. Попробуйте позже.', reply_markup=persistent_keyboard)
                 return
             
             # Отправляем сообщение в OpenAI Assistant
             logger.info(f'Sending message to OpenAI Assistant thread {thread_id}: {text[:100]}...')
+            # Append user message to local MCP context before sending
+            try:
+                if thread_id:
+                    mcp_context.append_message(thread_id, 'user', text)
+            except Exception:
+                logger.debug('Failed to append user message to MCP context')
+
             assistant_msg = await openai_client.send_message(thread_id, text)
+
+            # Append assistant response to local MCP context (best-effort)
+            try:
+                if thread_id and assistant_msg:
+                    mcp_context.append_message(thread_id, 'assistant', str(assistant_msg))
+                    # prune to keep memory bounded
+                    mcp_context.prune_thread(thread_id, keep=80)
+            except Exception:
+                logger.debug('Failed to append assistant message to MCP context')
             logger.info(f'Received response from Assistant: {assistant_msg[:100] if assistant_msg else "None"}...')
             
             if not assistant_msg:
@@ -323,10 +372,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 code = context.user_data.get('partner_code', '')
                 row = None
                 if code and tickets_client:
-                    row = tickets_client.find_row_by_code(code)
+                    row = await run_blocking(tickets_client.find_row_by_code, code)
                 if not row and tickets_client:
                     try:
-                        cell = tickets_client.sheet.find(str(update.effective_user.id), in_column=4)
+                        cell = await run_blocking(tickets_client.sheet.find, str(update.effective_user.id), in_column=4)
                         row = cell.row if cell else None
                     except Exception:
                         row = None
@@ -339,8 +388,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]
                     ]
             except Exception as e:
-                logger.warning(f'Failed to create ticket buttons: {e}')
-                buttons = None
+                # Если не удалось создать кнопки на основе строки, пытаемся найти строку по Telegram ID в фоне
+                logger.warning(f'Failed to create ticket buttons during initial attempt: {e}')
+                try:
+                    cell = await run_blocking(tickets_client.sheet.find, str(update.effective_user.id), in_column=4)
+                    row = cell.row if cell else None
+                except Exception:
+                    row = None
+                if row:
+                    try:
+                        menu_url = get_web_app_url('SPA_MENU')
+                        buttons = [
+                            [InlineKeyboardButton('Перевести специалисту', callback_data=f't:transfer:{row}'), InlineKeyboardButton('Выполнено', callback_data=f't:done:{row}')],
+                            [InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]
+                        ]
+                    except Exception as e2:
+                        logger.warning(f'Failed to create ticket buttons after background lookup: {e2}')
+                        buttons = None
+                else:
+                    buttons = None
             
             # Извлекаем текст из ответа ассистента
             def extract_text(obj):
@@ -384,17 +450,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Заменяем нежелательные паттерны
             assistant_msg = assistant_msg.replace('annotations value', 'Вера')
             logger.info(f'Sending response to user. Has buttons: {buttons is not None}. Message: {assistant_msg[:100]}...')
-            logger.info(f'DEBUG: About to send message via reply_text')
+            logger.info('DEBUG: About to send message via reply_text')
             
             if buttons:
                 # Send message with inline action buttons; persistent keyboard remains available to the user
-                logger.info(f'DEBUG: Sending with buttons')
+                logger.info('DEBUG: Sending with buttons')
                 await update.message.reply_text(assistant_msg, reply_markup=InlineKeyboardMarkup(buttons))
             else:
-                logger.info(f'DEBUG: Sending with persistent keyboard')
+                logger.info('DEBUG: Sending with persistent keyboard')
                 await update.message.reply_text(assistant_msg, reply_markup=persistent_keyboard)
             
-            logger.info(f'DEBUG: Message sent successfully')
+            logger.info('DEBUG: Message sent successfully')
             
             # Логируем ответ ассистента в таблицу обращений
             try:
@@ -404,7 +470,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     phone = context.user_data.get('phone', '')
                     fio = f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
                     
-                    await asyncio.to_thread(
+                    await run_blocking(
                         tickets_client.upsert_ticket, 
                         str(telegram_id), code, phone, fio, 
                         assistant_msg, 'в работе', 'assistant', False
@@ -428,6 +494,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f'Completed processing message {message_id} from user {user.id}')
 
 # Обработчики
+@safe_execute('start')
+@monitor_performance('start')
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     logger.info(f'/start от {user.id} ({user.first_name})')
@@ -522,10 +590,12 @@ def validate_payload(payload: dict) -> tuple[bool, str]:
         if len(phone.strip()) < 10:
             logger.warning(f'Phone too short: {phone}')
             return False, "Номер телефона слишком короткий"
-        
-        logger.info(f'Payload validation successful')
+
+        logger.info('Payload validation successful')
         return True, ""
 
+@safe_execute('web_app_data')
+@monitor_performance('web_app_data')
 async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает данные от веб-приложения. Определяет тип данных и направляет в соответствующий обработчик."""
     user = update.effective_user
@@ -564,21 +634,23 @@ async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data_type = 'direct_webapp'
         
     if data_type == 'menu_selection':
-        logger.info(f'Routing to menu selection handler')
+        logger.info('Routing to menu selection handler')
         await handle_menu_selection(update, context, payload)
     elif data_type == 'subsection_selection':
-        logger.info(f'Routing to subsection selection handler')
+        logger.info('Routing to subsection selection handler')
         await handle_subsection_selection(update, context, payload)
     elif data_type == 'back_to_main':
-        logger.info(f'Routing back to main menu')
+        logger.info('Routing back to main menu')
         await handle_back_to_main(update, context)
     elif data_type == 'direct_webapp':
-        logger.info(f'Routing to direct webapp handler')
+        logger.info('Routing to direct webapp handler')
         await handle_direct_webapp(update, context, payload)
     else:
-        logger.info(f'Routing to authorization handler')
+        logger.info('Routing to authorization handler')
         await handle_authorization(update, context, payload)
 
+@safe_execute('handle_menu_selection')
+@monitor_performance('handle_menu_selection')
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор раздела меню от пользователя."""
     user = update.effective_user
@@ -595,12 +667,12 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
             code = context.user_data.get('partner_code', '')
             phone = context.user_data.get('phone', '')
             fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
-        
-        await asyncio.to_thread(
-            tickets_client.upsert_ticket, 
-            telegram_id, code, phone, fio, 
-            f"Запрос: {section}", 'в работе', 'user', False
-        )
+
+            await run_blocking(
+                tickets_client.upsert_ticket, 
+                telegram_id, code, phone, fio, 
+                f'Запрос: {section}', 'в работе', 'user', False
+            )
     except Exception as e:
         logger.error(f'Не удалось записать выбор раздела в tickets: {e}')
 
@@ -617,6 +689,8 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception:
         pass
 
+@safe_execute('handle_subsection_selection')
+@monitor_performance('handle_subsection_selection')
 async def handle_subsection_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает выбор подраздела от пользователя."""
     user = update.effective_user
@@ -634,10 +708,10 @@ async def handle_subsection_selection(update: Update, context: ContextTypes.DEFA
             code = context.user_data.get('partner_code', '')
             phone = context.user_data.get('phone', '')
             fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
-            
+
             ticket_text = f"{section} → {subsection}"
-            
-            await asyncio.to_thread(
+
+            await run_blocking(
                 tickets_client.upsert_ticket, 
                 telegram_id, code, phone, fio, 
                 ticket_text, 'в работе', 'user', False
@@ -663,6 +737,8 @@ async def handle_subsection_selection(update: Update, context: ContextTypes.DEFA
     except Exception:
         pass
 
+@safe_execute('handle_back_to_main')
+@monitor_performance('handle_back_to_main')
 async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает возврат в главное меню."""
     user = update.effective_user
@@ -679,6 +755,8 @@ async def handle_back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE
     persistent_keyboard = create_persistent_keyboard()
     await update.message.reply_text('Используйте кнопку "🚀 Личный кабинет" для быстрого доступа:', reply_markup=persistent_keyboard)
 
+@safe_execute('handle_direct_webapp')
+@monitor_performance('handle_direct_webapp')
 async def handle_direct_webapp(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает прямое открытие мини-приложения без промежуточных кнопок."""
     user = update.effective_user
@@ -696,6 +774,8 @@ async def handle_direct_webapp(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = [[InlineKeyboardButton(f'📝 Открыть {section}', web_app=WebAppInfo(url=webapp_url))]]
     await update.message.reply_text(f'💼 Открываю раздел: {section}', reply_markup=InlineKeyboardMarkup(keyboard))
 
+@safe_execute('handle_authorization')
+@monitor_performance('handle_authorization')
 async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
     """Обрабатывает данные авторизации от пользователя."""
     user = update.effective_user
@@ -735,8 +815,8 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # Выполняем проверку авторизации
     try:
-        logger.info(f'Looking up user credentials in Google Sheets...')
-        row = await asyncio.to_thread(sheets_client.find_user_by_credentials, code, phone)
+        logger.info('Looking up user credentials in Google Sheets...')
+        row = await run_blocking(sheets_client.find_user_by_credentials, code, phone)
         logger.info(f'Credentials lookup result: row={row}')
     except Exception as e:
         logger.error(f'Error during credentials lookup: {e}')
@@ -747,7 +827,7 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
         # Успешная авторизация
         try:
             logger.info(f'Updating auth status for user {user.id} in row {row}')
-            await asyncio.to_thread(sheets_client.update_user_auth_status, row, update.effective_user.id)
+            await run_blocking(sheets_client.update_user_auth_status, row, update.effective_user.id)
             
             # Обновляем данные пользователя
             context.user_data['is_authorized'] = True
@@ -800,6 +880,8 @@ async def handle_authorization(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
+@safe_execute('new_chat')
+@monitor_performance('new_chat')
 async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
@@ -822,6 +904,8 @@ async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton('Авторизоваться', web_app=WebAppInfo(url=web_app_url))]]
         await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
 
+@safe_execute('reply_command')
+@monitor_performance('reply_command')
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Специалист отвечает: /reply <код> <текст ответа>
     НОВАЯ ЛОГИКА:
@@ -848,21 +932,21 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not tickets_client or not tickets_client.sheet:
             await update.message.reply_text('Tickets sheet не доступен.')
             return
-        
+
         # Ищем тикет по коду
-        row = await asyncio.to_thread(tickets_client.find_row_by_code, code)
+        row = await run_blocking(tickets_client.find_row_by_code, code)
         if not row:
             await update.message.reply_text(f'Тикет с кодом {code} не найден.')
             return
-        
+
         # Читаем telegram_id из строки
-        telegram_id = await asyncio.to_thread(lambda r: tickets_client.sheet.cell(r, 4).value, row)
+        telegram_id = await run_blocking(lambda r=row: tickets_client.sheet.cell(r, 4).value)
         if not telegram_id:
             await update.message.reply_text(f'Telegram ID не найден для кода {code}.')
             return
-        
+
         # 1. Записываем ответ в поле G (SPECIALIST_REPLY)
-        success = await asyncio.to_thread(tickets_client.set_specialist_reply, str(telegram_id), reply_text)
+        success = await run_blocking(tickets_client.set_specialist_reply, str(telegram_id), reply_text)
         if not success:
             await update.message.reply_text('Ошибка при записи ответа в поле специалиста.')
             return
@@ -884,529 +968,17 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 3. Логируем ответ в столбец E (текст_обращений) через upsert_ticket
         # Добавляем ответ специалиста в историю обращений
         logger.info(f'Логируем ответ специалиста в историю для пользователя {telegram_id}')
-        await asyncio.to_thread(
+        await run_blocking(
             tickets_client.upsert_ticket, 
             str(telegram_id), code, '', '', f'[ОТВЕТ СПЕЦИАЛИСТА] {reply_text}', 'в работе', 'specialist', False
         )
         
         # 4. Очищаем поле G (SPECIALIST_REPLY) после логирования
         logger.info(f'Очищаем поле G для пользователя {telegram_id}')
-        await asyncio.to_thread(tickets_client.clear_specialist_reply, str(telegram_id))
-        
+        await run_blocking(tickets_client.clear_specialist_reply, str(telegram_id))
+
         await update.message.reply_text(
-            f'✅ Ответ успешно отправлен!\n\n'
+            '✅ Ответ успешно отправлен!\n\n'
             f'👤 Пользователь: {telegram_id}\n'
             f'📝 Код: {code}\n'
-            f'💬 Ответ: {reply_text[:100]}{"..." if len(reply_text) > 100 else ""}'
-        )
-        
-    except Exception as e:
-        logger.error(f'Ошибка в /reply: {e}')
-        await update.message.reply_text('Ошибка при отправке ответа.')
-
-async def monitor_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для проверки статуса мониторинга ответов оператора"""
-    user = update.effective_user
-    
-    if not is_admin(user.id):
-        await update.message.reply_text('Недостаточно прав для этой команды.')
-        return
-    
-    status_info = []
-    status_info.append(f'🔍 Мониторинг ответов оператора:')
-    status_info.append(f'📄 Таблица: {"\u2705 Подключена" if tickets_client else "\u274c Недоступна"}')
-    status_info.append(f'📊 Мониторинг: Отключен')
-    
-    await update.message.reply_text('\n'.join(status_info))
-
-async def test_monitor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для ручного теста мониторинга"""
-    user = update.effective_user
-    
-    if not is_admin(user.id):
-        await update.message.reply_text('Недостаточно прав для этой команды.')
-        return
-    
-    await update.message.reply_text('🔄 Запускаю проверку ответов оператора...')
-    
-    try:
-
-        await update.message.reply_text('✅ Проверка завершена (мониторинг временно отключен)')
-    except Exception as e:
-        logger.error(f'Ошибка в тесте мониторинга: {e}')
-        await update.message.reply_text(f'❌ Ошибка: {e}')
-
-async def send_keyboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для принудительной отправки persistent keyboard"""
-    user = update.effective_user
-    
-    # Проверяем авторизацию
-    auth_status = await is_user_authorized(user.id, context)
-    logger.info(f'User {user.id} authorization check: {auth_status}')
-    
-    if auth_status:
-        persistent_keyboard = create_persistent_keyboard()
-        await update.message.reply_text(
-            f'✅ Вы авторизованы!\n'
-            f'👤 ID: {user.id}\n'
-            f'👍 Reply клавиатура отправлена!\n'
-            f'🔍 Посмотрите вниз экрана рядом с полем ввода.',
-            reply_markup=persistent_keyboard
-        )
-        # Отправляем ещё одну клавиатуру чтобы точно появилась
-        await update.message.reply_text('⚡️ Повторно отправляю клавиатуру...', reply_markup=persistent_keyboard)
-    else:
-        await update.message.reply_text(
-            f'❌ Вы не авторизованы!\n'
-            f'👤 ID: {user.id}\n'
-            f'⚠️ Сначала пройдите авторизацию через /start'
-        )
-
-async def reset_keyboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для полного сброса и установки клавиатуры"""
-    user = update.effective_user
-    
-    # Сначала убираем все клавиатуры
-    from telegram import ReplyKeyboardRemove
-    await update.message.reply_text('🗑️ Очищаю клавиатуру...', reply_markup=ReplyKeyboardRemove())
-    
-    # Проверяем авторизацию
-    if await is_user_authorized(user.id, context):
-        # Устанавливаем новую клавиатуру
-        persistent_keyboard = create_persistent_keyboard()
-        await update.message.reply_text(
-            '✨ Клавиатура сброшена и установлена заново!\n'
-            '🔍 Проверьте нижний левый угол экрана',
-            reply_markup=persistent_keyboard
-        )
-    else:
-        await update.message.reply_text('❌ Нужна авторизация. Напишите /start')
-
-async def setstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Позволяет админу/специалисту установить статус: /setstatus <код|row> <статус>
-    НОВЫЕ СТАТУСЫ: в работе, выполнено, ожидает, приостановлено, отменено, ожидает ответа пользователя
-    """
-    user = update.effective_user
-    if not await is_user_authorized(user.id, context) and not is_admin(user.id):
-        await update.message.reply_text('Недостаточно прав для изменения статуса.')
-        return
-    
-    if len(context.args) < 2:
-        await update.message.reply_text('Использование: /setstatus <код> <статус>')
-        return
-    
-    key = context.args[0]
-    status = ' '.join(context.args[1:])
-    
-    # Проверяем корректность статуса
-    valid_statuses = ['в работе', 'выполнено']
-    if status.lower() not in [s.lower() for s in valid_statuses]:
-        await update.message.reply_text(
-            f'❌ Некорректный статус: {status}\n\n'
-            f'✅ Доступные статусы:\n'
-            f'• в работе\n'
-            f'• выполнено'
-        )
-        return
-    
-    try:
-        # Пытаемся интерпретировать ключ как номер строки
-        row = None
-        if key.isdigit():
-            row = int(key)
-        
-        # Выгружаем set_ticket_status в поток
-        success = await asyncio.to_thread(tickets_client.set_ticket_status, row, (None if row else key), status)
-        
-        if success:
-            await update.message.reply_text(
-                f'✅ Статус обновлен!\n\n'
-                f'🔑 Ключ: {key}\n'
-                f'📊 Новый статус: {status}\n'
-                f'👤 Специалист: {user.first_name or user.id}'
-            )
-        else:
-            await update.message.reply_text('❌ Не удалось обновить статус (тикет не найден или ошибка).')
-            
-    except Exception as e:
-        logger.error(f'Ошибка в /setstatus: {e}')
-        await update.message.reply_text('❌ Ошибка при обновлении статуса.')
-
-async def fix_telegram_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для исправления Telegram ID в таблице"""
-    user = update.effective_user
-    
-    if not sheets_client or not sheets_client.sheet:
-        await update.message.reply_text('База недоступна.')
-        return
-    
-    try:
-        # Run worker in thread
-        updated_count = await asyncio.to_thread(_fix_telegram_id_worker, user.id)
-        if updated_count == 0:
-            await update.message.reply_text('Не найдено авторизованных пользователей или обновлений не требовалось.')
-            return
-        await update.message.reply_text(
-            f'🔧 Обновлено {updated_count} записей.\n'
-            f'🆔 Ваш Telegram ID: {user.id}\n'
-            f'✅ Проверьте авторизацию командой /check_auth'
-        )
-        # refresh cache in thread
-        await asyncio.to_thread(refresh_authorized_cache)
-    except Exception as e:
-        logger.error(f'Ошибка в fix_telegram_id: {e}')
-        await update.message.reply_text('Ошибка при обновлении Telegram ID.')
-
-async def set_column_width_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для установки ширины колонок обращений (колонка E и G) и высоты строк"""
-    user = update.effective_user
-    
-    if not is_admin(user.id):
-        await update.message.reply_text('Недостаточно прав для выполнения этой команды.')
-        return
-    
-    args = context.args
-    if len(args) != 2:
-        await update.message.reply_text('Использование: /set_column_width <ширина_колонки_E> <высота_строк>')
-        return
-    
-    try:
-        width = int(args[0])
-        height = int(args[1])
-        
-        if width < 50 or width > 1000:
-            await update.message.reply_text('Ширина колонки должна быть от 50 до 1000 пикселей.')
-            return
-            
-        if height < 30 or height > 300:
-            await update.message.reply_text('Высота строк должна быть от 30 до 300 пикселей.')
-            return
-            
-    except ValueError:
-        await update.message.reply_text('Некорректные числа. Укажите ширину и высоту в пикселях.')
-        return
-    
-    try:
-        if not tickets_client or not tickets_client.sheet:
-            await update.message.reply_text('Таблица обращений недоступна.')
-            return
-        
-        success = await asyncio.to_thread(tickets_client.set_tickets_column_width, width, height)
-        if success:
-            await update.message.reply_text(
-                f'✅ Установлены размеры:\n'
-                f'📏 Колонка E (текст_обращений): {width}px\n'
-                f'📏 Колонка G (специалист_ответ): 400px\n'
-                f'📏 Высота строк: {height}px'
-            )
-        else:
-            await update.message.reply_text('❗️ Ошибка при установке размеров')
-        
-    except Exception as e:
-        logger.error(f'Ошибка в /set_column_width: {e}')
-        await update.message.reply_text('Ошибка при установке размеров.')
-
-async def setup_dropdown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для настройки выпадающего списка статусов в столбце F"""
-    user = update.effective_user
-    
-    if not is_admin(user.id):
-        await update.message.reply_text('Недостаточно прав для выполнения этой команды.')
-        return
-    
-    try:
-        if not tickets_client or not tickets_client.sheet:
-            await update.message.reply_text('Tickets sheet не доступен.')
-            return
-        
-        # Выгружаем setup_status_dropdown в поток
-        success = await asyncio.to_thread(tickets_client.setup_status_dropdown)
-        
-        if success:
-            await update.message.reply_text(
-                f'✅ Выпадающий список статусов настроен!\n\n'
-                f'📋 Доступные статусы:\n'
-                f'• в работе\n'
-                f'• выполнено\n\n'
-                f'📍 Применено к столбцу F (статус)'
-            )
-        else:
-            await update.message.reply_text('❌ Не удалось настроить выпадающий список.')
-            
-    except Exception as e:
-        logger.error(f'Ошибка в /setup_dropdown: {e}')
-        await update.message.reply_text('❌ Ошибка при настройке выпадающего списка.')
-
-async def check_auth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для проверки авторизации пользователя"""
-    user = update.effective_user
-    
-    # Проверяем авторизацию
-    is_auth = await is_user_authorized(user.id, context)
-    
-    authorized_ids = get_authorized_ids()
-    
-    # Добавляем отладочную информацию о Google Sheets
-    sheets_info = "❌ Недоступно"
-    if sheets_client and sheets_client.sheet:
-        try:
-            def _read_sample():
-                auth_statuses = sheets_client.sheet.col_values(4)[:10]
-                telegram_ids = sheets_client.sheet.col_values(5)[:10]
-                return auth_statuses, telegram_ids
-            auth_statuses, telegram_ids = await asyncio.to_thread(_read_sample)
-            sheets_info = f"✅ Подключено\nСтатусы (D): {auth_statuses}\nTelegram ID (E): {telegram_ids}"
-        except Exception as e:
-            sheets_info = f"⚠️ Ошибка чтения: {e}"
-    
-    await update.message.reply_text(
-        f'🔍 Проверка авторизации:\n'
-        f'🆔 Ваш ID: {user.id}\n'
-        f'✅ Авторизован: {"Да" if is_auth else "Нет"}\n'
-        f'📊 Количество авторизованных: {len(authorized_ids) if authorized_ids else 0}\n'
-        f'📊 Авторизованные ID: {list(authorized_ids)[:5] if authorized_ids else []}{"..." if authorized_ids and len(authorized_ids) > 5 else ""}\n'
-        f'📋 Google Sheets: {sheets_info}'
-    )
-
-async def push_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для очистки кэша авторизаций и принудительного обновления"""
-    user = update.effective_user
-    
-    # Очищаем кэш в контексте пользователя
-    if 'is_authorized' in context.user_data:
-        del context.user_data['is_authorized']
-    if 'auth_timestamp' in context.user_data:
-        del context.user_data['auth_timestamp']
-    
-    logger.info(f'/push от {user.id} - кэш авторизаций очищен')
-    
-    # Проверяем авторизацию заново
-    if await is_user_authorized(user.id, context):
-        persistent_keyboard = create_persistent_keyboard()
-        await update.message.reply_text('Кэш очищен. Вы авторизованы.', reply_markup=persistent_keyboard)
-    else:
-        await update.message.reply_text('Кэш очищен. Требуется авторизация.')
-        # Показываем кнопку авторизации
-        web_app_url = get_web_app_url('MAIN')
-        keyboard = create_auth_button(web_app_url)
-        await update.message.reply_text('Нажмите кнопку для авторизации:', reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def table_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для просмотра структуры обновленной таблицы обращений"""
-    user = update.effective_user
-    
-    if not is_admin(user.id):
-        await update.message.reply_text('Недостаточно прав для этой команды.')
-        return
-    
-    try:
-        if not tickets_client or not tickets_client.sheet:
-            await update.message.reply_text('❌ Таблица обращений недоступна.')
-            return
-        
-        # Получаем информацию о таблице
-        all_values = await asyncio.to_thread(tickets_client.sheet.get_all_values)
-        row_count = len(all_values)
-        
-        info_text = [
-            '📊 **СТРУКТУРА ТАБЛИЦЫ ОБРАЩЕНИЙ**',
-            '',
-            '🔹 **Колонки:**',
-            '• A - Код партнера',
-            '• B - Телефон',
-            '• C - ФИО',
-            '• D - Telegram ID',
-            '• E - Текст обращений (история)',
-            '• F - Статус (ручной выбор)',
-            '• G - Ответ специалиста (временное поле)',
-            '• H - Время последнего обновления',
-            '',
-            f'📈 **Всего строк:** {row_count}',
-            f'📋 **Заголовки:** {row_count > 0}',
-            '',
-            '🎯 **НОВАЯ ЛОГИКА:**',
-            '• Новые обращения → новые строки',
-            '• Старые обращения → обновление в столбце E',
-            '• Поле G очищается после отправки ответа',
-            '• Статусы выбираются специалистом вручную'
-        ]
-        
-        await update.message.reply_text('\n'.join(info_text))
-        
-    except Exception as e:
-        logger.error(f'Ошибка в /table_info: {e}')
-        await update.message.reply_text('❌ Ошибка при получении информации о таблице.')
-
-async def check_operator_replies(context: ContextTypes.DEFAULT_TYPE):
-    """Проверяет ответы операторов в поле G и отправляет их пользователям"""
-    if not tickets_client or not tickets_client.sheet:
-        logger.warning('Tickets sheet не доступен для проверки ответов')
-        return
-    
-    try:
-        # Получаем все ответы операторов из поля G
-        replies = await asyncio.to_thread(tickets_client.extract_operator_replies)
-        if not replies:
-            return
-        
-        for reply in replies:
-            telegram_id = reply.get('telegram_id')
-            reply_text = reply.get('reply_text')
-            code = reply.get('code')
-            
-            if not all([telegram_id, reply_text, code]):
-                continue
-            
-            try:
-                # Отправляем ответ пользователю
-                await context.bot.send_message(
-                    chat_id=telegram_id,
-                    text=f"📋 **Ответ специалиста по обращению {code}:**\n\n{reply_text}"
-                )
-                
-                # Логируем ответ в историю обращений (столбец E)
-                await asyncio.to_thread(
-                    tickets_client.upsert_ticket,
-                    str(telegram_id), code, '', '', f'[ОТВЕТ СПЕЦИАЛИСТА] {reply_text}', 'в работе', 'specialist', False
-                )
-                
-                # Очищаем поле G после обработки
-                await asyncio.to_thread(tickets_client.clear_specialist_reply, str(telegram_id))
-                
-                logger.info(f'Ответ специалиста отправлен пользователю {telegram_id} и записан в историю')
-                
-            except Exception as e:
-                logger.error(f'Ошибка при отправке ответа пользователю {telegram_id}: {e}')
-                
-    except Exception as e:
-        logger.error(f'Ошибка при проверке ответов операторов: {e}')
-
-async def update_headers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда для обновления заголовков таблицы обращений в соответствии с новой структурой"""
-    user = update.effective_user
-    
-    if not is_admin(user.id):
-        await update.message.reply_text('Недостаточно прав для выполнения этой команды.')
-        return
-    
-    try:
-        if not tickets_client or not tickets_client.sheet:
-            await update.message.reply_text('❌ Таблица обращений недоступна.')
-            return
-
-        await update.message.reply_text('🔄 Обновляю заголовки таблицы...')
-        
-        # Обновляем заголовки в потоке
-        success = await asyncio.to_thread(tickets_client.update_tickets_headers)
-        
-        if success:
-            await update.message.reply_text(
-                '✅ Заголовки таблицы обновлены!\n\n'
-                '📊 Новая структура:\n'
-                '• A - код партнера\n'
-                '• B - телефон\n'
-                '• C - ФИО\n'
-                '• D - telegram_id\n'
-                '• E - текст_обращений (история)\n'
-                '• F - статус (в работе/выполнено)\n'
-                '• G - специалист_ответ (временное поле)\n'
-                '• H - время_обновления\n\n'
-                '🔄 ЛОГИКА РАБОТЫ:\n'
-                '• Специалист пишет ответ в G\n'
-                '• Бот отправляет пользователю\n'
-                '• Очищает поле G\n'
-                '• Логирует ответ в столбец E'
-            )
-        else:
-            await update.message.reply_text('❌ Ошибка при обновлении заголовков.')
-        
-    except Exception as e:
-        logger.error(f'Ошибка в /update_headers: {e}')
-        await update.message.reply_text('❌ Ошибка при обновлении заголовков.')
-
-def _fix_telegram_id_worker(new_id: int) -> int:
-    """Worker to run in thread: find rows with status 'авторизован' and update column 5 with new_id."""
-    try:
-        all_statuses = sheets_client.sheet.col_values(4)
-        found_rows = []
-        for i, status in enumerate(all_statuses[1:], start=2):  # skip header
-            if status and str(status).strip() == 'авторизован':
-                found_rows.append(i)
-        updated_count = 0
-        for row in found_rows:
-            current_id = sheets_client.sheet.cell(row, 5).value
-            if current_id != str(new_id):
-                sheets_client.sheet.update_cell(row, 5, str(new_id))
-                updated_count += 1
-        return updated_count
-    except Exception:
-        return 0
-
-# Запуск
-def main():
-    # Простая блокировка через файл
-    lock_file = 'bot.lock'
-    if os.path.exists(lock_file):
-        logger.error('Бот уже запущен')
-        return
-    
-    with open(lock_file, 'w') as f:
-        f.write(str(os.getpid()))
-    
-    try:
-        token = os.getenv('TELEGRAM_TOKEN')
-        if not token:
-            logger.error('TELEGRAM_TOKEN не задан в .env')
-            return
-                        
-        # Создаем Application с job_queue
-        app = Application.builder().token(token).build()
-
-        app.add_handler(CommandHandler('start', start))
-        app.add_handler(CommandHandler('new_chat', new_chat))
-        app.add_handler(CommandHandler('reply', reply_command))
-        app.add_handler(CommandHandler('setstatus', setstatus_command))
-        app.add_handler(CommandHandler('push', push_command))
-        app.add_handler(CommandHandler('check_auth', check_auth_command))
-        app.add_handler(CommandHandler('fix_telegram_id', fix_telegram_id_command))
-        app.add_handler(CommandHandler('set_column_width', set_column_width_command))
-        app.add_handler(CommandHandler('setup_dropdown', setup_dropdown_command))
-        app.add_handler(CommandHandler('monitor_status', monitor_status_command))
-        app.add_handler(CommandHandler('test_monitor', test_monitor_command))
-        app.add_handler(CommandHandler('send_keyboard', send_keyboard_command))
-        app.add_handler(CommandHandler('reset_keyboard', reset_keyboard_command))
-        app.add_handler(CommandHandler('table_info', table_info_command))
-        app.add_handler(CommandHandler('update_headers', update_headers_command))
-        app.add_handler(CallbackQueryHandler(handle_callback_query))
-        app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        app.add_handler(CommandHandler('menu', menu_command))
-        app.add_handler(CallbackQueryHandler(handle_menu_callback, pattern=r'^menu:'))
-                        
-        # Запускаем мониторинг ответов оператора
-        job_queue = app.job_queue
-        if job_queue and tickets_client:
-            job_queue.run_repeating(
-                check_operator_replies,
-                interval=30,  # каждые 30 секунд
-                first=10      # первый запуск через 10 секунд
-            )
-            logger.info('Запущен мониторинг ответов оператора (каждые 30 сек)')
-                        
-        logger.info('Бот запущен...')
-                        
-        # Убираем проблемный error handler
-
-        # Простой запуск без сложной обработки ошибок
-        app.run_polling(drop_pending_updates=True)
-                                
-    except Exception as e:
-        logger.error(f'Error starting bot: {e}')
-        return
-    finally:
-        # Очищаем блокировку при выходе
-        if os.path.exists(lock_file):
-            os.remove(lock_file)
-
-if __name__ == '__main__':
-    main()
+            f'💬 Ответ: {reply_text[:100]}{

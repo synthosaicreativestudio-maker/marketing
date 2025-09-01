@@ -152,7 +152,7 @@ class DataValidator:
             if not value:
                 errors.append(f"Отсутствует {description} ({var})")
             elif var == 'TELEGRAM_TOKEN' and not (len(value) > 40 and ':' in value):
-                errors.append(f"Некорректный формат токена бота")
+                errors.append("Некорректный формат токена бота")
             elif 'SHEET_URL' in var and 'docs.google.com/spreadsheets' not in value:
                 errors.append(f"Некорректный URL Google Sheets для {description}")
         

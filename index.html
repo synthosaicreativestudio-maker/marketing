@@ -9,13 +9,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    
-    <!-- ✅ ПРИНУДИТЕЛЬНАЯ ИНИЦИАЛИЗАЦИЯ -->
-    <script>
-        console.log('🚨 СКРИПТ ЗАГРУЖЕН!');
-        alert('🚨 СКРИПТ ЗАГРУЖЕН! JavaScript работает!');
-    </script>
-    
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230b1226'/%3E%3Ccircle cx='50' cy='40' r='22' fill='%23d4af37'/%3E%3C/text%3E%3C/svg%3E">
     <style>
         :root{
@@ -44,14 +37,13 @@
         .header{
             display:flex;align-items:center;gap:15px;width:100%;
             position:relative;
-            margin-bottom: 20px; /* фиксированный отступ */
+            margin-bottom: 20px;
         }
         .logo{
             width:50px;height:50px;border-radius:6px;overflow:hidden;
-            flex-shrink: 0; /* не сжимается */
+            flex-shrink: 0;
             z-index:1000;
         }
-
         .logo img{
             width:100%;height:100%;object-fit:cover
         }
@@ -72,37 +64,29 @@
         label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px;text-align:left}
         input[type=text],input[type=tel]{padding:14px;border-radius:10px;border:none;background:rgba(255,255,255,0.03);color:#fff;font-size:15px;box-sizing:border-box}
         #code_input{width:200px}
-                #phone_input{width:200px}
+        #phone_input{width:200px}
         .input-container{display:flex;flex-direction:column;align-items:flex-start;margin-bottom:12px}
-        .footer-note{margin-top:12px;font-size:12px;color:rgba(255,255,255,0.5)}
         .divider{height:1px;background:linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);margin:18px 0;border-radius:2px}
-        .cta{display:flex;align-items:center;gap:12px}
-        .muted-small{font-size:12px;color:rgba(255,255,255,0.6)}
         
         .auth-button {
-            width: 100% !important;
-            padding: 15px !important;
-            background: linear-gradient(90deg, #d4af37, #f6e7a0) !important;
-            color: #000 !important;
-            border: none !important;
-            border-radius: 8px !important;
-            font-size: 16px !important;
-            font-weight: 600 !important;
-            margin-top: 20px !important;
-            cursor: pointer !important;
-            transition: all 0.3s ease !important;
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            z-index: 1000 !important;
-            position: relative !important;
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(90deg, #d4af37, #f6e7a0);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
         
         .auth-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(212, 175, 55, 0.3);
         }
-        /* responsive */
+
         @media (max-width:720px){
             .shell{padding:20px;margin-top:-80px;margin-left:-3%}
             .header{gap:10px;margin-bottom:15px}
@@ -111,10 +95,6 @@
             #code_input,#phone_input{width:100%;max-width:200px}
             .card{width:100%;max-width:240px;padding:12px}
         }
-    /* menu screen */
-    .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
-    .menu-btn{padding:12px;border-radius:10px;background:linear-gradient(90deg,#0b1226, #081428);border:1px solid rgba(212,175,55,0.08);color:var(--gold);cursor:pointer;font-weight:600}
-    .menu-title{font-size:18px;margin:0 0 8px 0}
     </style>
 </head>
 <body>
@@ -142,409 +122,57 @@
 
             <div class="divider"></div>
             
-            <!-- Статическая HTML кнопка авторизации -->
-            <button id="static_auth_button" class="auth-button" onclick="testButtonClick()">
+            <button id="auth_button" class="auth-button">
                 Авторизоваться
             </button>
             
-            <!-- Диагностическая информация -->
-            <div id="debug_info" style="margin-top: 10px; padding: 10px; background: #333; color: #fff; font-size: 12px; border-radius: 5px;">
-                <div>🔍 Диагностика:</div>
-                <div id="tg_status">Telegram WebApp: проверяется...</div>
-                <div id="button_status">Кнопка: проверяется...</div>
-                <div id="click_status">Клик: не было</div>
-                
-                <!-- ✅ ТЕСТОВАЯ КНОПКА -->
-                <button onclick="testSimpleClick()" style="margin-top: 10px; padding: 5px 10px; background: #ff4444; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                    🧪 ТЕСТ КЛИКА
-                </button>
-                
-                <!-- ✅ ПРИНУДИТЕЛЬНЫЙ ТЕСТ -->
-                <button onclick="alert('🚨 ПРИНУДИТЕЛЬНЫЙ ТЕСТ: HTML работает!')" style="margin-top: 5px; padding: 5px 10px; background: #00ff00; color: black; border: none; border-radius: 3px; cursor: pointer;">
-                    🚨 ПРИНУДИТЕЛЬНЫЙ ТЕСТ
-                </button>
-            </div>
-            
-            <div style="display:flex;justify-content:flex-start;align-items:center;width:100%">
-                <div style="color:#d4af37;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Produced by SYNTHOS AI®</div>
-            </div>
-
-            <!-- Menu screen (second mini-app) - hidden by default -->
-            <div id="menu_screen" style="display:none">
-                <h3 class="menu-title">ЛИЧНЫЙ КАБИНЕТ</h3>
-                <div class="menu-grid" id="menu_grid"></div>
-                <div style="margin-top:12px"><small class="muted-small">Нажмите раздел, чтобы отправить запрос в бота.</small></div>
+            <div style="margin-top:12px;display:flex;justify-content:flex-start;align-items:center;width:100%">
+                <div style="color:#d4af37;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Powered by SYNTHOS AI®</div>
             </div>
         </div>
     </div>
 
     <script>
-        let tg = window.Telegram.WebApp;
-        
-        // ✅ Проверяем доступность Telegram WebApp API
-        if (!tg) {
-            console.error('Telegram WebApp API не доступен!');
-            alert('Ошибка: Telegram WebApp API не доступен');
-            return;
-        }
-        
-        // ✅ Инициализируем WebApp
-        try {
-            // ✅ ДИАГНОСТИКА: Проверяем доступность Telegram WebApp
-            console.log('Telegram WebApp объект:', typeof tg !== 'undefined' ? 'доступен' : 'НЕ ДОСТУПЕН');
-            
-            // Обновляем диагностику на странице
-            if (typeof tg !== 'undefined') {
-                console.log('tg.sendData:', typeof tg.sendData);
-                console.log('tg.close:', typeof tg.close);
-                console.log('tg.MainButton:', typeof tg.MainButton);
-                
-                document.getElementById('tg_status').textContent = 'Telegram WebApp: ✅ доступен';
-                document.getElementById('button_status').textContent = 'Кнопка: ✅ найдена';
-            } else {
-                document.getElementById('tg_status').textContent = 'Telegram WebApp: ❌ НЕ ДОСТУПЕН';
-                document.getElementById('button_status').textContent = 'Кнопка: ❌ WebApp недоступен';
-            }
-            
-            tg.ready();
-            console.log('Telegram WebApp готов к работе');
-            
-            // Настраиваем цвета для лучшего отображения
-            if (tg.setHeaderColor) tg.setHeaderColor('#0b1226');
-            if (tg.setBackgroundColor) tg.setBackgroundColor('#071028');
-            
-                    // ✅ Настраиваем MainButton если доступен
-        if (tg.MainButton) {
-            console.log('MainButton доступен');
-            // Инициализируем MainButton
-            tg.MainButton.setText('Авторизоваться');
-            tg.MainButton.color = '#d4af37';
-            tg.MainButton.textColor = '#000000';
-            
-            // Принудительно показываем кнопку для тестирования
-            setTimeout(() => {
-                try {
-                    tg.MainButton.show();
-                    console.log('MainButton принудительно показан');
-                } catch (e) {
-                    console.error('Ошибка показа MainButton:', e);
-                }
-            }, 1000);
-            
-            console.log('MainButton инициализирован');
-        } else {
-            console.log('MainButton недоступен, используем HTML кнопку');
-        }
-        
-        // ✅ ВСЕГДА настраиваем HTML кнопку как основной вариант
-        setupStaticButton();
-        
-        // ✅ ПРИНУДИТЕЛЬНО показываем кнопку
-        forceShowButton();
-            
-        } catch (error) {
-            console.error('Ошибка инициализации Telegram WebApp:', error);
-        }
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+
+        // Настраиваем цвета для лучшего отображения
+        tg.setHeaderColor('#0b1226');
+        tg.setBackgroundColor('#071028');
 
         const codeInput = document.getElementById('code_input');
         const phoneInput = document.getElementById('phone_input');
-        const menuScreen = document.getElementById('menu_screen');
-        const menuGrid = document.getElementById('menu_grid');
-        
-        // Настраиваем HTML кнопку как основной вариант авторизации
-        function setupStaticButton() {
-            console.log('Настраиваю HTML кнопку авторизации');
-            const staticButton = document.getElementById('static_auth_button');
-            if (staticButton) {
-                // Кнопка уже видна (убрали display: none)
-                staticButton.addEventListener('click', function() {
-                    console.log('HTML кнопка авторизации нажата');
-                    
-                    // ✅ КРИТИЧНО: Проверяем доступность Telegram WebApp
-                    if (typeof tg === 'undefined' || typeof tg.sendData !== 'function') {
-                        console.error('Telegram WebApp недоступен!');
-                        alert('Ошибка: Telegram WebApp недоступен. Откройте через бота в Telegram.');
-                        return;
-                    }
-                    
-                    sendData();
-                });
-                console.log('HTML кнопка настроена и готова к работе');
-            } else {
-                console.error('HTML кнопка не найдена!');
-            }
-        }
-        
-        // ✅ ПРОСТАЯ ТЕСТОВАЯ ФУНКЦИЯ
-        function testSimpleClick() {
-            console.log('🧪 ТЕСТОВАЯ КНОПКА НАЖАТА!');
-            alert('🧪 ТЕСТ: Кнопка работает! JavaScript выполняется!');
-            document.getElementById('click_status').textContent = 'Клик: ✅ ТЕСТ прошел!';
-        }
-        
-        // ✅ Функция для тестирования кнопки
-        function testButtonClick() {
-            console.log('🎯 Кнопка нажата через onclick!');
-            document.getElementById('click_status').textContent = 'Клик: ✅ было нажатие!';
-            
-            // Проверяем доступность WebApp
-            if (typeof tg === 'undefined') {
-                console.error('❌ tg не определен!');
-                document.getElementById('tg_status').textContent = 'Telegram WebApp: ❌ НЕ ДОСТУПЕН';
-                alert('Telegram WebApp недоступен! Откройте через бота в Telegram.');
-                return;
-            }
-            
-            if (typeof tg.sendData !== 'function') {
-                console.error('❌ tg.sendData не функция!');
-                document.getElementById('tg_status').textContent = 'Telegram WebApp: ❌ sendData недоступен';
-                alert('Функция отправки недоступна!');
-                return;
-            }
-            
-            console.log('✅ WebApp доступен, вызываю sendData()');
-            document.getElementById('tg_status').textContent = 'Telegram WebApp: ✅ доступен';
-            sendData();
-        }
-        
-        // Принудительно показываем кнопку
-        function forceShowButton() {
-            console.log('Принудительно показываю кнопку авторизации');
-            const button = document.getElementById('static_auth_button');
-            if (button) {
-                button.style.display = 'block !important';
-                button.style.visibility = 'visible !important';
-                button.style.opacity = '1 !important';
-                button.style.zIndex = '1000 !important';
-                button.style.position = 'relative !important';
-                
-                // Дополнительно через CSS
-                button.setAttribute('style', `
-                    width: 100% !important;
-                    padding: 15px !important;
-                    background: linear-gradient(90deg, #d4af37, #f6e7a0) !important;
-                    color: #000 !important;
-                    border: none !important;
-                    border-radius: 8px !important;
-                    font-size: 16px !important;
-                    font-weight: 600 !important;
-                    margin-top: 20px !important;
-                    cursor: pointer !important;
-                    display: block !important;
-                    visibility: visible !important;
-                    opacity: 1 !important;
-                    z-index: 1000 !important;
-                    position: relative !important;
-                `);
-                
-                console.log('Кнопка принудительно показана');
-            } else {
-                console.error('Кнопка не найдена для принудительного показа!');
-            }
-        }
+        const authButton = document.getElementById('auth_button');
 
-        // Phone mask (keeps behaviour)
-        function formatPhone(raw){
-            const v = raw.replace(/\D/g,'');
-            if(!v) return '';
+        // Форматирование телефона по маске
+        phoneInput.addEventListener('input', e => {
+            const v = e.target.value.replace(/\D/g, '');
+            if (!v) return e.target.value = '';
             let result = '8 (';
-            for(let i=1;i<v.length && i<11;i++){
-                if(i===4) result += ') ';
-                if(i===7||i===9) result += '-';
+            for (let i = 1; i < v.length && i < 11; i++) {
+                if (i === 4) result += ') ';
+                if (i === 7 || i === 9) result += '-';
                 result += v[i];
             }
-            return result;
-        }
-
-        phoneInput.addEventListener('input', e => {
-            e.target.value = formatPhone(e.target.value);
-            updateMainButtonState();
-        });
-        codeInput.addEventListener('input', updateMainButtonState);
-
-        function updateMainButtonState(){
-            const phoneDigits = phoneInput.value.replace(/\D/g,'');
-            console.log('updateMainButtonState called:', {
-                code: codeInput.value.trim(),
-                phoneLength: phoneDigits.length,
-                mainButtonAvailable: !!tg.MainButton
-            });
-            
-            if(codeInput.value.trim() !== '' && phoneDigits.length === 11){
-                if (tg.MainButton) {
-                    tg.MainButton.setText('Авторизоваться');
-                    tg.MainButton.show();
-                    console.log('MainButton показан');
-                } else {
-                    console.error('tg.MainButton недоступен!');
-                }
-            } else {
-                if (tg.MainButton) {
-                    tg.MainButton.hide();
-                    console.log('MainButton скрыт');
-                }
-            }
-        }
-
-        tg.onEvent('mainButtonClicked', function(){
-            console.log('Main button clicked - starting authorization');
-            try{
-                tg.MainButton.showProgress(true);
-                tg.MainButton.disable();
-
-                // Установим запасной таймаут на случай, если отправка займёт слишком много времени
-                const emergencyTimeout = setTimeout(() => {
-                    console.log('Emergency timeout triggered');
-                    try{ tg.MainButton.showProgress(false); tg.MainButton.enable(); }catch(e){}
-                    tg.showAlert('Таймаут авторизации. Попробуйте ещё раз.');
-                }, 15000); // 15 секунд
-
-                // sendData выполняется синхронно по API, нет callback — поэтому даём пользователю быстрый фидбек
-                sendData();
-
-                // После отправки показываем подтверждение и закрываем WebApp, очистив таймаут
-                try{
-                    tg.MainButton.showProgress(false);
-                    tg.MainButton.enable();
-                }catch(e){}
-                clearTimeout(emergencyTimeout);
-                
-                // ✅ КРИТИЧНО: Закрываем WebApp после отправки данных
-                // Без этого на мобильных устройствах данные могут не уйти
-                setTimeout(() => {
-                    try {
-                        tg.close();
-                        console.log('WebApp closed successfully after main button click');
-                    } catch (closeError) {
-                        console.error('Error closing WebApp:', closeError);
-                    }
-                }, 500); // Небольшая задержка для гарантии отправки
-            }catch (error) {
-                console.error('Error in mainButtonClicked handler:', error);
-                try{ tg.MainButton.showProgress(false); tg.MainButton.enable(); }catch(e){}
-                tg.showAlert('Ошибка при отправке данных.');
-            }
+            e.target.value = result;
         });
 
-        function sendData(){
-            console.log('Sending data to bot');
+        // Обработчик нажатия кнопки
+        authButton.addEventListener('click', () => {
             const code = codeInput.value.trim();
-            const phone = phoneInput.value.replace(/\D/g,'');
-            
-            if(!code || phone.length !== 11){
-                console.log('Validation failed:', {code: !!code, phoneLength: phone.length});
-                tg.showAlert('Пожалуйста, заполните корректно все поля.');
-                tg.MainButton.showProgress(false);
-                tg.MainButton.enable();
-                return;
-            }
-            
-            console.log('Sending to bot:', {code, phone: phone.substring(0,3) + '***'});
-            
-            // ✅ Проверяем доступность tg.sendData
-            if (typeof tg.sendData !== 'function') {
-                console.error('tg.sendData is not available!');
-                tg.showAlert('Ошибка: функция отправки недоступна');
-                return;
-            }
-            
-            // ✅ Дополнительная проверка для мобильных устройств
-            console.log('Platform info:', {
-                platform: navigator.platform,
-                userAgent: navigator.userAgent,
-                isMobile: /Mobile|Android|iPhone|iPad/.test(navigator.userAgent)
-            });
-            
-            try {
-                const data = JSON.stringify({code, phone});
-                console.log('Data to send:', data);
+            const phone = phoneInput.value.replace(/\D/g, '');
+
+            if (code && phone.length === 11) {
+                const data = JSON.stringify({ code, phone });
                 tg.sendData(data);
-                console.log('Data sent successfully');
-                
-                // ✅ КРИТИЧНО: Закрываем WebApp после отправки данных
-                // Без этого на мобильных устройствах данные могут не уйти
-                setTimeout(() => {
-                    try {
-                        tg.close();
-                        console.log('WebApp closed successfully');
-                    } catch (closeError) {
-                        console.error('Error closing WebApp:', closeError);
-                    }
-                }, 500); // Небольшая задержка для гарантии отправки
-                
-            } catch (error) {
-                console.error('Error sending data:', error);
-                tg.showAlert('Ошибка при отправке: ' + error.message);
+                // Закрытие WebApp после отправки данных для лучшей совместимости
+                setTimeout(() => tg.close(), 500);
+            } else {
+                tg.showAlert('Пожалуйста, заполните все поля корректно.');
             }
-        }
+        });
 
-        // --- Second mini-app: menu screen ---
-        const SECTIONS = [
-            'Агрегаторы',
-            'Контент',
-            'Финансы',
-            'Технические проблемы',
-            'Дизайн и материалы',
-            'Регламенты и обучение',
-            'Акции и мероприятия',
-            'Аналитика',
-            'Связаться со специалистом'
-        ];
-
-        function renderMenu(selectedSection){
-            // hide auth inputs and main button
-            document.querySelector('.card > .divider').style.display = 'none';
-            // hide inputs
-            codeInput.style.display = 'none';
-            phoneInput.style.display = 'none';
-            // show menu
-            menuGrid.innerHTML = '';
-            SECTIONS.forEach(s => {
-                const btn = document.createElement('button');
-                btn.className = 'menu-btn';
-                btn.textContent = s;
-                if(selectedSection && selectedSection === s){
-                    btn.style.outline = '2px solid rgba(212,175,55,0.25)';
-                }
-                btn.onclick = () => {
-                    try{
-                        tg.sendData(JSON.stringify({type:'menu_selection', section: s}));
-                        // give visual feedback
-                        btn.textContent = 'Отправлено ✓';
-                        setTimeout(()=>tg.close(), 700);
-                    }catch(e){
-                        tg.showAlert('Ошибка при отправке. Попробуйте ещё раз.');
-                    }
-                };
-                const wrap = document.createElement('div');
-                wrap.appendChild(btn);
-                menuGrid.appendChild(wrap);
-            });
-            menuScreen.style.display = 'block';
-            // hide main button if present
-            try{ tg.MainButton.hide(); }catch(e){}
-        }
-
-        // If URL contains ?view=menu2 or ?section=... (or the same in the URL fragment), open the menu screen directly.
-        const params = new URLSearchParams(window.location.search);
-        let view = params.get('view');
-        let sectionParam = params.get('section');
-
-        // Telegram clients sometimes strip query parameters when opening Web Apps.
-        // Support fragment-style deep links as well: #view=menu2 or #section=...
-        if((!view || !sectionParam) && window.location.hash){
-            // Remove leading '#' and optional leading '/'
-            const rawHash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
-            const hashClean = rawHash.replace(/^\/?/, '');
-            const hashParams = new URLSearchParams(hashClean);
-            if(!view) view = hashParams.get('view');
-            if(!sectionParam) sectionParam = hashParams.get('section');
-        }
-
-        if(view === 'menu2' || sectionParam){
-            renderMenu(sectionParam ? decodeURIComponent(sectionParam) : null);
-        }
     </script>
 
 </body>
-</html><!-- Force update -->
+</html>

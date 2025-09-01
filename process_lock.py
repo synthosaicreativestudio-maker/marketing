@@ -50,7 +50,7 @@ class ProcessLock:
                 if self.lock_handle:
                     try:
                         self.lock_handle.close()
-                    except:
+                    except Exception:
                         pass
                     self.lock_handle = None
                 
@@ -60,7 +60,7 @@ class ProcessLock:
                         os.unlink(self.lock_file)
                         logger.info(f'Удалена устаревшая блокировка: {self.lock_file}')
                         continue
-                    except:
+                    except Exception:
                         pass
                 
                 time.sleep(0.1)
@@ -89,7 +89,7 @@ class ProcessLock:
             # Удаляем файл блокировки
             try:
                 os.unlink(self.lock_file)
-            except:
+            except Exception:
                 pass
                 
             self.is_locked = False
@@ -120,7 +120,7 @@ class ProcessLock:
                             import psutil
                             if not psutil.pid_exists(pid):
                                 return True
-                except:
+                except Exception:
                     pass
                     
         except Exception:
