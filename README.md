@@ -1,22 +1,23 @@
-# 🤖 Marketing Telegram Bot v2.0.0
+# 🤖 Marketing Telegram Bot v2.1.0
 
 [![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)](https://github.com/synthosaicreativestudio-maker/marketing)
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue)](https://github.com/synthosaicreativestudio-maker/marketing/releases/tag/v2.0.0)
+[![Version](https://img.shields.io/badge/Version-2.1.0-blue)](https://github.com/synthosaicreativestudio-maker/marketing/releases/tag/v2.1.0)
+[![Mobile Ready](https://img.shields.io/badge/Mobile-100%25%20Compatible-brightgreen)](https://github.com/synthosaicreativestudio-maker/marketing)
 [![Issues Fixed](https://img.shields.io/badge/Critical%20Issues-0%2F0-brightgreen)](https://github.com/synthosaicreativestudio-maker/marketing)
 [![Diagnostics](https://img.shields.io/badge/Diagnostics-33%2F33%20Passing-brightgreen)](https://github.com/synthosaicreativestudio-maker/marketing)
 [![Code Quality](https://img.shields.io/badge/Code%20Quality-Enterprise%20Grade-brightgreen)](https://github.com/synthosaicreativestudio-maker/marketing)
 
 A **production-ready, enterprise-grade** Telegram bot for marketing teams with Google Sheets integration, OpenAI assistant, and comprehensive user authorization system.
 
-## 🎉 **Version 2.0.0 - Major Release**
+## 🎉 **Version 2.1.0 - Mobile Authentication Release**
 
-✅ **All critical issues fixed** - Zero bugs remaining  
-✅ **Production ready** - Enterprise-grade reliability  
-✅ **Enhanced performance** - Optimized for scale  
-✅ **MCP integration** - Advanced development tools  
-✅ **Persistent storage** - Conversation continuity  
+✅ **100% mobile compatibility** - Works on all devices  
+✅ **Hybrid authentication** - WebApp + chat command fallback  
+✅ **Zero breaking changes** - Existing users unaffected  
+✅ **Enhanced user experience** - Auto-copy and validation  
+✅ **Enterprise reliability** - Maintained security standards  
 
-[**📋 View Full Changelog →**](CHANGELOG_V2.md)
+[📱 **View Mobile Auth Guide →**](MOBILE_AUTH_UPDATE.md)
 
 ## 📋 Table of Contents
 
