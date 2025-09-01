@@ -165,6 +165,14 @@
         
         // ✅ Инициализируем WebApp
         try {
+            // ✅ ДИАГНОСТИКА: Проверяем доступность Telegram WebApp
+            console.log('Telegram WebApp объект:', typeof tg !== 'undefined' ? 'доступен' : 'НЕ ДОСТУПЕН');
+            if (typeof tg !== 'undefined') {
+                console.log('tg.sendData:', typeof tg.sendData);
+                console.log('tg.close:', typeof tg.close);
+                console.log('tg.MainButton:', typeof tg.MainButton);
+            }
+            
             tg.ready();
             console.log('Telegram WebApp готов к работе');
             
@@ -218,6 +226,14 @@
                 // Кнопка уже видна (убрали display: none)
                 staticButton.addEventListener('click', function() {
                     console.log('HTML кнопка авторизации нажата');
+                    
+                    // ✅ КРИТИЧНО: Проверяем доступность Telegram WebApp
+                    if (typeof tg === 'undefined' || typeof tg.sendData !== 'function') {
+                        console.error('Telegram WebApp недоступен!');
+                        alert('Ошибка: Telegram WebApp недоступен. Откройте через бота в Telegram.');
+                        return;
+                    }
+                    
                     sendData();
                 });
                 console.log('HTML кнопка настроена и готова к работе');
