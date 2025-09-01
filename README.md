@@ -39,7 +39,8 @@ A **production-ready, enterprise-grade** Telegram bot for marketing teams with G
 - **Google Sheets Integration**: Dual-table architecture for auth and conversations
 - **OpenAI Assistant**: AI-powered responses with conversation context and thread persistence
 - **Web Mini-App**: Telegram WebApp interface for user interactions
-- **Admin Commands**: Specialist tools for ticket management and user support
+- **📧 Automated Specialist Replies**: Specialists can respond directly from Google Sheets with automatic delivery
+- **🔄 Real-time Monitoring**: 30-second polling of specialist reply fields for instant message delivery
 
 ### 🚀 **Version 2.0.0 Enhancements**
 - **Zero Critical Issues**: All 18 critical bugs fixed and validated
@@ -444,6 +445,7 @@ For issues and questions:
 #### **Для специалистов:**
 - `/reply <код> <текст>` - ответить пользователю
 - `/setstatus <код> <статус>` - изменить статус тикета
+- **🆕 Google Sheets Integration**: Write replies directly in column G (`специалист_ответ`) - automatic delivery every 30 seconds!
 
 #### **Для администраторов:**
 - `/table_info` - просмотр структуры таблицы

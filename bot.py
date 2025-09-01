@@ -107,6 +107,17 @@ class Bot:
         self.application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, self.web_app_data))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
+        
+        # Добавляем периодическую задачу мониторинга ответов специалистов
+        job_queue = self.application.job_queue
+        if job_queue:
+            job_queue.run_repeating(
+                self.monitor_specialist_replies,
+                interval=30,  # Проверяем каждые 30 секунд
+                first=10,     # Первая проверка через 10 секунд после запуска
+                name='monitor_specialist_replies'
+            )
+            logger.info("🔄 Запущен мониторинг ответов специалистов (каждые 30 секунд)")
 
     async def run(self):
         """
@@ -950,9 +961,9 @@ class Bot:
         try:
             await context.bot.send_message(
                 chat_id=int(telegram_id),
-                text=f'✉️ Ответ специалиста (код {code}):\n{text}'
+                text=f'Отдел маркетинга (код {code}):\n{text}'
             )
-            logger.info(f"Ответ специалиста отправлен пользователю {telegram_id}")
+            logger.info(f"Ответ отдела маркетинга отправлен пользователю {telegram_id}")
         except Exception as e:
             logger.error(f"Не удалось отправить сообщение пользователю {telegram_id}: {e}")
             raise
@@ -964,12 +975,60 @@ class Bot:
         try:
             await self.run_blocking(
                 self.tickets_client.upsert_ticket, 
-                str(telegram_id), code, '', '', f'[ОТВЕТ СПЕЦИАЛИСТА] {text}', 'в работе', 'specialist', False
+                str(telegram_id), code, '', '', f'[ОТВЕТ ОТДЕЛА МАРКЕТИНГА] {text}', 'в работе', 'specialist', False
             )
-            logger.info(f"Ответ специалиста залогирован для пользователя {telegram_id}")
+            logger.info(f"Ответ отдела маркетинга залогирован для пользователя {telegram_id}")
         except Exception as e:
             logger.error(f"Не удалось залогировать ответ специалиста для пользователя {telegram_id}: {e}")
             raise
+
+    async def monitor_specialist_replies(self, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Периодическая проверка поля 'специалист_ответ' в таблице для автоматической отправки ответов.
+        """
+        if not self.tickets_client:
+            return
+            
+        try:
+            # Извлекаем все ответы специалистов из поля G
+            replies = await self.run_blocking(self.tickets_client.extract_operator_replies)
+            
+            if not replies:
+                # Не логируем, чтобы не спамить
+                return
+                
+            logger.info(f"📬 Найдено {len(replies)} ответов специалистов для обработки")
+            
+            # Обрабатываем каждый ответ
+            for reply in replies:
+                telegram_id = reply.get('telegram_id', '')
+                reply_text = reply.get('reply_text', '')
+                code = reply.get('code', '')
+                row = reply.get('row', 0)
+                
+                if not telegram_id or not reply_text or not code:
+                    logger.warning(f"Неполные данные в ответе: telegram_id={telegram_id}, code={code}")
+                    continue
+                
+                try:
+                    # Отправляем ответ пользователю
+                    await self._send_reply_to_user(context, telegram_id, code, reply_text)
+                    
+                    # Логируем ответ в столбец E (история)
+                    await self._log_specialist_reply(telegram_id, code, reply_text)
+                    
+                    # Очищаем поле G после успешной отправки
+                    await self.run_blocking(self.tickets_client.clear_specialist_reply, telegram_id)
+                    
+                    logger.info(f"✅ Ответ отдела маркетинга успешно обработан: код={code}, telegram_id={telegram_id}")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Ошибка при обработке ответа специалиста: код={code}, telegram_id={telegram_id}, ошибка: {e}")
+                    # Продолжаем обработку остальных ответов
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ Ошибка в мониторинге ответов специалистов: {e}")
 
 
 def main():
