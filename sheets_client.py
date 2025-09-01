@@ -171,6 +171,48 @@ class GoogleSheetsClient:
             logger.error(f"Error getting all authorized user IDs: {e}")
             return set()
 
+    def get_authorized_users_batch(self, batch_size: int = 100) -> dict:
+        """
+        Получает авторизованных пользователей пакетами для оптимизации.
+        Возвращает словарь {telegram_id: {code, phone, fio}}.
+        """
+        if not self.sheet:
+            logger.error('Sheet not connected')
+            return {}
+        
+        try:
+            # Получаем все данные одним запросом для оптимизации
+            all_values = self.sheet.get_all_values()
+            if len(all_values) < 2:  # Только заголовки или пустая таблица
+                return {}
+            
+            authorized_users = {}
+            
+            # Проходим по всем строкам с данными
+            for row in all_values[1:]:
+                if len(row) >= 5:  # Проверяем, что достаточно колонок
+                    code = row[0] if row[0] else ''
+                    fio = row[1] if len(row) > 1 and row[1] else ''
+                    phone = row[2] if len(row) > 2 and row[2] else ''
+                    status = row[3] if len(row) > 3 and row[3] else ''
+                    telegram_id = row[4] if len(row) > 4 and row[4] else ''
+                    
+                    # Проверяем авторизацию
+                    if (status.lower() == 'авторизован' and 
+                        telegram_id and telegram_id.isdigit()):
+                        authorized_users[telegram_id] = {
+                            'code': code,
+                            'phone': phone,
+                            'fio': fio
+                        }
+            
+            logger.info(f'Получено {len(authorized_users)} авторизованных пользователей (пакетный режим)')
+            return authorized_users
+            
+        except Exception as e:
+            logger.error(f'Ошибка при пакетном получении авторизованных пользователей: {e}')
+            return {}
+
     def find_row_by_code(self, code: str) -> int | None:
         """Find a row by the unique code in column 1. Returns 1-based row index or None."""
         if not self.sheet:

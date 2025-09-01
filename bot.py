@@ -19,7 +19,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 # Импорты модулей проекта
 from config import (
     SECTIONS, get_web_app_url, get_ticket_status, SUBSECTIONS, validate_config,
-    LOG_FILE, GOOGLE_CREDENTIALS_PATH, AUTH_WORKSHEET_NAME, TICKETS_WORKSHEET_NAME
+    LOG_FILE, GOOGLE_CREDENTIALS_PATH, AUTH_WORKSHEET_NAME, TICKETS_WORKSHEET_NAME,
+    SCALING_CONFIG
 )
 from sheets_client import GoogleSheetsClient
 from auth_cache import auth_cache
@@ -104,6 +105,7 @@ class Bot:
         self.application.add_handler(CommandHandler('new_chat', self.new_chat))
         self.application.add_handler(CommandHandler('reply', self.reply_command))
         self.application.add_handler(CommandHandler('auth', self.auth_command))
+        self.application.add_handler(CommandHandler('force_update', self.force_update_command))  # Новая команда
         self.application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, self.web_app_data))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
@@ -111,13 +113,26 @@ class Bot:
         # Добавляем периодическую задачу мониторинга ответов специалистов
         job_queue = self.application.job_queue
         if job_queue:
+            # Используем конфигурацию масштабирования
+            monitoring_interval = SCALING_CONFIG['MONITORING_INTERVAL']
             job_queue.run_repeating(
                 self.monitor_specialist_replies,
-                interval=30,  # Проверяем каждые 30 секунд
+                interval=monitoring_interval,  # Конфигурируемый интервал
                 first=10,     # Первая проверка через 10 секунд после запуска
                 name='monitor_specialist_replies'
             )
-            logger.info("🔄 Запущен мониторинг ответов специалистов (каждые 30 секунд)")
+            
+            # Добавляем задачу очистки кэша
+            cache_cleanup_interval = SCALING_CONFIG['CACHE_CLEANUP_INTERVAL']
+            job_queue.run_repeating(
+                self.cleanup_cache,
+                interval=cache_cleanup_interval,
+                first=300,  # Первая очистка через 5 минут
+                name='cleanup_cache'
+            )
+            
+            logger.info(f"🔄 Запущен мониторинг ответов специалистов (каждые {monitoring_interval} секунд)")
+            logger.info(f"🧹 Запущена очистка кэша (каждые {cache_cleanup_interval // 60} минут)")
 
     async def run(self):
         """
@@ -257,6 +272,33 @@ class Bot:
             '💼 Используйте кнопку "🚀 Личный кабинет" для быстрого доступа к личному кабинету:',
             reply_markup=persistent_keyboard
         )
+
+    @safe_execute('force_update_command')
+    @monitor_performance('force_update_command')
+    async def force_update_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Принудительное обновление интерфейса для решения проблем кэширования.
+        """
+        user = update.effective_user
+        logger.info(f"/force_update от {user.id} ({user.first_name})")
+        
+        if await self.is_user_authorized(user.id):
+            # Для авторизованных пользователей
+            persistent_keyboard = self.create_persistent_keyboard()
+            await update.message.reply_text(
+                '✅ Интерфейс обновлен! Теперь вы видите обновленную клавиатуру.\n'
+                'Нажмите кнопку "🚀 Личный кабинет" для доступа к функциям.',
+                reply_markup=persistent_keyboard
+            )
+        else:
+            # Для неавторизованных пользователей
+            auth_url = get_web_app_url('MAIN')
+            keyboard = self.create_auth_keyboard(auth_url)
+            await update.message.reply_text(
+                '✅ Интерфейс обновлен! Теперь вы видите обновленную клавиатуру.\n'
+                'Нажмите кнопку "🔐 Авторизоваться" для авторизации.',
+                reply_markup=keyboard
+            )
 
     @safe_execute('auth_command')
     @monitor_performance('auth_command')
@@ -981,6 +1023,36 @@ class Bot:
         except Exception as e:
             logger.error(f"Не удалось залогировать ответ специалиста для пользователя {telegram_id}: {e}")
             raise
+
+    async def cleanup_cache(self, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Периодическая очистка кэша для масштабируемости.
+        """
+        try:
+            max_cache_size = SCALING_CONFIG['MAX_CACHE_SIZE']
+            
+            # Очищаем старые записи кэша
+            if len(auth_cache.user_cache) > max_cache_size:
+                # Удаляем самые старые записи
+                sorted_items = sorted(
+                    auth_cache.user_cache.items(),
+                    key=lambda x: x[1].get('auth_timestamp', 0)
+                )
+                
+                # Оставляем 80% от максимального размера
+                keep_count = int(max_cache_size * 0.8)
+                items_to_remove = sorted_items[:-keep_count]
+                
+                for user_id, _ in items_to_remove:
+                    del auth_cache.user_cache[user_id]
+                
+                logger.info(f"🧹 Очищен кэш: удалено {len(items_to_remove)} старых записей, осталось {len(auth_cache.user_cache)}")
+                
+                # Сохраняем обновленный кэш
+                auth_cache._save_to_file()
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка при очистке кэша: {e}")
 
     async def monitor_specialist_replies(self, context: ContextTypes.DEFAULT_TYPE):
         """
