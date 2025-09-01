@@ -33,6 +33,7 @@ A **production-ready, enterprise-grade** Telegram bot for marketing teams with G
 
 ### 🔒 **Core Functionality**
 - **User Authentication**: Secure authorization with partner codes and phone numbers
+- **📱 Mobile-Friendly Auth**: Hybrid authentication system with WebApp + chat command fallback
 - **Google Sheets Integration**: Dual-table architecture for auth and conversations
 - **OpenAI Assistant**: AI-powered responses with conversation context and thread persistence
 - **Web Mini-App**: Telegram WebApp interface for user interactions
@@ -40,6 +41,7 @@ A **production-ready, enterprise-grade** Telegram bot for marketing teams with G
 
 ### 🚀 **Version 2.0.0 Enhancements**
 - **Zero Critical Issues**: All 18 critical bugs fixed and validated
+- **📱 Mobile Authentication**: 100% mobile compatibility with automatic fallback
 - **Enhanced Performance**: Rate limiting, caching, and optimization
 - **Persistent Storage**: Conversation history and auth state preserved
 - **MCP Integration**: Advanced development and debugging tools
@@ -159,6 +161,7 @@ python bot.py
 ### User Commands
 
 - `/start` - Initialize bot and show authorization
+- `/auth <code> <phone>` - 🆕 Direct authentication via chat command
 - `/menu` - Access main menu and mini-app
 - `/new_chat` - Reset conversation context
 - `/check_auth` - Check authorization status (diagnostic)
@@ -225,6 +228,55 @@ python диагностика_авторизации.py
 1. User enters code + phone → Bot checks **auth table**
 2. If valid → Bot updates **same auth table** (columns D & E)
 3. Conversations → Bot logs to **tickets table**
+
+## 📱 Mobile Authentication
+
+### Hybrid Authentication System
+
+The bot provides **100% mobile compatibility** with a sophisticated fallback mechanism:
+
+#### **Primary Method: WebApp API**
+- Standard Telegram WebApp data transmission
+- Works seamlessly on desktop and compatible mobile devices
+- Automatic validation and authorization
+
+#### **Fallback Method: Chat Command**
+- For mobile devices with limited WebApp API support
+- User fills form → Command auto-generated → Copy to clipboard
+- Format: `/auth <partner_code> <phone>`
+- Direct processing through bot chat interface
+
+### **Authentication Flow**
+
+```mermaid
+graph TD
+    A[User Opens WebApp] --> B[Fills Form]
+    B --> C{WebApp API Available?}
+    C -->|Yes| D[Send via WebApp]
+    C -->|No| E[Generate Command]
+    E --> F[Auto-copy to Clipboard]
+    F --> G[User Pastes in Chat]
+    D --> H[Bot Processes Auth]
+    G --> H
+    H --> I[Validation & Authorization]
+```
+
+### **Command Usage**
+
+```bash
+# Standard format
+/auth PARTNER123 89991234567
+
+# Phone normalization (10 digits → 11 digits)
+/auth PARTNER123 9991234567  # Auto-converts to 89991234567
+```
+
+### **Mobile Features**
+- ✅ **Responsive design** - Optimized for all screen sizes
+- ✅ **Auto-copy functionality** - One-click command copying
+- ✅ **Phone formatting** - Automatic phone number formatting
+- ✅ **Error handling** - Clear error messages and validation
+- ✅ **Cross-platform** - Works on iOS, Android, and Desktop
 
 ## 📚 API Reference
 
