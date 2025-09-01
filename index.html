@@ -146,6 +146,11 @@
                 <div id="tg_status">Telegram WebApp: проверяется...</div>
                 <div id="button_status">Кнопка: проверяется...</div>
                 <div id="click_status">Клик: не было</div>
+                
+                <!-- ✅ ТЕСТОВАЯ КНОПКА -->
+                <button onclick="testSimpleClick()" style="margin-top: 10px; padding: 5px 10px; background: #ff4444; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                    🧪 ТЕСТ КЛИКА
+                </button>
             </div>
             
             <div style="display:flex;justify-content:flex-start;align-items:center;width:100%">
@@ -256,6 +261,13 @@
             } else {
                 console.error('HTML кнопка не найдена!');
             }
+        }
+        
+        // ✅ ПРОСТАЯ ТЕСТОВАЯ ФУНКЦИЯ
+        function testSimpleClick() {
+            console.log('🧪 ТЕСТОВАЯ КНОПКА НАЖАТА!');
+            alert('🧪 ТЕСТ: Кнопка работает! JavaScript выполняется!');
+            document.getElementById('click_status').textContent = 'Клик: ✅ ТЕСТ прошел!';
         }
         
         // ✅ Функция для тестирования кнопки
