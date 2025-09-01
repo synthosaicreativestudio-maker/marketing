@@ -125,6 +125,11 @@ bot.log
 bot.lock
 *.lock
 
+# Cache and persistence files (v2.0.0+)
+auth_cache.json
+mcp_context_data.json
+diagnostic_report.json
+
 # IDE files
 .vscode/
 .idea/
