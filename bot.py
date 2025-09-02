@@ -642,6 +642,7 @@ class Bot:
             'back_to_main': self._handle_back_to_main,
             'direct_webapp': self._handle_direct_webapp,
             'auth_request': self._handle_authorization,
+            'get_promotions': self._handle_get_promotions_api,
         }.get(data_type)
 
     async def _handle_menu_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
@@ -682,7 +683,7 @@ class Bot:
 
         # Специальная обработка для подраздела "Акции"
         if section == "Акции и мероприятия" and subsection == "Акции":
-            await self._handle_promotions_request(update, context)
+            await self._handle_promotions_webapp_request(update, context)
             return
 
         try:
@@ -801,6 +802,89 @@ class Bot:
         except Exception as e:
             logger.error(f"Ошибка при обработке запроса акций: {e}")
             await update.message.reply_text('🎉 Актуальных акций пока нет\n\nСледите за обновлениями! Мы обязательно сообщим о новых предложениях.')
+
+    async def _handle_promotions_webapp_request(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Обрабатывает запрос на открытие страницы акций в мини-приложении.
+        """
+        user = update.effective_user
+        
+        try:
+            # Логируем запрос акций как тикет
+            if self.tickets_client and self.tickets_client.sheet:
+                telegram_id = str(user.id)
+                code = context.user_data.get('partner_code', '')
+                phone = context.user_data.get('phone', '')
+                fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
+                ticket_text = f"Акции и мероприятия → Акции (открытие страницы)"
+
+                await self.run_blocking(
+                    self.tickets_client.upsert_ticket,
+                    telegram_id, code, phone, fio,
+                    ticket_text, 'выполнено', 'user', False
+                )
+            
+            # Создаём URL для страницы акций
+            promotions_url = get_web_app_url('SPA_MENU').replace('spa_menu.html', 'promotions.html')
+            
+            # Открываем страницу акций
+            keyboard = [[InlineKeyboardButton('🎉 Открыть акции', web_app=WebAppInfo(url=promotions_url))]]
+            await update.message.reply_text('🎉 Открываю страницу акций...', 
+                                           reply_markup=InlineKeyboardMarkup(keyboard))
+                
+        except Exception as e:
+            logger.error(f"Ошибка при открытии страницы акций: {e}")
+            await update.message.reply_text('🎉 Ошибка при открытии страницы акций')
+
+    async def _handle_get_promotions_api(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
+        """
+        Обрабатывает API запрос на получение акций.
+        """
+        user = update.effective_user
+        
+        try:
+            # Проверяем подключение к таблице акций
+            if not self.promotions_client:
+                await update.message.reply_text('🎉 Актуальных акций пока нет')
+                return
+            
+            # Подключаемся к таблице если не подключены
+            if not self.promotions_client.sheet:
+                connected = await self.run_blocking(self.promotions_client.connect)
+                if not connected:
+                    await update.message.reply_text('🎉 Актуальных акций пока нет')
+                    return
+            
+            # Получаем активные акции
+            active_promotions = await self.run_blocking(self.promotions_client.get_active_promotions)
+            
+            if not active_promotions:
+                await update.message.reply_text('🎉 Актуальных акций пока нет')
+                return
+            
+            # Формируем ответ с акциями
+            message_text = f'🎉 Найдено {len(active_promotions)} активных акций!\n\n'
+            
+            for i, promotion in enumerate(active_promotions[:3], 1):  # Показываем максимум 3 акции
+                name = promotion.get('name', 'Без названия')
+                status = promotion.get('ui_status', 'unknown')
+                
+                status_emoji = {
+                    'active': '🟢',
+                    'published': '🟡', 
+                    'finished': '🔴'
+                }.get(status, '⚪')
+                
+                message_text += f'{i}. {status_emoji} {name}\n'
+            
+            if len(active_promotions) > 3:
+                message_text += f'... и ещё {len(active_promotions) - 3} акций'
+            
+            await update.message.reply_text(message_text)
+                
+        except Exception as e:
+            logger.error(f"Ошибка при обработке API запроса акций: {e}")
+            await update.message.reply_text('🎉 Ошибка при загрузке акций')
 
     @safe_execute('test_promotions_command')
     @monitor_performance('test_promotions_command')
