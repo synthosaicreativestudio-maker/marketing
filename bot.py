@@ -5,10 +5,12 @@
 - Классовая структура для инкапсуляции логики
 - Улучшенная обработка ошибок и логирование
 - Рефакторинг длинных функций
+- Менеджер процессов для предотвращения множественных экземпляров
 """
 
 import logging
 import os
+import sys
 import asyncio
 import functools
 import nest_asyncio
@@ -30,6 +32,7 @@ from mcp_context_v7 import mcp_context
 from error_handler import safe_execute
 from performance_monitor import monitor_performance
 from validator import validator
+from process_manager import ensure_single_bot_instance, cleanup_bot_instance
 
 # Инициализируем nest_asyncio для совместимости
 nest_asyncio.apply()
@@ -1521,6 +1524,16 @@ def main():
     """
     logger.info("Starting Marketing Bot...")
     
+    # Проверяем аргументы командной строки
+    force_restart = '--force' in sys.argv
+    
+    # Гарантируем единственность экземпляра
+    if not ensure_single_bot_instance(force_restart):
+        logger.error("❌ Не удалось запустить бот - конфликт экземпляров")
+        logger.error("💡 Попробуйте: python3 bot.py --force")
+        logger.error("💡 Или: pkill -f 'python.*bot.py' && python3 bot.py")
+        sys.exit(1)
+    
     # Комплексная валидация конфигурации
     logger.info("Validating configuration...")
     
@@ -1582,6 +1595,10 @@ def main():
     except Exception as e:
         logger.critical(f"❌ Critical error during bot startup: {e}")
         raise
+    finally:
+        # Очищаем ресурсы процесс-менеджера
+        cleanup_bot_instance()
+        logger.info("🧹 Очистка завершена")
 
 if __name__ == '__main__':
     main()
