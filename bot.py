@@ -680,11 +680,13 @@ class Bot:
         user = update.effective_user
         section = payload.get('section')
         subsection = payload.get('subsection')
+        
+        # Отладочная информация
+        logger.info(f"📋 Subsection selection from user {user.id}: section='{section}', subsection='{subsection}'")
+        logger.info(f"📋 Full payload: {payload}")
 
-        # Специальная обработка для подраздела "Акции"
-        if section == "Акции и мероприятия" and subsection == "Акции":
-            await self._handle_promotions_webapp_request(update, context)
-            return
+        # Примечание: Акции теперь обрабатываются прямо в SPA меню, 
+        # не требуют специальной обработки в боте
 
         try:
             if self.tickets_client and self.tickets_client.sheet:
@@ -808,6 +810,7 @@ class Bot:
         Обрабатывает запрос на открытие страницы акций в мини-приложении.
         """
         user = update.effective_user
+        logger.info(f"🎉 Promotions webapp request from user {user.id}")
         
         try:
             # Логируем запрос акций как тикет

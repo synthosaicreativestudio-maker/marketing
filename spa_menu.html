@@ -24,6 +24,30 @@
         .menu-btn:hover{background:linear-gradient(90deg,#2a3050, #2e3452);border-color:rgba(212,175,55,0.25)}
         .back-btn{background:linear-gradient(90deg,#403020, #443822);border-color:rgba(212,175,55,0.2);margin-top:20px;width:100%;text-align:center}
         .back-btn:hover{background:linear-gradient(90deg,#504030, #544832)}
+        
+        /* Стили для акций */
+        .loading{text-align:center;padding:40px;color:rgba(255,255,255,0.65)}
+        .loading-spinner{display:inline-block;width:30px;height:30px;border:3px solid rgba(212,175,55,0.3);border-radius:50%;border-top-color:#d4af37;animation:spin 1s ease-in-out infinite;margin-bottom:15px}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        
+        .promotions-list{display:flex;flex-direction:column;gap:15px}
+        .promotion-card{background:rgba(255,255,255,0.03);border:1px solid rgba(212,175,55,0.2);border-radius:12px;padding:20px;position:relative;overflow:hidden;transition:all 0.3s ease}
+        .promotion-card:hover{border-color:rgba(212,175,55,0.4);transform:translateY(-2px)}
+        .promotion-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#d4af37,#f6e7a0)}
+        
+        .promotion-title{font-size:16px;font-weight:600;margin-bottom:10px;color:#d4af37;display:flex;align-items:center;gap:8px}
+        .promotion-description{color:rgba(255,255,255,0.65);line-height:1.5;margin-bottom:12px;font-size:14px}
+        .promotion-dates{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;font-size:12px}
+        .date-item{background:rgba(212,175,55,0.1);padding:4px 10px;border-radius:15px;color:#d4af37}
+        .promotion-status{display:inline-block;padding:4px 10px;border-radius:15px;font-size:11px;font-weight:600;text-transform:uppercase}
+        .status-active{background:rgba(0,255,0,0.1);color:#00ff00}
+        .status-published{background:rgba(255,165,0,0.1);color:#ffa500}
+        .status-finished{background:rgba(128,128,128,0.1);color:#888}
+        
+        .no-promotions{text-align:center;padding:50px 20px;color:rgba(255,255,255,0.65)}
+        .no-promotions-icon{font-size:3rem;margin-bottom:15px;opacity:0.5}
+        .no-promotions h2{font-size:18px;margin-bottom:10px;color:#fff}
+        .no-promotions p{font-size:14px;line-height:1.5}
     </style>
 </head>
 <body>
@@ -87,6 +111,20 @@
                 <h1>АКЦИИ И МЕРОПРИЯТИЯ</h1>
                 <div class="menu-grid" id="events_grid"></div>
                 <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+            </div>
+        </div>
+
+        <!-- Акции -->
+        <div class="screen" id="promotions-screen">
+            <div class="card">
+                <h1>🎉 АКЦИИ</h1>
+                <div id="promotions-content">
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        <p>Загружаем актуальные акции...</p>
+                    </div>
+                </div>
+                <button class="menu-btn back-btn" onclick="goToEvents()">← Назад к мероприятиям</button>
             </div>
         </div>
     </div>
@@ -180,6 +218,15 @@
             }
         }
 
+        function goToEvents() {
+            showScreen('events-screen');
+        }
+
+        function goToPromotions() {
+            showScreen('promotions-screen');
+            loadPromotions();
+        }
+
         // Отправка данных в бот
         function sendToBot(data) {
             try {
@@ -249,6 +296,13 @@
                     btn.textContent = subsection;
                     
                     btn.onclick = () => {
+                        // Специальная обработка для Акций
+                        if (section === 'Акции и мероприятия' && subsection === 'Акции') {
+                            goToPromotions();
+                            return;
+                        }
+                        
+                        // Обычная обработка для остальных подразделов
                         if (sendToBot({type: 'subsection_selection', section: section, subsection: subsection})) {
                             btn.textContent = 'Отправлено ✓';
                             setTimeout(() => {
@@ -275,6 +329,87 @@
 
         // Запуск при загрузке
         init();
+        
+        // Функции для акций
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('ru-RU');
+            } catch (e) {
+                return dateStr;
+            }
+        }
+
+        function getStatusText(status) {
+            switch (status) {
+                case 'active': return 'Активна';
+                case 'published': return 'Опубликована';
+                case 'finished': return 'Завершена';
+                default: return status;
+            }
+        }
+
+        function getStatusEmoji(status) {
+            switch (status) {
+                case 'active': return '🟢';
+                case 'published': return '🟡';
+                case 'finished': return '🔴';
+                default: return '⚪';
+            }
+        }
+
+        function renderPromotions(promotions) {
+            const container = document.getElementById('promotions-content');
+            
+            if (!promotions || promotions.length === 0) {
+                container.innerHTML = `
+                    <div class="no-promotions">
+                        <div class="no-promotions-icon">📋</div>
+                        <h2>Актуальных акций пока нет</h2>
+                        <p>Следите за обновлениями!<br>Мы обязательно сообщим о новых предложениях.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '<div class="promotions-list">';
+            promotions.forEach(promotion => {
+                const datesHtml = [];
+                if (promotion.start_date) {
+                    datesHtml.push(`<span class="date-item">📅 Начало: ${formatDate(promotion.start_date)}</span>`);
+                }
+                if (promotion.end_date) {
+                    datesHtml.push(`<span class="date-item">⏰ Окончание: ${formatDate(promotion.end_date)}</span>`);
+                }
+
+                const statusEmoji = getStatusEmoji(promotion.ui_status);
+                const statusText = getStatusText(promotion.ui_status);
+
+                html += `
+                    <div class="promotion-card">
+                        <div class="promotion-title">
+                            ${statusEmoji} ${promotion.name || 'Без названия'}
+                        </div>
+                        ${promotion.description ? `<div class="promotion-description">${promotion.description}</div>` : ''}
+                        ${datesHtml.length > 0 ? `<div class="promotion-dates">${datesHtml.join('')}</div>` : ''}
+                        <div class="promotion-status status-${promotion.ui_status || 'unknown'}">
+                            ${statusText}
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function loadPromotions() {
+            // Мок-данные для тестирования
+            setTimeout(() => {
+                const mockPromotions = [];
+                renderPromotions(mockPromotions);
+            }, 1000);
+        }
     </script>
 </body>
 </html>
