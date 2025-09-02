@@ -80,6 +80,15 @@
                 <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
             </div>
         </div>
+
+        <!-- Акции и мероприятия -->
+        <div class="screen" id="events-screen">
+            <div class="card">
+                <h1>АКЦИИ И МЕРОПРИЯТИЯ</h1>
+                <div class="menu-grid" id="events_grid"></div>
+                <button class="menu-btn back-btn" onclick="goToMain()">← Назад в меню</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -128,10 +137,16 @@
                 'Заказ полиграфии',
                 'Заказ цифровых материалов',
                 'Прочие вопросы'
+            ],
+            'Акции и мероприятия': [
+                'Акции',
+                'Мероприятия',
+                'События',
+                'Прочие вопросы'
             ]
         };
 
-        const SECTIONS_WITH_SUBSECTIONS = ['Агрегаторы', 'Контент', 'Финансы', 'Технические проблемы', 'Дизайн и материалы'];
+        const SECTIONS_WITH_SUBSECTIONS = ['Агрегаторы', 'Контент', 'Финансы', 'Технические проблемы', 'Дизайн и материалы', 'Акции и мероприятия'];
 
         // Навигация между экранами
         function showScreen(screenId) {
@@ -156,7 +171,8 @@
                 'Контент': 'content-screen',
                 'Финансы': 'finance-screen',
                 'Технические проблемы': 'tech-screen',
-                'Дизайн и материалы': 'design-screen'
+                'Дизайн и материалы': 'design-screen',
+                'Акции и мероприятия': 'events-screen'
             };
             
             if (screenMap[section]) {
@@ -254,6 +270,7 @@
             renderSubsectionMenu('Финансы', 'finance_grid');
             renderSubsectionMenu('Технические проблемы', 'tech_grid');
             renderSubsectionMenu('Дизайн и материалы', 'design_grid');
+            renderSubsectionMenu('Акции и мероприятия', 'events_grid');
         }
 
         // Запуск при загрузке
