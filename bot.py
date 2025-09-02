@@ -902,8 +902,45 @@ class Bot:
             await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
             return
             
-        await update.message.reply_text('🔍 Тестирую отображение акций...')
-        await self._handle_promotions_request(update, context)
+        await update.message.reply_text('🔍 Тестирую подключение к таблице акций...')
+        
+        try:
+            # Проверяем клиент акций
+            if not self.promotions_client:
+                await update.message.reply_text('❌ Клиент акций не инициализирован')
+                return
+            
+            # Подключаемся к таблице
+            if not self.promotions_client.sheet:
+                connected = await self.run_blocking(self.promotions_client.connect)
+                if not connected:
+                    await update.message.reply_text('❌ Не удалось подключиться к таблице акций')
+                    return
+            
+            # Проверяем новые акции
+            new_promotions = await self.run_blocking(self.promotions_client.get_new_published_promotions)
+            active_promotions = await self.run_blocking(self.promotions_client.get_active_promotions)
+            
+            result_text = f'''✅ Подключение к таблице акций работает!
+
+📊 Статистика:
+🆕 Новых для уведомления: {len(new_promotions)}
+🎯 Активных всего: {len(active_promotions)}
+
+⏰ Мониторинг: каждые 5 минут
+🔄 Последняя проверка: прошла успешно'''
+            
+            if new_promotions:
+                result_text += f"\n\n🎉 Новые акции:\n"
+                for promo in new_promotions[:3]:
+                    name = promo.get('name', 'Без названия')
+                    result_text += f"• {name}\n"
+            
+            await update.message.reply_text(result_text)
+            
+        except Exception as e:
+            logger.error(f"Ошибка в тесте акций: {e}")
+            await update.message.reply_text(f'❌ Ошибка при тестировании: {str(e)}')
 
     async def _handle_back_to_main(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
         """
