@@ -5,6 +5,10 @@
 
 import os
 from typing import List
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения
+load_dotenv()
 
 # Google Sheets конфигурация
 SHEET_COLUMNS = {
@@ -47,6 +51,15 @@ AUTH_CONFIG = {
     'BLOCK_DURATIONS': [86400, 432000, 2592000],  # 1 день, 5 дней, 30 дней
     'CACHE_TTL': 300,  # 5 минут - увеличено для производительности
     'USER_CACHE_TTL': 1800,  # 30 минут - увеличено для производительности
+}
+
+# Настройки акций
+PROMOTIONS_CONFIG = {
+    'SHEET_NAME': 'Акции',
+    'MONITORING_INTERVAL': 300,  # 5 минут - мониторинг новых публикаций
+    'CACHE_TTL': 600,  # 10 минут - кэш акций для мини-приложения
+    'NOTIFICATION_DELAY': 2,  # 2 секунды между уведомлениями партнерам
+    'MAX_DESCRIPTION_LENGTH': 200,  # Максимальная длина описания в уведомлении
 }
 
 # Настройки масштабирования для большого количества пользователей
@@ -132,6 +145,7 @@ GOOGLE_CREDENTIALS_PATH = get_env_or_default('GOOGLE_CREDENTIALS_PATH', 'credent
 LOG_FILE = get_env_or_default('LOG_FILE', 'bot.log')
 AUTH_WORKSHEET_NAME = get_env_or_default('AUTH_WORKSHEET_NAME', 'список сотрудников для авторизации')
 TICKETS_WORKSHEET_NAME = get_env_or_default('TICKETS_WORKSHEET_NAME', 'обращения')
+PROMOTIONS_SHEET_URL = get_env_or_default('PROMOTIONS_SHEET_URL', '')
 
 
 def get_web_app_url(key: str = 'MAIN') -> str:

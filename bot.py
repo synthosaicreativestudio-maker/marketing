@@ -20,9 +20,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 from config import (
     SECTIONS, get_web_app_url, get_ticket_status, SUBSECTIONS, validate_config,
     LOG_FILE, GOOGLE_CREDENTIALS_PATH, AUTH_WORKSHEET_NAME, TICKETS_WORKSHEET_NAME,
-    SCALING_CONFIG
+    SCALING_CONFIG, PROMOTIONS_CONFIG, PROMOTIONS_SHEET_URL
 )
 from sheets_client import GoogleSheetsClient
+from promotions_client import PromotionsClient
 from auth_cache import auth_cache
 from openai_client import openai_client
 from mcp_context_v7 import mcp_context
@@ -61,6 +62,7 @@ class Bot:
         self.application = Application.builder().token(self.token).build()
         self.sheets_client = None
         self.tickets_client = None
+        self.promotions_client = None
         self._init_clients()
         self._register_handlers()
 
@@ -96,6 +98,21 @@ class Bot:
         else:
             logger.info("TICKETS_SHEET_URL не задан или credentials.json отсутствует — таблица обращений отключена.")
 
+        # Инициализация клиента акций
+        promotions_sheet_url = PROMOTIONS_SHEET_URL
+        if promotions_sheet_url and os.path.exists(GOOGLE_CREDENTIALS_PATH):
+            try:
+                self.promotions_client = PromotionsClient(
+                    credentials_file=GOOGLE_CREDENTIALS_PATH,
+                    sheet_url=promotions_sheet_url
+                )
+                logger.info("Клиент акций создан, подключение будет выполнено при запуске.")
+            except Exception as e:
+                logger.error(f"Ошибка создания клиента акций: {e}")
+                self.promotions_client = None
+        else:
+            logger.info("PROMOTIONS_SHEET_URL не задан или credentials.json отсутствует — таблица акций отключена.")
+
     def _register_handlers(self):
         """
         Регистрация обработчиков команд и сообщений.
@@ -106,6 +123,7 @@ class Bot:
         self.application.add_handler(CommandHandler('reply', self.reply_command))
         self.application.add_handler(CommandHandler('auth', self.auth_command))
         self.application.add_handler(CommandHandler('force_update', self.force_update_command))  # Новая команда
+        self.application.add_handler(CommandHandler('test_promotions', self.test_promotions_command))  # Тестовая команда
         self.application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, self.web_app_data))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
@@ -133,6 +151,16 @@ class Bot:
             
             logger.info(f"🔄 Запущен мониторинг ответов специалистов (каждые {monitoring_interval} секунд)")
             logger.info(f"🧹 Запущена очистка кэша (каждые {cache_cleanup_interval // 60} минут)")
+            
+            # Добавляем мониторинг новых акций
+            promotions_monitoring_interval = PROMOTIONS_CONFIG['MONITORING_INTERVAL']
+            job_queue.run_repeating(
+                self.monitor_new_promotions,
+                interval=promotions_monitoring_interval,
+                first=30,  # Первая проверка через 30 секунд
+                name='monitor_new_promotions'
+            )
+            logger.info(f"🎉 Запущен мониторинг новых акций (каждые {promotions_monitoring_interval // 60} минут)")
 
     async def run(self):
         """
@@ -652,6 +680,11 @@ class Bot:
         section = payload.get('section')
         subsection = payload.get('subsection')
 
+        # Специальная обработка для подраздела "Акции"
+        if section == "Акции и мероприятия" and subsection == "Акции":
+            await self._handle_promotions_request(update, context)
+            return
+
         try:
             if self.tickets_client and self.tickets_client.sheet:
                 telegram_id = str(user.id)
@@ -671,6 +704,119 @@ class Bot:
 
         await update.message.reply_text(f'✅ Ваша заявка принята\n\n📝 Раздел: {section}\n🔹 Подраздел: {subsection}\n\nМы свяжемся с вами в ближайшее время.')
         await self._notify_admins(context, f'🆕 Новая заявка от {user.first_name or user.id}\n\n📝 {section} → {subsection}\n\n👤 ID: {user.id}')
+
+    async def _handle_promotions_request(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Обрабатывает запрос на просмотр акций.
+        """
+        user = update.effective_user
+        
+        try:
+            # Проверяем подключение к таблице акций
+            if not self.promotions_client:
+                await update.message.reply_text('🎉 Актуальных акций пока нет\n\nСледите за обновлениями! Мы обязательно сообщим о новых предложениях.')
+                return
+            
+            # Подключаемся к таблице если не подключены
+            if not self.promotions_client.sheet:
+                connected = await self.run_blocking(self.promotions_client.connect)
+                if not connected:
+                    await update.message.reply_text('🎉 Актуальных акций пока нет\n\nСледите за обновлениями! Мы обязательно сообщим о новых предложениях.')
+                    return
+            
+            # Получаем активные акции
+            active_promotions = await self.run_blocking(self.promotions_client.get_active_promotions)
+            
+            if not active_promotions:
+                await update.message.reply_text('🎉 Актуальных акций пока нет\n\nСледите за обновлениями! Мы обязательно сообщим о новых предложениях.')
+                return
+            
+            # Формируем сообщение с актуальными акциями
+            message_parts = ['🎉 Актуальные акции:']
+            
+            for i, promotion in enumerate(active_promotions[:5], 1):  # Показываем максимум 5 акций
+                name = promotion.get('name', 'Без названия')
+                description = promotion.get('description', '')
+                status = promotion.get('ui_status', 'unknown')
+                start_date = promotion.get('start_date')
+                end_date = promotion.get('end_date')
+                
+                # Определяем эмодзи статуса
+                status_emoji = {
+                    'active': '🟢',
+                    'published': '🟡', 
+                    'finished': '🔴'
+                }.get(status, '⚪')
+                
+                # Определяем текст статуса
+                status_text = {
+                    'active': 'Активна',
+                    'published': 'Опубликована',
+                    'finished': 'Завершена'
+                }.get(status, 'Неизвестно')
+                
+                promotion_text = f'\n{i}. {status_emoji} **{name}** ({status_text})'
+                
+                # Добавляем описание если есть (обрезаем до 100 символов)
+                if description:
+                    short_desc = description[:100] + '...' if len(description) > 100 else description
+                    promotion_text += f'\n   {short_desc}'
+                
+                # Добавляем даты если есть
+                if start_date and end_date:
+                    promotion_text += f'\n   📅 {start_date.strftime("%d.%m.%Y")} - {end_date.strftime("%d.%m.%Y")}'
+                elif start_date:
+                    promotion_text += f'\n   📅 Начало: {start_date.strftime("%d.%m.%Y")}'
+                
+                message_parts.append(promotion_text)
+            
+            # Добавляем информацию о дополнительных акциях
+            if len(active_promotions) > 5:
+                message_parts.append(f'\n... и еще {len(active_promotions) - 5} акций')
+            
+            message_parts.append('\n💡 Подробности уточняйте у специалистов отдела маркетинга')
+            
+            final_message = '\n'.join(message_parts)
+            
+            # Отправляем сообщение с акциями
+            await update.message.reply_text(final_message, parse_mode='Markdown')
+            
+            # Логируем запрос акций как тикет
+            try:
+                if self.tickets_client and self.tickets_client.sheet:
+                    telegram_id = str(user.id)
+                    code = context.user_data.get('partner_code', '')
+                    phone = context.user_data.get('phone', '')
+                    fio = f"{user.first_name or ''} {user.last_name or ''}".strip()
+                    ticket_text = f"Акции и мероприятия → Акции (просмотр {len(active_promotions)} акций)"
+
+                    await self.run_blocking(
+                        self.tickets_client.upsert_ticket,
+                        telegram_id, code, phone, fio,
+                        ticket_text, 'выполнено', 'user', False
+                    )
+            except Exception as e:
+                logger.error(f"Не удалось залогировать просмотр акций: {e}")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при обработке запроса акций: {e}")
+            await update.message.reply_text('🎉 Актуальных акций пока нет\n\nСледите за обновлениями! Мы обязательно сообщим о новых предложениях.')
+
+    @safe_execute('test_promotions_command')
+    @monitor_performance('test_promotions_command')
+    async def test_promotions_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Тестовая команда для проверки функциональности акций.
+        """
+        user = update.effective_user
+        logger.info(f"/test_promotions от {user.id} ({user.first_name})")
+        
+        if not await self.is_user_authorized(user.id):
+            await update.message.reply_text('Вы не авторизованы. Сначала пройдите авторизацию.')
+            return
+            
+        await update.message.reply_text('🔍 Тестирую отображение акций...')
+        await self._handle_promotions_request(update, context)
 
     async def _handle_back_to_main(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
         """
@@ -1003,7 +1149,7 @@ class Bot:
         try:
             await context.bot.send_message(
                 chat_id=int(telegram_id),
-                text=f'Отдел маркетинга (код {code}):\n{text}'
+                text=f'Отдел маркетинга:\n{text}'
             )
             logger.info(f"Ответ отдела маркетинга отправлен пользователю {telegram_id}")
         except Exception as e:
@@ -1053,6 +1199,148 @@ class Bot:
                 
         except Exception as e:
             logger.error(f"❌ Ошибка при очистке кэша: {e}")
+
+    async def monitor_new_promotions(self, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Мониторинг новых опубликованных акций для отправки уведомлений.
+        """
+        if not self.promotions_client:
+            return
+            
+        try:
+            # Подключаемся к таблице если не подключены
+            if not self.promotions_client.sheet:
+                connected = await self.run_blocking(self.promotions_client.connect)
+                if not connected:
+                    logger.warning("Не удалось подключиться к таблице акций")
+                    return
+            
+            # Получаем новые опубликованные акции
+            new_promotions = await self.run_blocking(self.promotions_client.get_new_published_promotions)
+            
+            if not new_promotions:
+                return
+                
+            logger.info(f"🎉 Найдено {len(new_promotions)} новых акций для уведомления")
+            
+            # Получаем всех авторизованных пользователей
+            authorized_users = await self.get_authorized_users()
+            
+            if not authorized_users:
+                logger.warning("Нет авторизованных пользователей для отправки уведомлений об акциях")
+                return
+            
+            # Отправляем уведомления для каждой акции
+            for promotion in new_promotions:
+                try:
+                    await self._send_promotion_notification(context, promotion, authorized_users)
+                    
+                    # Помечаем уведомление как отправленное
+                    await self.run_blocking(self.promotions_client.mark_notification_sent, promotion['row'])
+                    
+                    # Небольшая пауза между уведомлениями
+                    await asyncio.sleep(PROMOTIONS_CONFIG['NOTIFICATION_DELAY'])
+                    
+                except Exception as e:
+                    logger.error(f"❌ Ошибка при отправке уведомления об акции '{promotion.get('name', 'Unknown')}': {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ Ошибка в мониторинге новых акций: {e}")
+    
+    async def _send_promotion_notification(self, context: ContextTypes.DEFAULT_TYPE, promotion: dict, authorized_users: list):
+        """
+        Отправляет уведомление о новой акции всем авторизованным пользователям.
+        """
+        try:
+            # Формируем текст уведомления
+            name = promotion.get('name', 'Новая акция')
+            description = promotion.get('description', '')
+            start_date = promotion.get('start_date')
+            end_date = promotion.get('end_date')
+            
+            # Обрезаем описание если слишком длинное
+            max_desc_length = PROMOTIONS_CONFIG['MAX_DESCRIPTION_LENGTH']
+            if description and len(description) > max_desc_length:
+                description = description[:max_desc_length] + '...'
+            
+            # Формируем период действия
+            period_text = ''
+            if start_date and end_date:
+                period_text = f"📅 Действует: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
+            elif start_date:
+                period_text = f"📅 Начало: {start_date.strftime('%d.%m.%Y')}"
+            
+            message_text = f"""🎉 Новая акция опубликована!
+
+📢 {name}
+{period_text}
+
+{description if description else 'Подробности в личном кабинете'}
+
+👀 Посмотреть подробнее ↓"""
+            
+            # Создаем кнопку для просмотра акций
+            spa_menu_url = get_web_app_url('SPA_MENU')
+            keyboard = ReplyKeyboardMarkup(
+                [[KeyboardButton('👀 Посмотреть акции', web_app=WebAppInfo(url=spa_menu_url))]],
+                resize_keyboard=True,
+                one_time_keyboard=False
+            )
+            
+            # Отправляем уведомления всем авторизованным пользователям
+            sent_count = 0
+            failed_count = 0
+            
+            for user in authorized_users:
+                telegram_id = user.get('telegram_id')
+                if not telegram_id:
+                    continue
+                    
+                try:
+                    await context.bot.send_message(
+                        chat_id=int(telegram_id),
+                        text=message_text,
+                        reply_markup=keyboard
+                    )
+                    sent_count += 1
+                    
+                except Exception as e:
+                    logger.warning(f"Не удалось отправить уведомление пользователю {telegram_id}: {e}")
+                    failed_count += 1
+                    
+                # Небольшая пауза между отправками
+                await asyncio.sleep(0.1)
+            
+            logger.info(f"✅ Уведомление об акции '{name}' отправлено: {sent_count} успешно, {failed_count} ошибок")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка при отправке уведомления об акции: {e}")
+            raise
+    
+    async def get_authorized_users(self) -> list:
+        """
+        Получает список всех авторизованных пользователей для отправки уведомлений.
+        """
+        try:
+            if not self.sheets_client:
+                return []
+            
+            # Получаем авторизованных пользователей из кэша или из таблицы
+            authorized_users = await self.run_blocking(self.sheets_client.get_authorized_users_batch)
+            
+            # Фильтруем пользователей с telegram_id
+            users_with_telegram = [
+                user for user in authorized_users 
+                if user.get('telegram_id') and user.get('telegram_id') != ''
+            ]
+            
+            logger.info(f"📋 Найдено {len(users_with_telegram)} авторизованных пользователей с Telegram ID")
+            return users_with_telegram
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения авторизованных пользователей: {e}")
+            return []
 
     async def monitor_specialist_replies(self, context: ContextTypes.DEFAULT_TYPE):
         """
