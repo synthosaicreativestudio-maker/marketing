@@ -1,0 +1,25 @@
+[Unit]
+Description=Marketing Telegram Bot Service
+After=network.target
+
+[Service]
+Type=simple
+User=verakoroleva
+Group=staff
+WorkingDirectory=/Users/verakoroleva/Desktop/@marketing
+ExecStart=/usr/bin/python3 /Users/verakoroleva/Desktop/@marketing/bot.py
+Restart=always
+RestartSec=10s
+Environment="PYTHONUNBUFFERED=1"
+
+# Безопасность и ресурсы
+StandardOutput=journal
+StandardError=journal
+KillMode=process
+TimeoutStopSec=30
+
+# Переменные окружения для production
+Environment="PRODUCTION=true"
+
+[Install]
+WantedBy=multi-user.target

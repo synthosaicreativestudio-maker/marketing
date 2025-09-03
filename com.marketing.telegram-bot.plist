@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identification -->
+    <key>Label</key>
+    <string>com.marketing.telegram-bot</string>
+    
+    <!-- Program configuration -->
+    <key>Program</key>
+    <string>/usr/bin/python3</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/verakoroleva/Desktop/@marketing/bot.py</string>
+    </array>
+    
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/verakoroleva/Desktop/@marketing</string>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+        <key>PRODUCTION</key>
+        <string>true</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    
+    <!-- Automatic restart configuration -->
+    <key>KeepAlive</key>
+    <true/>
+    
+    <!-- Restart on failure -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- Logging configuration -->
+    <key>StandardOutPath</key>
+    <string>/Users/verakoroleva/Desktop/@marketing/launchd_stdout.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/verakoroleva/Desktop/@marketing/launchd_stderr.log</string>
+    
+    <!-- Resource limits and throttling -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    
+    <!-- Process management -->
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
+    
+    <!-- User configuration -->
+    <key>UserName</key>
+    <string>verakoroleva</string>
+    
+    <!-- Security settings -->
+    <key>SessionCreate</key>
+    <false/>
+    
+    <!-- Prevent from running as root -->
+    <key>GroupName</key>
+    <string>staff</string>
+</dict>
+</plist>

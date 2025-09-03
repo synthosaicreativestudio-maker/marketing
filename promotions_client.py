@@ -110,8 +110,8 @@ class PromotionsClient:
                 notification_sent = row_data[self.NOTIFICATION_COLUMN - 1] if len(row_data) >= self.NOTIFICATION_COLUMN else ''
                 name = row_data[self.NAME_COLUMN - 1] if len(row_data) >= self.NAME_COLUMN else ''
                 
-                # Ищем акции со статусом "Активна" без отправленного уведомления
-                if status == self.STATUS_ACTIVE and not notification_sent:
+                # Ищем акции со статусом "Опубликовано" без отправленного уведомления
+                if status == self.STATUS_PUBLISHED and not notification_sent:
                     
                     promotion_data = {
                         'row': row_idx,

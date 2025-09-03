@@ -32,7 +32,7 @@ from mcp_context_v7 import mcp_context
 from error_handler import safe_execute
 from performance_monitor import monitor_performance
 from validator import validator
-from process_manager import ensure_single_bot_instance, cleanup_bot_instance
+# Process management is now handled by system service manager (systemd/launchd)
 
 # Инициализируем nest_asyncio для совместимости
 nest_asyncio.apply()
@@ -43,15 +43,45 @@ if not os.getenv('TELEGRAM_TOKEN') and os.path.exists('bot.env'):
     load_dotenv('bot.env', override=True)
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE, encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+def setup_production_logging():
+    """
+    Настраивает систему логирования производственного уровня.
+    """
+    # Создать корневой логгер для приложения
+    app_logger = logging.getLogger('marketing_bot')
+    app_logger.setLevel(logging.DEBUG)
+    
+    # Избегаем дублирования обработчиков при повторном вызове
+    if app_logger.handlers:
+        return app_logger
+    
+    # Создать обработчик для вывода в консоль
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    
+    # Создать обработчик для записи в файл
+    file_handler = logging.FileHandler(LOG_FILE, mode='a', encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    
+    # Создать форматер
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - [%(levelname)s] - %(funcName)s:%(lineno)d - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Применить форматер к обработчикам
+    console_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+    
+    # Добавить обработчики к логгеру
+    app_logger.addHandler(console_handler)
+    app_logger.addHandler(file_handler)
+    
+    return app_logger
+
+# Инициализация логирования
+app_logger = setup_production_logging()
+logger = logging.getLogger('marketing_bot.main')
 
 class Bot:
     """
@@ -163,7 +193,7 @@ class Bot:
                 first=30,  # Первая проверка через 30 секунд
                 name='monitor_new_promotions'
             )
-            logger.info(f"🎉 Запущен мониторинг новых акций (каждые {promotions_monitoring_interval // 60} минут)")
+            logger.info(f"🎉 Запущен мониторинг новых акций (каждые {promotions_monitoring_interval} секунд)")
 
     async def run(self):
         """
@@ -1451,22 +1481,77 @@ class Bot:
         """
         try:
             if not self.sheets_client:
+                logger.error("sheets_client не инициализирован")
                 return []
             
             # Получаем авторизованных пользователей из кэша или из таблицы
-            authorized_users = await self.run_blocking(self.sheets_client.get_authorized_users_batch)
+            logger.debug("🔍 Вызываем sheets_client.get_authorized_users_batch()")
+            raw_data = await self.run_blocking(self.sheets_client.get_authorized_users_batch)
             
-            # Фильтруем пользователей с telegram_id
-            users_with_telegram = [
-                user for user in authorized_users 
-                if user.get('telegram_id') and user.get('telegram_id') != ''
-            ]
+            logger.debug(f"📊 Получены сырые данные: тип={type(raw_data)}, длина={len(raw_data) if hasattr(raw_data, '__len__') else 'N/A'}")
+            
+            # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обработка случая JSON-строки
+            if isinstance(raw_data, str):
+                logger.warning(f"⚠️ Получена строка вместо словаря. Попытка десериализации JSON...")
+                try:
+                    import json
+                    authorized_users_dict = json.loads(raw_data)
+                    logger.info(f"✅ Успешно десериализован JSON: {type(authorized_users_dict)}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"❌ Не удалось декодировать JSON: {e}")
+                    logger.error(f"❌ Проблемные данные: {raw_data[:200]}...")
+                    return []
+                except Exception as e:
+                    logger.error(f"❌ Неожиданная ошибка при десериализации: {e}")
+                    return []
+            elif isinstance(raw_data, dict):
+                logger.debug("✅ Получен корректный словарь")
+                authorized_users_dict = raw_data
+            else:
+                logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Неожиданный тип данных: {type(raw_data)}")
+                logger.error(f"❌ Содержимое: {raw_data}")
+                return []
+            
+            logger.debug(f"Словарь пользователей содержит {len(authorized_users_dict)} записей")
+            
+            # Преобразуем словарь в список объектов с telegram_id
+            users_with_telegram = []
+            for telegram_id, user_data in authorized_users_dict.items():
+                logger.debug(f"Обрабатываем пользователя {telegram_id}: тип данных={type(user_data)}, данные={user_data}")
+                
+                # Дополнительная проверка типов
+                if not isinstance(user_data, dict):
+                    logger.warning(f"ПРОПУСК: Пользователь {telegram_id} имеет данные неправильного типа ({type(user_data)}): {user_data}")
+                    continue
+                    
+                user_obj = {
+                    'telegram_id': telegram_id,
+                    'code': user_data.get('code', ''),
+                    'phone': user_data.get('phone', ''),
+                    'fio': user_data.get('fio', '')
+                }
+                users_with_telegram.append(user_obj)
             
             logger.info(f"📋 Найдено {len(users_with_telegram)} авторизованных пользователей с Telegram ID")
             return users_with_telegram
             
         except Exception as e:
-            logger.error(f"❌ Ошибка получения авторизованных пользователей: {e}")
+            logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА в get_authorized_users: {e}")
+            import traceback
+            logger.error(f"Полный traceback: {traceback.format_exc()}")
+            
+            # Попытаемся получить данные повторно с дополнительным логированием
+            try:
+                logger.error("🔍 Попытка повторного получения данных...")
+                test_data = await self.run_blocking(self.sheets_client.get_authorized_users_batch)
+                logger.error(f"Повторные данные: тип={type(test_data)}, количество={len(test_data) if hasattr(test_data, '__len__') else 'N/A'}")
+                if hasattr(test_data, 'items'):
+                    for i, (k, v) in enumerate(test_data.items()):
+                        if i < 3:  # Показываем только первые 3
+                            logger.error(f"Ключ {i}: {k} -> Тип значения: {type(v)}, Значение: {v}")
+            except Exception as e2:
+                logger.error(f"Ошибка при повторном получении: {e2}")
+            
             return []
 
     async def monitor_specialist_replies(self, context: ContextTypes.DEFAULT_TYPE):
@@ -1524,15 +1609,8 @@ def main():
     """
     logger.info("Starting Marketing Bot...")
     
-    # Проверяем аргументы командной строки
-    force_restart = '--force' in sys.argv
-    
-    # Гарантируем единственность экземпляра
-    if not ensure_single_bot_instance(force_restart):
-        logger.error("❌ Не удалось запустить бот - конфликт экземпляров")
-        logger.error("💡 Попробуйте: python3 bot.py --force")
-        logger.error("💡 Или: pkill -f 'python.*bot.py' && python3 bot.py")
-        sys.exit(1)
+    # System service manager (systemd/launchd) guarantees single instance
+    # No need for manual process lock management
     
     # Комплексная валидация конфигурации
     logger.info("Validating configuration...")
@@ -1596,9 +1674,7 @@ def main():
         logger.critical(f"❌ Critical error during bot startup: {e}")
         raise
     finally:
-        # Очищаем ресурсы процесс-менеджера
-        cleanup_bot_instance()
-        logger.info("🧹 Очистка завершена")
+        logger.info("🧹 Bot shutdown completed")
 
 if __name__ == '__main__':
     main()
