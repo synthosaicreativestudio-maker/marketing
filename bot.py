@@ -1187,12 +1187,42 @@ class Bot:
             await self._handle_ticket_action(query, context, data)
         elif data.startswith('view_promotion:'):
             await self._handle_view_promotion(query, context, data)
+        elif data == 'open_promotions_webapp':
+            await self._handle_open_promotions_webapp(query, context)
         elif data == 'show_menu':
             keyboard = [[InlineKeyboardButton(section, callback_data=f"menu:{section}") for section in SECTIONS]]
             await query.edit_message_text('Выберите интересующий раздел:', reply_markup=InlineKeyboardMarkup(keyboard))
         else:
             logger.warning(f"❓ Неизвестный callback data: {data}")
             await query.edit_message_text('Неподдерживаемое действие.')
+
+    async def _handle_open_promotions_webapp(self, query, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Обрабатывает открытие мини-приложения с акциями.
+        """
+        try:
+            # Получаем URL мини-приложения с переходом в раздел акций
+            spa_menu_url = get_web_app_url('SPA_MENU') + '?section=promotions'
+            
+            # Создаем кнопку для открытия мини-приложения
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    '📱 Открыть акции', 
+                    web_app=WebAppInfo(url=spa_menu_url)
+                )
+            ]])
+            
+            # Отправляем сообщение с кнопкой
+            await query.edit_message_text(
+                '📱 Откройте мини-приложение для просмотра акций:',
+                reply_markup=keyboard
+            )
+            
+            logger.info("🔗 Отправлена кнопка для открытия мини-приложения с акциями")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка при открытии мини-приложения: {e}")
+            await query.edit_message_text('Произошла ошибка при открытии мини-приложения.')
 
     async def _handle_ticket_action(self, query, context: ContextTypes.DEFAULT_TYPE, data: str):
         """
@@ -1556,11 +1586,10 @@ class Bot:
 👀 Посмотреть подробнее ↓"""
             
             # Создаем кнопку для просмотра акций (открывает мини-приложение с переходом в раздел акций)
-            spa_menu_url = get_web_app_url('SPA_MENU') + '?section=promotions'
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton(
                     '👀 Ознакомиться подробнее', 
-                    web_app=WebAppInfo(url=spa_menu_url)
+                    callback_data='open_promotions_webapp'
                 )
             ]])
             
