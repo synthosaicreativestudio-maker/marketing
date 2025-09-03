@@ -259,7 +259,34 @@
 
         function goToPromotions() {
             showScreen('promotions-screen');
-            loadPromotions();
+            showPromotionsMenu();
+        }
+
+        // Показать меню акций с кнопками действий
+        function showPromotionsMenu() {
+            const container = document.getElementById('promotions-content');
+            container.innerHTML = `
+                <div class="promotions-menu">
+                    <h2 style="text-align: center; margin-bottom: 30px; color: #d4af37;">🎯 РАЗДЕЛ АКЦИЙ</h2>
+                    <div class="menu-grid">
+                        <button class="menu-btn" onclick="loadPromotions()">
+                            📋 Просмотреть все акции
+                        </button>
+                        <button class="menu-btn" onclick="refreshPromotions()">
+                            🔄 Обновить акции
+                        </button>
+                        <button class="menu-btn" onclick="showActivePromotions()">
+                            ✅ Только активные акции
+                        </button>
+                        <button class="menu-btn" onclick="showPromotionsByDate()">
+                            📅 Акции по датам
+                        </button>
+                    </div>
+                    <button class="menu-btn back-btn" onclick="goToMain()" style="margin-top: 30px;">
+                        ← Назад в меню
+                    </button>
+                </div>
+            `;
         }
 
         // Отправка данных в бот
@@ -432,6 +459,11 @@
                         <div class="no-promotions-icon">📋</div>
                         <h2>Актуальных акций пока нет</h2>
                         <p>Следите за обновлениями!<br>Мы обязательно сообщим о новых предложениях.</p>
+                        <div style="text-align: center; margin-top: 30px;">
+                            <button class="menu-btn back-btn" onclick="showPromotionsMenu()">
+                                ← Назад к меню акций
+                            </button>
+                        </div>
                     </div>
                 `;
                 return;
@@ -475,6 +507,16 @@
                 `;
             });
             html += '</div>';
+            
+            // Добавляем кнопку "Назад к меню"
+            html += `
+                <div style="text-align: center; margin-top: 30px;">
+                    <button class="menu-btn back-btn" onclick="showPromotionsMenu()">
+                        ← Назад к меню акций
+                    </button>
+                </div>
+            `;
+            
             container.innerHTML = html;
         }
         
@@ -565,6 +607,52 @@
             promotionsCache.timestamp = null;
             console.log('🔄 Принудительное обновление акций');
             loadPromotions();
+        }
+
+        // Показать только активные акции
+        function showActivePromotions() {
+            const requestData = {
+                type: 'get_promotions',
+                filter: 'active',
+                timestamp: new Date().toISOString()
+            };
+            
+            if (sendToBot(requestData)) {
+                console.log('✅ Запрос активных акций отправлен боту');
+                setTimeout(() => {
+                    const container = document.getElementById('promotions-content');
+                    if (container.innerHTML.includes('loading-spinner')) {
+                        console.log('⏰ Таймаут загрузки активных акций');
+                        renderPromotions([]);
+                    }
+                }, 5000);
+            } else {
+                console.error('❌ Не удалось отправить запрос активных акций');
+                renderPromotions([]);
+            }
+        }
+
+        // Показать акции по датам
+        function showPromotionsByDate() {
+            const requestData = {
+                type: 'get_promotions',
+                filter: 'by_date',
+                timestamp: new Date().toISOString()
+            };
+            
+            if (sendToBot(requestData)) {
+                console.log('✅ Запрос акций по датам отправлен боту');
+                setTimeout(() => {
+                    const container = document.getElementById('promotions-content');
+                    if (container.innerHTML.includes('loading-spinner')) {
+                        console.log('⏰ Таймаут загрузки акций по датам');
+                        renderPromotions([]);
+                    }
+                }, 5000);
+            } else {
+                console.error('❌ Не удалось отправить запрос акций по датам');
+                renderPromotions([]);
+            }
         }
     </script>
 </body>
