@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест мини-приложения акций</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .promotion-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .promotion-card.expanded {
+            background: #e8f4f8;
+            border-color: #007bff;
+        }
+        .promotion-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        .promotion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            margin-top: 15px;
+        }
+        .promotion-card.expanded .promotion-content {
+            max-height: 1000px;
+        }
+        .promotion-toggle {
+            font-size: 20px;
+            transition: transform 0.3s ease;
+        }
+        .promotion-card.expanded .promotion-toggle {
+            transform: rotate(180deg);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Тест мини-приложения акций</h1>
+    
+    <div class="test-section">
+        <h2>📱 Тест Telegram WebApp API</h2>
+        <p>Telegram WebApp доступен: <span id="telegram-status">Проверяем...</span></p>
+        <p>Версия WebApp: <span id="telegram-version">-</span></p>
+        <p>Платформа: <span id="telegram-platform">-</span></p>
+    </div>
+
+    <div class="test-section">
+        <h2>🎉 Тест акций</h2>
+        <button onclick="testLoadPromotions()">Загрузить акции</button>
+        <button onclick="testSendData()">Отправить тестовые данные</button>
+        <button onclick="clearLog()">Очистить лог</button>
+        
+        <div id="promotions-content">
+            <p>Нажмите "Загрузить акции" для тестирования</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📋 Лог событий</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        let tg = window.Telegram?.WebApp;
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Проверка Telegram WebApp
+        if (tg) {
+            document.getElementById('telegram-status').textContent = '✅ Доступен';
+            document.getElementById('telegram-version').textContent = tg.version || 'Неизвестно';
+            document.getElementById('telegram-platform').textContent = tg.platform || 'Неизвестно';
+            
+            tg.ready();
+            log('✅ Telegram WebApp инициализирован');
+            
+            // Слушатель для получения данных от бота
+            tg.onEvent('webAppDataReceived', function(data) {
+                log(`📱 Получены данные от бота: ${data}`);
+                try {
+                    const payload = JSON.parse(data);
+                    if (payload.type === 'promotions_response') {
+                        log(`🎉 Получены акции: ${payload.count} штук`);
+                        renderPromotions(payload.promotions);
+                    }
+                } catch (e) {
+                    log(`❌ Ошибка парсинга данных: ${e.message}`);
+                }
+            });
+        } else {
+            document.getElementById('telegram-status').textContent = '❌ Недоступен';
+            log('❌ Telegram WebApp недоступен - работаем в тестовом режиме');
+        }
+
+        function testLoadPromotions() {
+            log('🔄 Загружаем акции...');
+            
+            if (tg && tg.sendData) {
+                const requestData = {
+                    type: 'get_promotions',
+                    timestamp: new Date().toISOString()
+                };
+                
+                log(`📤 Отправляем запрос: ${JSON.stringify(requestData)}`);
+                tg.sendData(JSON.stringify(requestData));
+            } else {
+                log('❌ Telegram API недоступен - используем тестовые данные');
+                // Тестовые данные
+                const testPromotions = [
+                    {
+                        name: 'Тестовая акция 1',
+                        description: 'Описание тестовой акции',
+                        status: 'Активна',
+                        start_date: '2025-09-01',
+                        end_date: '2025-09-30',
+                        ui_status: 'active',
+                        media: []
+                    },
+                    {
+                        name: 'Тестовая акция 2',
+                        description: 'Еще одна тестовая акция с длинным описанием для проверки отображения',
+                        status: 'Опубликована',
+                        start_date: '2025-09-15',
+                        end_date: '2025-10-15',
+                        ui_status: 'published',
+                        media: []
+                    }
+                ];
+                renderPromotions(testPromotions);
+            }
+        }
+
+        function testSendData() {
+            if (tg && tg.sendData) {
+                const testData = {
+                    type: 'test_data',
+                    message: 'Тестовое сообщение',
+                    timestamp: new Date().toISOString()
+                };
+                
+                log(`📤 Отправляем тестовые данные: ${JSON.stringify(testData)}`);
+                tg.sendData(JSON.stringify(testData));
+            } else {
+                log('❌ Telegram API недоступен');
+            }
+        }
+
+        function renderPromotions(promotions) {
+            const container = document.getElementById('promotions-content');
+            log(`🎨 renderPromotions вызвана с данными: ${JSON.stringify(promotions)}`);
+            
+            if (!promotions || promotions.length === 0) {
+                log('📋 Нет акций для отображения');
+                container.innerHTML = `
+                    <div class="no-promotions">
+                        <h3>📋 Актуальных акций пока нет</h3>
+                        <p>Следите за обновлениями!</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            log(`🎉 Отображаем ${promotions.length} акций`);
+
+            let html = '<div class="promotions-list">';
+            promotions.forEach((promotion, index) => {
+                const datesHtml = [];
+                if (promotion.start_date) {
+                    datesHtml.push(`<span>📅 Начало: ${formatDate(promotion.start_date)}</span>`);
+                }
+                if (promotion.end_date) {
+                    datesHtml.push(`<span>⏰ Окончание: ${formatDate(promotion.end_date)}</span>`);
+                }
+
+                const statusEmoji = getStatusEmoji(promotion.ui_status);
+                const statusText = getStatusText(promotion.ui_status);
+                
+                html += `
+                    <div class="promotion-card" onclick="togglePromotion(${index})">
+                        <div class="promotion-header">
+                            <div class="promotion-title">
+                                ${statusEmoji} ${promotion.name || 'Без названия'}
+                            </div>
+                            <div class="promotion-toggle">▼</div>
+                        </div>
+                        <div class="promotion-content">
+                            ${promotion.description ? `<div class="promotion-description">${promotion.description}</div>` : ''}
+                            ${datesHtml.length > 0 ? `<div class="promotion-dates">${datesHtml.join(' | ')}</div>` : ''}
+                            <div class="promotion-status">
+                                Статус: ${statusText}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        function togglePromotion(index) {
+            log(`🔄 togglePromotion вызвана для индекса: ${index}`);
+            const cards = document.querySelectorAll('.promotion-card');
+            log(`📋 Найдено ${cards.length} карточек акций`);
+            const card = cards[index];
+            if (card) {
+                card.classList.toggle('expanded');
+                log(`✅ Карточка ${index} переключена, класс expanded: ${card.classList.contains('expanded')}`);
+            } else {
+                log(`❌ Карточка с индексом ${index} не найдена`);
+            }
+        }
+
+        function formatDate(dateStr) {
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('ru-RU');
+            } catch (e) {
+                return dateStr;
+            }
+        }
+
+        function getStatusText(status) {
+            switch (status) {
+                case 'active': return 'Активна';
+                case 'published': return 'Опубликована';
+                case 'finished': return 'Завершена';
+                default: return status;
+            }
+        }
+
+        function getStatusEmoji(status) {
+            switch (status) {
+                case 'active': return '🟢';
+                case 'published': return '🟡';
+                case 'finished': return '🔴';
+                default: return '⚪';
+            }
+        }
+
+        // Автоматический тест при загрузке
+        window.addEventListener('load', function() {
+            log('🚀 Страница загружена, начинаем тестирование...');
+            setTimeout(() => {
+                testLoadPromotions();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
+
