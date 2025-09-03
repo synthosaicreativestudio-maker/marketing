@@ -17,6 +17,7 @@
 - **PROJECT_JOURNAL.md** - журнал разработки и изменений
 - **PROJECT_CHECKLIST.md** - чек-лист задач и приоритетов
 - **PROJECT_ROADMAP.md** - роадмэп развития проекта
+- **FUNCTIONAL_REQUIREMENTS.md** - основные требования по функционалу бота
 - **AUTO_DOCUMENTATION_SYSTEM.md** - эта система
 
 ### 📊 Отчеты и аналитика
