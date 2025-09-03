@@ -88,7 +88,7 @@ class AsyncPromotionsClient:
     
     async def get_new_published_promotions(self) -> List[Dict[str, Any]]:
         """
-        Асинхронно получает новые опубликованные акции для отправки уведомлений.
+        Асинхронно получает новые активные акции для отправки уведомлений.
         
         Returns:
             List[Dict]: Список новых акций для уведомления
@@ -113,7 +113,7 @@ class AsyncPromotionsClient:
                     notification_sent = row_data[self.NOTIFICATION_COLUMN - 1] if len(row_data) >= self.NOTIFICATION_COLUMN else ''
                     name = row_data[self.NAME_COLUMN - 1] if len(row_data) >= self.NAME_COLUMN else ''
                     
-                    if status == self.STATUS_PUBLISHED and not notification_sent:
+                    if status == self.STATUS_ACTIVE and not notification_sent:
                         promotion_data = {
                             'row': row_idx,
                             'release_date': self._parse_date(row_data[self.RELEASE_DATE_COLUMN - 1]) if len(row_data) >= self.RELEASE_DATE_COLUMN else None,

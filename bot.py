@@ -21,7 +21,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 # Импорты модулей проекта
 from config import (
-    SECTIONS, get_web_app_url, get_ticket_status, SUBSECTIONS, validate_config,
+    SECTIONS, WEB_APP_URLS, get_web_app_url, get_ticket_status, SUBSECTIONS, validate_config,
     LOG_FILE, GOOGLE_CREDENTIALS_PATH, AUTH_WORKSHEET_NAME, TICKETS_WORKSHEET_NAME,
     SCALING_CONFIG, PROMOTIONS_CONFIG, PROMOTIONS_SHEET_URL
 )
@@ -110,10 +110,9 @@ class Bot:
         self.tickets_client = None
         self.promotions_client = None
         self.async_promotions_client = None
-        self._init_clients()
         self._register_handlers()
 
-    def _init_clients(self):
+    async def _init_clients(self):
         """
         Инициализация клиентов для Google Sheets.
         """
@@ -161,7 +160,14 @@ class Bot:
                     sheet_url=promotions_sheet_url
                 )
                 
-                logger.info("Клиенты акций созданы, подключение будет выполнено при запуске.")
+                logger.info("Клиенты акций созданы, подключаемся к таблице...")
+                # Подключаемся к таблице акций при инициализации
+                if self.async_promotions_client:
+                    try:
+                        await self.async_promotions_client.connect()
+                        logger.info("✅ Подключение к таблице акций успешно")
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка подключения к таблице акций: {e}")
             except Exception as e:
                 logger.error(f"Ошибка создания клиентов акций: {e}")
                 self.promotions_client = None
@@ -223,6 +229,8 @@ class Bot:
         Запуск бота.
         """
         logger.info("Бот запускается...")
+        # Инициализируем клиенты перед запуском
+        await self._init_clients()
         await self.application.run_polling()
 
     @staticmethod
@@ -927,7 +935,7 @@ class Bot:
             logger.error(f"❌ Ошибка при обработке API запроса акций: {e}")
             await self._send_promotions_response(update, [])
     
-    async def _send_promotions_response(self, update: Update, promotions: list):
+    async def _send_promotions_response(self, update_or_query, promotions: list):
         """
         Отправляет ответ с акциями в мини-приложение.
         """
@@ -940,8 +948,16 @@ class Bot:
                 'count': len(promotions)
             }
             
+            # Определяем, что у нас - Update или CallbackQuery
+            if hasattr(update_or_query, 'message'):
+                # Это Update
+                message = update_or_query.message
+            else:
+                # Это CallbackQuery
+                message = update_or_query
+            
             # Отправляем данные через WebApp
-            await update.message.reply_text(
+            await message.reply_text(
                 f"📱 Данные акций отправлены в мини-приложение\n\n"
                 f"🎉 Найдено {len(promotions)} активных акций",
                 reply_markup=InlineKeyboardMarkup([[
@@ -956,7 +972,10 @@ class Bot:
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки ответа акций: {e}")
-            await update.message.reply_text('❌ Ошибка при отправке данных акций')
+            if hasattr(update_or_query, 'message'):
+                await update_or_query.message.reply_text('❌ Ошибка при отправке данных акций')
+            else:
+                await update_or_query.reply_text('❌ Ошибка при отправке данных акций')
 
     @safe_execute('test_promotions_command')
     @monitor_performance('test_promotions_command')
@@ -1160,8 +1179,10 @@ class Bot:
 
         if data.startswith('t:'):
             await self._handle_ticket_action(query, context, data)
+        elif data.startswith('view_promotion:'):
+            await self._handle_view_promotion(query, context, data)
         elif data == 'show_menu':
-            keyboard = [[InlineKeyboardButton(section, callback_data=f"menu:{section}")] for section in SECTIONS]
+            keyboard = [[InlineKeyboardButton(section, callback_data=f"menu:{section}") for section in SECTIONS]]
             await query.edit_message_text('Выберите интересующий раздел:', reply_markup=InlineKeyboardMarkup(keyboard))
         else:
             await query.edit_message_text('Неподдерживаемое действие.')
@@ -1219,6 +1240,53 @@ class Bot:
         except Exception as e:
             logger.error(f"Ошибка при пометке тикета как выполненного: {e}")
             await query.edit_message_text('Произошла ошибка при обновлении статуса тикета.')
+
+    async def _handle_view_promotion(self, query, context: ContextTypes.DEFAULT_TYPE, data: str):
+        """
+        Обрабатывает запрос на просмотр акции.
+        """
+        try:
+            # Извлекаем номер строки из callback_data
+            parts = data.split(':')
+            if len(parts) != 2:
+                await query.edit_message_text('Некорректный формат запроса акции.')
+                return
+                
+            row = int(parts[1])
+            
+            # Получаем данные акции из таблицы
+            if not self.async_promotions_client:
+                await query.edit_message_text('Сервис акций недоступен.')
+                return
+                
+            # Подключаемся к таблице если не подключены
+            if not self.async_promotions_client.sheet:
+                connected = await self.async_promotions_client.connect()
+                if not connected:
+                    await query.edit_message_text('Не удалось подключиться к таблице акций.')
+                    return
+            
+            # Получаем все акции и находим нужную
+            all_promotions = await self.async_promotions_client.get_active_promotions()
+            target_promotion = None
+            
+            for promotion in all_promotions:
+                if promotion.get('row') == row:
+                    target_promotion = promotion
+                    break
+            
+            if not target_promotion:
+                await query.edit_message_text('Акция не найдена.')
+                return
+            
+            # Отправляем данные акции в мини-приложение
+            await self._send_promotions_response(query, [target_promotion])
+            
+        except ValueError:
+            await query.edit_message_text('Неверный идентификатор акции.')
+        except Exception as e:
+            logger.error(f"Ошибка при обработке запроса акции: {e}")
+            await query.edit_message_text('Произошла ошибка при загрузке акции.')
 
     async def _notify_specialists(self, context: ContextTypes.DEFAULT_TYPE, row: int):
         """
@@ -1397,21 +1465,28 @@ class Bot:
         """
         Мониторинг новых опубликованных акций для отправки уведомлений.
         """
+        logger.info("🔍 Проверяем новые акции...")
+        
         if not self.async_promotions_client:
+            logger.warning("❌ Клиент акций не инициализирован")
             return
             
         try:
             # Подключаемся к таблице если не подключены
             if not self.async_promotions_client.sheet:
+                logger.info("🔗 Подключаемся к таблице акций...")
                 connected = await self.async_promotions_client.connect()
                 if not connected:
-                    logger.warning("Не удалось подключиться к таблице акций")
+                    logger.warning("❌ Не удалось подключиться к таблице акций")
                     return
+                logger.info("✅ Подключение к таблице акций успешно")
             
             # Получаем новые опубликованные акции асинхронно
+            logger.info("📋 Получаем новые опубликованные акции...")
             new_promotions = await self.async_promotions_client.get_new_published_promotions()
             
             if not new_promotions:
+                logger.info("📭 Новых акций для уведомления не найдено")
                 return
                 
             logger.info(f"🎉 Найдено {len(new_promotions)} новых акций для уведомления")
@@ -1473,7 +1548,7 @@ class Bot:
 
 👀 Посмотреть подробнее ↓"""
             
-            # Создаем кнопку для просмотра акций (ведет прямо в раздел акций)
+            # Создаем кнопку для просмотра акций (открывает мини-приложение с переходом в раздел акций)
             spa_menu_url = get_web_app_url('SPA_MENU') + '?section=promotions'
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton(

@@ -423,8 +423,10 @@
 
         function renderPromotions(promotions) {
             const container = document.getElementById('promotions-content');
+            console.log('🎨 renderPromotions вызвана с данными:', promotions);
             
             if (!promotions || promotions.length === 0) {
+                console.log('📋 Нет акций для отображения');
                 container.innerHTML = `
                     <div class="no-promotions">
                         <div class="no-promotions-icon">📋</div>
@@ -434,6 +436,8 @@
                 `;
                 return;
             }
+            
+            console.log(`🎉 Отображаем ${promotions.length} акций`);
 
             let html = '<div class="promotions-list">';
             promotions.forEach((promotion, index) => {
@@ -475,10 +479,15 @@
         }
         
         function togglePromotion(index) {
+            console.log(`🔄 togglePromotion вызвана для индекса: ${index}`);
             const cards = document.querySelectorAll('.promotion-card');
+            console.log(`📋 Найдено ${cards.length} карточек акций`);
             const card = cards[index];
             if (card) {
                 card.classList.toggle('expanded');
+                console.log(`✅ Карточка ${index} переключена, класс expanded: ${card.classList.contains('expanded')}`);
+            } else {
+                console.error(`❌ Карточка с индексом ${index} не найдена`);
             }
         }
         

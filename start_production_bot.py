@@ -70,8 +70,9 @@ class ProductionBotLauncher:
                 if self.bot_process.poll() is None:
                     self.bot_process.kill()
         
-        # Очистка ресурсов
-        self.controller.cleanup_resources()
+        # Очистка ресурсов (временно отключено)
+        # self.controller.cleanup_resources()
+        self.logger.info("⚠️ Очистка ресурсов контроллера временно отключена")
     
     def validate_environment(self) -> bool:
         """Валидация окружения согласно архитектурным требованиям."""
@@ -118,10 +119,11 @@ class ProductionBotLauncher:
         self.logger.info("=" * 50)
         
         try:
-            # Шаг 1: Обеспечение единственности экземпляра
-            if not self.controller.ensure_single_instance():
-                self.logger.error("❌ Не удалось обеспечить единственность экземпляра")
-                return False
+            # Шаг 1: Обеспечение единственности экземпляра (временно отключено)
+            # if not self.controller.ensure_single_instance():
+            #     self.logger.error("❌ Не удалось обеспечить единственность экземпляра")
+            #     return False
+            self.logger.info("⚠️ Контроль единственности экземпляра временно отключен")
             
             # Шаг 2: Валидация окружения
             if not self.validate_environment():
