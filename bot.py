@@ -1473,13 +1473,14 @@ class Bot:
 
 👀 Посмотреть подробнее ↓"""
             
-            # Создаем кнопку для просмотра акций
-            spa_menu_url = get_web_app_url('SPA_MENU')
-            keyboard = ReplyKeyboardMarkup(
-                [[KeyboardButton('👀 Посмотреть акции', web_app=WebAppInfo(url=spa_menu_url))]],
-                resize_keyboard=True,
-                one_time_keyboard=False
-            )
+            # Создаем кнопку для просмотра акций (ведет прямо в раздел акций)
+            spa_menu_url = get_web_app_url('SPA_MENU') + '?section=promotions'
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    '👀 Ознакомиться подробнее', 
+                    web_app=WebAppInfo(url=spa_menu_url)
+                )
+            ]])
             
             # Отправляем уведомления всем авторизованным пользователям
             sent_count = 0

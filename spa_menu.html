@@ -48,6 +48,33 @@
         .no-promotions-icon{font-size:3rem;margin-bottom:15px;opacity:0.5}
         .no-promotions h2{font-size:18px;margin-bottom:10px;color:#fff}
         .no-promotions p{font-size:14px;line-height:1.5}
+        
+        /* Аккордеон для акций */
+        .promotion-card{background:rgba(255,255,255,0.03);border:1px solid rgba(212,175,55,0.2);border-radius:12px;padding:20px;position:relative;overflow:hidden;transition:all 0.3s ease;cursor:pointer;margin-bottom:15px}
+        .promotion-card:hover{border-color:rgba(212,175,55,0.4);transform:translateY(-2px)}
+        .promotion-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#d4af37,#f6e7a0)}
+        .promotion-card.expanded{border-color:rgba(212,175,55,0.6);background:rgba(255,255,255,0.05)}
+        
+        .promotion-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+        .promotion-title{font-size:16px;font-weight:600;margin-bottom:10px;color:#d4af37;display:flex;align-items:center;gap:8px;flex:1}
+        .promotion-toggle{font-size:20px;color:#d4af37;transition:transform 0.3s ease;margin-left:10px}
+        .promotion-card.expanded .promotion-toggle{transform:rotate(180deg)}
+        
+        .promotion-content{max-height:0;overflow:hidden;transition:max-height 0.3s ease;margin-top:15px}
+        .promotion-card.expanded .promotion-content{max-height:1000px}
+        
+        .promotion-description{color:rgba(255,255,255,0.8);line-height:1.6;margin-bottom:15px;font-size:14px}
+        .promotion-dates{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px;font-size:12px}
+        .date-item{background:rgba(212,175,55,0.15);padding:6px 12px;border-radius:15px;color:#d4af37;border:1px solid rgba(212,175,55,0.3)}
+        .promotion-status{display:inline-block;padding:6px 12px;border-radius:15px;font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:15px}
+        .status-active{background:rgba(0,255,0,0.15);color:#00ff00;border:1px solid rgba(0,255,0,0.3)}
+        .status-published{background:rgba(255,165,0,0.15);color:#ffa500;border:1px solid rgba(255,165,0,0.3)}
+        .status-finished{background:rgba(128,128,128,0.15);color:#888;border:1px solid rgba(128,128,128,0.3)}
+        
+        .promotion-media{margin-top:15px}
+        .media-item{margin-bottom:10px;border-radius:8px;overflow:hidden}
+        .media-item img{width:100%;height:auto;border-radius:8px}
+        .media-item iframe{width:100%;height:200px;border-radius:8px}
     </style>
 </head>
 <body>
@@ -338,6 +365,16 @@
         // Запуск при загрузке
         init();
         
+        // Проверяем URL параметры для автоматического перехода
+        const urlParams = new URLSearchParams(window.location.search);
+        const section = urlParams.get('section');
+        if (section === 'promotions') {
+            // Автоматически переходим в раздел акций
+            setTimeout(() => {
+                goToPromotions();
+            }, 500);
+        }
+        
         // Слушатель для получения данных от бота
         tg.onEvent('webAppDataReceived', function(data) {
             console.log('📱 Получены данные от бота:', data);
@@ -399,7 +436,7 @@
             }
 
             let html = '<div class="promotions-list">';
-            promotions.forEach(promotion => {
+            promotions.forEach((promotion, index) => {
                 const datesHtml = [];
                 if (promotion.start_date) {
                     datesHtml.push(`<span class="date-item">📅 Начало: ${formatDate(promotion.start_date)}</span>`);
@@ -410,22 +447,60 @@
 
                 const statusEmoji = getStatusEmoji(promotion.ui_status);
                 const statusText = getStatusText(promotion.ui_status);
+                
+                // Медиа контент
+                const mediaHtml = renderMediaContent(promotion.media || []);
 
                 html += `
-                    <div class="promotion-card">
-                        <div class="promotion-title">
-                            ${statusEmoji} ${promotion.name || 'Без названия'}
+                    <div class="promotion-card" onclick="togglePromotion(${index})">
+                        <div class="promotion-header">
+                            <div class="promotion-title">
+                                ${statusEmoji} ${promotion.name || 'Без названия'}
+                            </div>
+                            <div class="promotion-toggle">▼</div>
                         </div>
-                        ${promotion.description ? `<div class="promotion-description">${promotion.description}</div>` : ''}
-                        ${datesHtml.length > 0 ? `<div class="promotion-dates">${datesHtml.join('')}</div>` : ''}
-                        <div class="promotion-status status-${promotion.ui_status || 'unknown'}">
-                            ${statusText}
+                        <div class="promotion-content">
+                            ${promotion.description ? `<div class="promotion-description">${promotion.description}</div>` : ''}
+                            ${datesHtml.length > 0 ? `<div class="promotion-dates">${datesHtml.join('')}</div>` : ''}
+                            <div class="promotion-status status-${promotion.ui_status || 'unknown'}">
+                                ${statusText}
+                            </div>
+                            ${mediaHtml}
                         </div>
                     </div>
                 `;
             });
             html += '</div>';
             container.innerHTML = html;
+        }
+        
+        function togglePromotion(index) {
+            const cards = document.querySelectorAll('.promotion-card');
+            const card = cards[index];
+            if (card) {
+                card.classList.toggle('expanded');
+            }
+        }
+        
+        function renderMediaContent(media) {
+            if (!media || media.length === 0) {
+                return '';
+            }
+            
+            let html = '<div class="promotion-media">';
+            media.forEach(item => {
+                if (item.type === 'image') {
+                    html += `<div class="media-item"><img src="${item.url}" alt="Медиа контент" loading="lazy"></div>`;
+                } else if (item.type === 'video') {
+                    if (item.url.includes('youtube.com/embed')) {
+                        html += `<div class="media-item"><iframe src="${item.url}" frameborder="0" allowfullscreen></iframe></div>`;
+                    } else {
+                        html += `<div class="media-item"><video controls><source src="${item.url}" type="video/mp4"></video></div>`;
+                    }
+                }
+            });
+            html += '</div>';
+            return html;
         }
 
         function loadPromotions() {
