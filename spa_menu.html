@@ -64,6 +64,7 @@
         .promotion-card.expanded .promotion-content{max-height:1000px}
         
         .promotion-description{color:rgba(255,255,255,0.8);line-height:1.6;margin-bottom:15px;font-size:14px}
+        .promotion-content-text{color:rgba(255,255,255,0.8);line-height:1.6;margin-bottom:15px;font-size:14px;background:rgba(212,175,55,0.1);padding:12px;border-radius:8px;border-left:3px solid #d4af37}
         .promotion-dates{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px;font-size:12px}
         .date-item{background:rgba(212,175,55,0.15);padding:6px 12px;border-radius:15px;color:#d4af37;border:1px solid rgba(212,175,55,0.3)}
         .promotion-status{display:inline-block;padding:6px 12px;border-radius:15px;font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:15px}
@@ -259,35 +260,10 @@
 
         function goToPromotions() {
             showScreen('promotions-screen');
-            showPromotionsMenu();
+            loadPromotions();
         }
 
-        // Показать меню акций с кнопками действий
-        function showPromotionsMenu() {
-            const container = document.getElementById('promotions-content');
-            container.innerHTML = `
-                <div class="promotions-menu">
-                    <h2 style="text-align: center; margin-bottom: 30px; color: #d4af37;">🎯 РАЗДЕЛ АКЦИЙ</h2>
-                    <div class="menu-grid">
-                        <button class="menu-btn" onclick="loadPromotions()">
-                            📋 Просмотреть все акции
-                        </button>
-                        <button class="menu-btn" onclick="refreshPromotions()">
-                            🔄 Обновить акции
-                        </button>
-                        <button class="menu-btn" onclick="showActivePromotions()">
-                            ✅ Только активные акции
-                        </button>
-                        <button class="menu-btn" onclick="showPromotionsByDate()">
-                            📅 Акции по датам
-                        </button>
-                    </div>
-                    <button class="menu-btn back-btn" onclick="goToMain()" style="margin-top: 30px;">
-                        ← Назад в меню
-                    </button>
-                </div>
-            `;
-        }
+
 
         // Отправка данных в бот
         function sendToBot(data) {
@@ -460,8 +436,8 @@
                         <h2>Актуальных акций пока нет</h2>
                         <p>Следите за обновлениями!<br>Мы обязательно сообщим о новых предложениях.</p>
                         <div style="text-align: center; margin-top: 30px;">
-                            <button class="menu-btn back-btn" onclick="showPromotionsMenu()">
-                                ← Назад к меню акций
+                            <button class="menu-btn back-btn" onclick="goToMain()">
+                                ← Назад в меню
                             </button>
                         </div>
                     </div>
@@ -471,48 +447,41 @@
             
             console.log(`🎉 Отображаем ${promotions.length} акций`);
 
-            let html = '<div class="promotions-list">';
+            let html = `
+                <div class="promotions-header">
+                    <h2 style="text-align: center; margin-bottom: 30px; color: #d4af37;">🎯 АКТИВНЫЕ АКЦИИ</h2>
+                </div>
+                <div class="promotions-list">
+            `;
+            
             promotions.forEach((promotion, index) => {
-                const datesHtml = [];
-                if (promotion.start_date) {
-                    datesHtml.push(`<span class="date-item">📅 Начало: ${formatDate(promotion.start_date)}</span>`);
-                }
-                if (promotion.end_date) {
-                    datesHtml.push(`<span class="date-item">⏰ Окончание: ${formatDate(promotion.end_date)}</span>`);
-                }
-
-                const statusEmoji = getStatusEmoji(promotion.ui_status);
-                const statusText = getStatusText(promotion.ui_status);
-                
-                // Медиа контент
-                const mediaHtml = renderMediaContent(promotion.media || []);
-
+                // Показываем только название акции (столбец B)
                 html += `
                     <div class="promotion-card" onclick="togglePromotion(${index})">
                         <div class="promotion-header">
                             <div class="promotion-title">
-                                ${statusEmoji} ${promotion.name || 'Без названия'}
+                                ${promotion.name || 'Без названия'}
                             </div>
                             <div class="promotion-toggle">▼</div>
                         </div>
                         <div class="promotion-content">
-                            ${promotion.description ? `<div class="promotion-description">${promotion.description}</div>` : ''}
-                            ${datesHtml.length > 0 ? `<div class="promotion-dates">${datesHtml.join('')}</div>` : ''}
-                            <div class="promotion-status status-${promotion.ui_status || 'unknown'}">
-                                ${statusText}
-                            </div>
-                            ${mediaHtml}
+                            ${promotion.description ? `<div class="promotion-description"><strong>Описание:</strong><br>${promotion.description}</div>` : ''}
+                            ${promotion.content ? `<div class="promotion-content-text"><strong>Контент:</strong><br>${promotion.content}</div>` : ''}
                         </div>
                     </div>
                 `;
             });
+            
             html += '</div>';
             
-            // Добавляем кнопку "Назад к меню"
+            // Добавляем кнопки навигации
             html += `
                 <div style="text-align: center; margin-top: 30px;">
-                    <button class="menu-btn back-btn" onclick="showPromotionsMenu()">
-                        ← Назад к меню акций
+                    <button class="menu-btn back-btn" onclick="goToMain()">
+                        ← Назад в меню
+                    </button>
+                    <button class="menu-btn back-btn" onclick="goToEvents()" style="margin-left: 10px;">
+                        ← Назад к мероприятиям
                     </button>
                 </div>
             `;
@@ -609,51 +578,7 @@
             loadPromotions();
         }
 
-        // Показать только активные акции
-        function showActivePromotions() {
-            const requestData = {
-                type: 'get_promotions',
-                filter: 'active',
-                timestamp: new Date().toISOString()
-            };
-            
-            if (sendToBot(requestData)) {
-                console.log('✅ Запрос активных акций отправлен боту');
-                setTimeout(() => {
-                    const container = document.getElementById('promotions-content');
-                    if (container.innerHTML.includes('loading-spinner')) {
-                        console.log('⏰ Таймаут загрузки активных акций');
-                        renderPromotions([]);
-                    }
-                }, 5000);
-            } else {
-                console.error('❌ Не удалось отправить запрос активных акций');
-                renderPromotions([]);
-            }
-        }
 
-        // Показать акции по датам
-        function showPromotionsByDate() {
-            const requestData = {
-                type: 'get_promotions',
-                filter: 'by_date',
-                timestamp: new Date().toISOString()
-            };
-            
-            if (sendToBot(requestData)) {
-                console.log('✅ Запрос акций по датам отправлен боту');
-                setTimeout(() => {
-                    const container = document.getElementById('promotions-content');
-                    if (container.innerHTML.includes('loading-spinner')) {
-                        console.log('⏰ Таймаут загрузки акций по датам');
-                        renderPromotions([]);
-                    }
-                }, 5000);
-            } else {
-                console.error('❌ Не удалось отправить запрос акций по датам');
-                renderPromotions([]);
-            }
-        }
     </script>
 </body>
 </html>
