@@ -1034,10 +1034,11 @@ class Bot:
         """
         Обрабатывает возврат в главное меню.
         """
-        menu_url = get_web_app_url('SPA_MENU')
-        keyboard = [[InlineKeyboardButton('🏠 Открыть личный кабинет', web_app=WebAppInfo(url=menu_url))]]
-        await update.message.reply_text('Возвращаюсь в главное меню:', reply_markup=InlineKeyboardMarkup(keyboard))
-        await update.message.reply_text('Используйте кнопку "menu" для быстрого доступа:', reply_markup=self.create_persistent_keyboard())
+        await update.message.reply_text(
+            '🏠 Возвращаюсь в главное меню.\n\n'
+            'Используйте кнопку "🚀 Личный кабинет" для быстрого доступа к функциям:',
+            reply_markup=self.create_persistent_keyboard()
+        )
 
     async def _handle_direct_webapp(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
         """
@@ -1118,11 +1119,8 @@ class Bot:
             await update.message.reply_text('✅ Авторизация прошла успешно!')
             menu_url = get_web_app_url('SPA_MENU')
             await update.message.reply_text(
-                'Откройте личный кабинет для выбора раздела, или напишите в чат',
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Личный кабинет', web_app=WebAppInfo(url=menu_url))]])
-            )
-            await update.message.reply_text(
-                'Используйте кнопку "menu" для быстрого доступа к личному кабинету',
+                '✅ Авторизация успешна! Теперь вы можете использовать все функции бота.\n\n'
+                'Используйте кнопку "🚀 Личный кабинет" для быстрого доступа к функциям.',
                 reply_markup=self.create_persistent_keyboard()
             )
         except Exception as e:
