@@ -7,6 +7,7 @@ import json
 import os
 import time
 import logging
+import threading
 from typing import Set, Dict, Optional, Tuple
 from config import AUTH_CONFIG
 
@@ -16,6 +17,7 @@ class AuthCache:
     """Единый кэш для авторизации пользователей с поддержкой персистентности"""
     
     def __init__(self, persistence_file: str = 'auth_cache.json'):
+        self._lock = threading.Lock()  # Thread-safe операции
         self.authorized_ids: Set[str] = set()
         self.auth_timestamp: float = 0
         self.user_cache: Dict[int, Dict] = {}  # user_id -> {is_authorized, timestamp, partner_code, phone}
@@ -110,13 +112,14 @@ class AuthCache:
     
     def set_user_authorized(self, user_id: int, is_authorized: bool, partner_code: str = '', phone: str = ''):
         """Устанавливает статус авторизации пользователя"""
-        self.user_cache[user_id] = {
-            'is_authorized': is_authorized,
-            'auth_timestamp': time.time(),
-            'partner_code': partner_code,
-            'phone': phone
-        }
-        self._save_to_file()
+        with self._lock:
+            self.user_cache[user_id] = {
+                'is_authorized': is_authorized,
+                'auth_timestamp': time.time(),
+                'partner_code': partner_code,
+                'phone': phone
+            }
+            self._save_to_file()
     
     def get_user_data(self, user_id: int) -> Optional[Dict]:
         """Получает данные пользователя из кэша"""

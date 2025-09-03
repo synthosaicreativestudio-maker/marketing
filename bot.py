@@ -92,7 +92,18 @@ class Bot:
         Инициализация бота.
         """
         self.token = token
-        self.application = Application.builder().token(self.token).build()
+        
+        # Создаем HTTP клиент с увеличенными таймаутами для медленного соединения
+        from telegram.request import HTTPXRequest
+        request = HTTPXRequest(
+            connection_pool_size=8,
+            read_timeout=60,  # Увеличиваем с 5 до 60 секунд
+            write_timeout=60,  # Увеличиваем с 5 до 60 секунд
+            connect_timeout=30,  # Увеличиваем с 5 до 30 секунд
+            pool_timeout=30  # Увеличиваем с 1 до 30 секунд
+        )
+        
+        self.application = Application.builder().token(self.token).request(request).build()
         self.sheets_client = None
         self.tickets_client = None
         self.promotions_client = None

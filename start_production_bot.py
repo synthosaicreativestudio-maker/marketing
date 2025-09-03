@@ -15,7 +15,7 @@ from pathlib import Path
 PROJECT_DIR = Path("/Users/verakoroleva/Desktop/@marketing")
 sys.path.insert(0, str(PROJECT_DIR))
 
-from ensure_single_instance import SingleInstanceController
+# from ensure_single_instance import SingleInstanceController  # Файл не существует
 
 class ProductionBotLauncher:
     """
@@ -24,7 +24,7 @@ class ProductionBotLauncher:
     
     def __init__(self):
         self.project_dir = PROJECT_DIR
-        self.controller = SingleInstanceController(str(self.project_dir))
+        # self.controller = SingleInstanceController(str(self.project_dir))  # Временно отключено
         self.bot_process = None
         self.setup_logging()
         self.setup_signal_handlers()
