@@ -14,6 +14,7 @@ import sys
 import asyncio
 import functools
 import nest_asyncio
+from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
@@ -26,6 +27,7 @@ from config import (
 )
 from sheets_client import GoogleSheetsClient
 from promotions_client import PromotionsClient
+from async_promotions_client import AsyncPromotionsClient
 from auth_cache import auth_cache
 from openai_client import openai_client
 from mcp_context_v7 import mcp_context
@@ -107,6 +109,7 @@ class Bot:
         self.sheets_client = None
         self.tickets_client = None
         self.promotions_client = None
+        self.async_promotions_client = None
         self._init_clients()
         self._register_handlers()
 
@@ -146,14 +149,23 @@ class Bot:
         promotions_sheet_url = PROMOTIONS_SHEET_URL
         if promotions_sheet_url and os.path.exists(GOOGLE_CREDENTIALS_PATH):
             try:
+                # Создаем синхронный клиент для обратной совместимости
                 self.promotions_client = PromotionsClient(
                     credentials_file=GOOGLE_CREDENTIALS_PATH,
                     sheet_url=promotions_sheet_url
                 )
-                logger.info("Клиент акций создан, подключение будет выполнено при запуске.")
+                
+                # Создаем асинхронный клиент для новых операций
+                self.async_promotions_client = AsyncPromotionsClient(
+                    credentials_file=GOOGLE_CREDENTIALS_PATH,
+                    sheet_url=promotions_sheet_url
+                )
+                
+                logger.info("Клиенты акций созданы, подключение будет выполнено при запуске.")
             except Exception as e:
-                logger.error(f"Ошибка создания клиента акций: {e}")
+                logger.error(f"Ошибка создания клиентов акций: {e}")
                 self.promotions_client = None
+                self.async_promotions_client = None
         else:
             logger.info("PROMOTIONS_SHEET_URL не задан или credentials.json отсутствует — таблица акций отключена.")
 
@@ -885,53 +897,66 @@ class Bot:
 
     async def _handle_get_promotions_api(self, update: Update, context: ContextTypes.DEFAULT_TYPE, payload: dict):
         """
-        Обрабатывает API запрос на получение акций.
+        Обрабатывает API запрос на получение акций для мини-приложения.
         """
         user = update.effective_user
+        logger.info(f"📱 API запрос акций от пользователя {user.id} ({user.first_name})")
         
         try:
             # Проверяем подключение к таблице акций
-            if not self.promotions_client:
-                await update.message.reply_text('🎉 Актуальных акций пока нет')
+            if not self.async_promotions_client:
+                logger.warning("Асинхронный клиент акций не инициализирован")
+                await self._send_promotions_response(update, [])
                 return
             
             # Подключаемся к таблице если не подключены
-            if not self.promotions_client.sheet:
-                connected = await self.run_blocking(self.promotions_client.connect)
+            if not self.async_promotions_client.sheet:
+                connected = await self.async_promotions_client.connect()
                 if not connected:
-                    await update.message.reply_text('🎉 Актуальных акций пока нет')
+                    logger.warning("Не удалось подключиться к таблице акций")
+                    await self._send_promotions_response(update, [])
                     return
             
-            # Получаем активные акции
-            active_promotions = await self.run_blocking(self.promotions_client.get_active_promotions)
+            # Получаем активные акции асинхронно
+            active_promotions = await self.async_promotions_client.get_active_promotions()
             
-            if not active_promotions:
-                await update.message.reply_text('🎉 Актуальных акций пока нет')
-                return
-            
-            # Формируем ответ с акциями
-            message_text = f'🎉 Найдено {len(active_promotions)} активных акций!\n\n'
-            
-            for i, promotion in enumerate(active_promotions[:3], 1):  # Показываем максимум 3 акции
-                name = promotion.get('name', 'Без названия')
-                status = promotion.get('ui_status', 'unknown')
-                
-                status_emoji = {
-                    'active': '🟢',
-                    'published': '🟡', 
-                    'finished': '🔴'
-                }.get(status, '⚪')
-                
-                message_text += f'{i}. {status_emoji} {name}\n'
-            
-            if len(active_promotions) > 3:
-                message_text += f'... и ещё {len(active_promotions) - 3} акций'
-            
-            await update.message.reply_text(message_text)
+            logger.info(f"📋 Получено {len(active_promotions)} активных акций для мини-приложения")
+            await self._send_promotions_response(update, active_promotions)
                 
         except Exception as e:
-            logger.error(f"Ошибка при обработке API запроса акций: {e}")
-            await update.message.reply_text('🎉 Ошибка при загрузке акций')
+            logger.error(f"❌ Ошибка при обработке API запроса акций: {e}")
+            await self._send_promotions_response(update, [])
+    
+    async def _send_promotions_response(self, update: Update, promotions: list):
+        """
+        Отправляет ответ с акциями в мини-приложение.
+        """
+        try:
+            # Формируем JSON ответ для мини-приложения
+            response_data = {
+                'type': 'promotions_response',
+                'promotions': promotions,
+                'timestamp': datetime.now().isoformat(),
+                'count': len(promotions)
+            }
+            
+            # Отправляем данные через WebApp
+            await update.message.reply_text(
+                f"📱 Данные акций отправлены в мини-приложение\n\n"
+                f"🎉 Найдено {len(promotions)} активных акций",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        "🔄 Обновить акции", 
+                        web_app=WebAppInfo(url=WEB_APP_URLS['SPA_MENU'])
+                    )
+                ]])
+            )
+            
+            logger.info(f"✅ Отправлен ответ с {len(promotions)} акциями в мини-приложение")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки ответа акций: {e}")
+            await update.message.reply_text('❌ Ошибка при отправке данных акций')
 
     @safe_execute('test_promotions_command')
     @monitor_performance('test_promotions_command')
@@ -949,21 +974,21 @@ class Bot:
         await update.message.reply_text('🔍 Тестирую подключение к таблице акций...')
         
         try:
-            # Проверяем клиент акций
-            if not self.promotions_client:
-                await update.message.reply_text('❌ Клиент акций не инициализирован')
+            # Проверяем асинхронный клиент акций
+            if not self.async_promotions_client:
+                await update.message.reply_text('❌ Асинхронный клиент акций не инициализирован')
                 return
             
             # Подключаемся к таблице
-            if not self.promotions_client.sheet:
-                connected = await self.run_blocking(self.promotions_client.connect)
+            if not self.async_promotions_client.sheet:
+                connected = await self.async_promotions_client.connect()
                 if not connected:
                     await update.message.reply_text('❌ Не удалось подключиться к таблице акций')
                     return
             
-            # Проверяем новые акции
-            new_promotions = await self.run_blocking(self.promotions_client.get_new_published_promotions)
-            active_promotions = await self.run_blocking(self.promotions_client.get_active_promotions)
+            # Проверяем новые акции асинхронно
+            new_promotions = await self.async_promotions_client.get_new_published_promotions()
+            active_promotions = await self.async_promotions_client.get_active_promotions()
             
             result_text = f'''✅ Подключение к таблице акций работает!
 
@@ -1372,19 +1397,19 @@ class Bot:
         """
         Мониторинг новых опубликованных акций для отправки уведомлений.
         """
-        if not self.promotions_client:
+        if not self.async_promotions_client:
             return
             
         try:
             # Подключаемся к таблице если не подключены
-            if not self.promotions_client.sheet:
-                connected = await self.run_blocking(self.promotions_client.connect)
+            if not self.async_promotions_client.sheet:
+                connected = await self.async_promotions_client.connect()
                 if not connected:
                     logger.warning("Не удалось подключиться к таблице акций")
                     return
             
-            # Получаем новые опубликованные акции
-            new_promotions = await self.run_blocking(self.promotions_client.get_new_published_promotions)
+            # Получаем новые опубликованные акции асинхронно
+            new_promotions = await self.async_promotions_client.get_new_published_promotions()
             
             if not new_promotions:
                 return
@@ -1403,8 +1428,8 @@ class Bot:
                 try:
                     await self._send_promotion_notification(context, promotion, authorized_users)
                     
-                    # Помечаем уведомление как отправленное
-                    await self.run_blocking(self.promotions_client.mark_notification_sent, promotion['row'])
+                    # Помечаем уведомление как отправленное асинхронно
+                    await self.async_promotions_client.mark_notification_sent(promotion['row'])
                     
                     # Небольшая пауза между уведомлениями
                     await asyncio.sleep(PROMOTIONS_CONFIG['NOTIFICATION_DELAY'])

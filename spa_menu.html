@@ -125,6 +125,7 @@
                     </div>
                 </div>
                 <button class="menu-btn back-btn" onclick="goToEvents()">← Назад к мероприятиям</button>
+                <button class="menu-btn back-btn" onclick="refreshPromotions()" style="background: linear-gradient(90deg, #2a3050, #2e3452); margin-top: 10px;">🔄 Обновить акции</button>
             </div>
         </div>
     </div>
@@ -132,6 +133,13 @@
     <script>
         const tg = window.Telegram.WebApp;
         tg.ready();
+        
+        // Кэш для акций
+        let promotionsCache = {
+            data: null,
+            timestamp: null,
+            ttl: 10 * 60 * 1000 // 10 минут в миллисекундах
+        };
 
         const SECTIONS = [
             'Агрегаторы',
@@ -330,6 +338,23 @@
         // Запуск при загрузке
         init();
         
+        // Слушатель для получения данных от бота
+        tg.onEvent('webAppDataReceived', function(data) {
+            console.log('📱 Получены данные от бота:', data);
+            try {
+                const payload = JSON.parse(data);
+                if (payload.type === 'promotions_response') {
+                    console.log('🎉 Получены акции от бота:', payload.promotions);
+                    const promotions = payload.promotions || [];
+                    updatePromotionsCache(promotions);
+                    renderPromotions(promotions);
+                }
+            } catch (e) {
+                console.error('❌ Ошибка парсинга данных от бота:', e);
+                renderPromotions([]);
+            }
+        });
+        
         // Функции для акций
         function formatDate(dateStr) {
             if (!dateStr) return '';
@@ -404,11 +429,58 @@
         }
 
         function loadPromotions() {
-            // Мок-данные для тестирования
-            setTimeout(() => {
-                const mockPromotions = [];
-                renderPromotions(mockPromotions);
-            }, 1000);
+            // Проверяем кэш
+            if (promotionsCache.data && promotionsCache.timestamp) {
+                const now = Date.now();
+                const cacheAge = now - promotionsCache.timestamp;
+                
+                if (cacheAge < promotionsCache.ttl) {
+                    console.log('💾 Используем кэшированные акции');
+                    renderPromotions(promotionsCache.data);
+                    return;
+                } else {
+                    console.log('⏰ Кэш устарел, обновляем данные');
+                }
+            }
+            
+            // Запрашиваем реальные данные акций от бота
+            console.log('🔄 Загружаем акции от бота...');
+            
+            // Отправляем запрос на получение акций
+            const requestData = {
+                type: 'get_promotions',
+                timestamp: new Date().toISOString()
+            };
+            
+            if (sendToBot(requestData)) {
+                console.log('✅ Запрос акций отправлен боту');
+                // Показываем загрузку пока ждем ответ
+                setTimeout(() => {
+                    // Если через 5 секунд нет ответа, показываем пустое состояние
+                    const container = document.getElementById('promotions-content');
+                    if (container.innerHTML.includes('loading-spinner')) {
+                        console.log('⏰ Таймаут загрузки акций, показываем пустое состояние');
+                        renderPromotions([]);
+                    }
+                }, 5000);
+            } else {
+                console.error('❌ Не удалось отправить запрос акций');
+                renderPromotions([]);
+            }
+        }
+        
+        function updatePromotionsCache(promotions) {
+            promotionsCache.data = promotions;
+            promotionsCache.timestamp = Date.now();
+            console.log('💾 Кэш акций обновлен');
+        }
+        
+        function refreshPromotions() {
+            // Очищаем кэш и загружаем заново
+            promotionsCache.data = null;
+            promotionsCache.timestamp = null;
+            console.log('🔄 Принудительное обновление акций');
+            loadPromotions();
         }
     </script>
 </body>
