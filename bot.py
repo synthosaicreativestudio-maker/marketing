@@ -1187,8 +1187,8 @@ class Bot:
             await self._handle_ticket_action(query, context, data)
         elif data.startswith('view_promotion:'):
             await self._handle_view_promotion(query, context, data)
-        elif data == 'open_promotions_webapp':
-            await self._handle_open_promotions_webapp(query, context)
+        elif data == 'refresh_promotions':
+            await self._handle_refresh_promotions(query, context)
         elif data == 'show_menu':
             keyboard = [[InlineKeyboardButton(section, callback_data=f"menu:{section}") for section in SECTIONS]]
             await query.edit_message_text('Выберите интересующий раздел:', reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1209,12 +1209,16 @@ class Bot:
                 InlineKeyboardButton(
                     '📱 Открыть акции', 
                     web_app=WebAppInfo(url=spa_menu_url)
+                ),
+                InlineKeyboardButton(
+                    '🔄 Обновить', 
+                    callback_data='refresh_promotions'
                 )
             ]])
             
             # Отправляем сообщение с кнопкой
             await query.edit_message_text(
-                '📱 Откройте мини-приложение для просмотра акций:',
+                '📱 Нажмите кнопку ниже для открытия раздела акций в мини-приложении:',
                 reply_markup=keyboard
             )
             
@@ -1223,6 +1227,34 @@ class Bot:
         except Exception as e:
             logger.error(f"❌ Ошибка при открытии мини-приложения: {e}")
             await query.edit_message_text('Произошла ошибка при открытии мини-приложения.')
+
+    async def _handle_refresh_promotions(self, query, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Обрабатывает обновление акций.
+        """
+        try:
+            # Получаем URL мини-приложения с переходом в раздел акций
+            spa_menu_url = get_web_app_url('SPA_MENU') + '?section=promotions'
+            
+            # Создаем кнопку для открытия мини-приложения
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    '📱 Открыть акции', 
+                    web_app=WebAppInfo(url=spa_menu_url)
+                )
+            ]])
+            
+            # Отправляем сообщение с кнопкой
+            await query.edit_message_text(
+                '🔄 Акции обновлены! Нажмите кнопку ниже для открытия раздела акций:',
+                reply_markup=keyboard
+            )
+            
+            logger.info("🔄 Акции обновлены, отправлена кнопка для открытия мини-приложения")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка при обновлении акций: {e}")
+            await query.edit_message_text('Произошла ошибка при обновлении акций.')
 
     async def _handle_ticket_action(self, query, context: ContextTypes.DEFAULT_TYPE, data: str):
         """
@@ -1586,10 +1618,11 @@ class Bot:
 👀 Посмотреть подробнее ↓"""
             
             # Создаем кнопку для просмотра акций (открывает мини-приложение с переходом в раздел акций)
+            spa_menu_url = get_web_app_url('SPA_MENU') + '?section=promotions'
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton(
                     '👀 Ознакомиться подробнее', 
-                    callback_data='open_promotions_webapp'
+                    web_app=WebAppInfo(url=spa_menu_url)
                 )
             ]])
             
