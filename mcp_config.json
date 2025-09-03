@@ -10,6 +10,22 @@
       "args": ["-y", "@modelcontextprotocol/server-sqlite", "--db-path", "/Users/verakoroleva/Desktop/@marketing/bot_data.db"],
       "description": "SQLite database for bot data persistence"
     },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "${POSTGRES_CONNECTION_STRING}"
+      },
+      "description": "PostgreSQL database access for advanced data operations"
+    },
+    "mysql": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-mysql"],
+      "env": {
+        "MYSQL_CONNECTION_STRING": "${MYSQL_CONNECTION_STRING}"
+      },
+      "description": "MySQL database access for data operations"
+    },
     "brave-search": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-brave-search"],
@@ -17,6 +33,11 @@
         "BRAVE_API_KEY": "${BRAVE_API_KEY}"
       },
       "description": "Web search capabilities for research and information gathering"
+    },
+    "puppeteer": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+      "description": "Web automation and scraping capabilities"
     },
     "git": {
       "command": "npx",
@@ -30,6 +51,267 @@
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
       },
       "description": "GitHub integration for issue tracking and repository management"
+    },
+    "docker": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-docker"],
+      "description": "Docker container management and operations"
+    },
+    "kubernetes": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-kubernetes"],
+      "env": {
+        "KUBECONFIG": "${KUBECONFIG}"
+      },
+      "description": "Kubernetes cluster management and operations"
+    },
+    "aws": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-aws"],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "${AWS_ACCESS_KEY_ID}",
+        "AWS_SECRET_ACCESS_KEY": "${AWS_SECRET_ACCESS_KEY}",
+        "AWS_REGION": "${AWS_REGION}"
+      },
+      "description": "AWS cloud services integration"
+    },
+    "gcp": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "${GOOGLE_APPLICATION_CREDENTIALS}"
+      },
+      "description": "Google Cloud Platform services integration"
+    },
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "env": {
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",
+        "SLACK_APP_TOKEN": "${SLACK_APP_TOKEN}"
+      },
+      "description": "Slack workspace integration for notifications"
+    },
+    "discord": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-discord"],
+      "env": {
+        "DISCORD_BOT_TOKEN": "${DISCORD_BOT_TOKEN}"
+      },
+      "description": "Discord bot integration for community management"
+    },
+    "telegram": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-telegram"],
+      "env": {
+        "TELEGRAM_BOT_TOKEN": "${TELEGRAM_TOKEN}"
+      },
+      "description": "Telegram Bot API integration for enhanced bot capabilities"
+    },
+    "openai": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-openai"],
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      },
+      "description": "OpenAI API integration for advanced AI capabilities"
+    },
+    "anthropic": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-anthropic"],
+      "env": {
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+      },
+      "description": "Anthropic Claude API integration"
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "description": "Sequential thinking and problem-solving capabilities"
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "description": "Persistent memory and context management"
+    },
+    "time": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-time"],
+      "description": "Time and date operations with timezone support"
+    },
+    "weather": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-weather"],
+      "env": {
+        "OPENWEATHER_API_KEY": "${OPENWEATHER_API_KEY}"
+      },
+      "description": "Weather information and forecasts"
+    },
+    "news": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-news"],
+      "env": {
+        "NEWS_API_KEY": "${NEWS_API_KEY}"
+      },
+      "description": "News and current events information"
+    },
+    "youtube": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-youtube"],
+      "env": {
+        "YOUTUBE_API_KEY": "${YOUTUBE_API_KEY}"
+      },
+      "description": "YouTube content search and analysis"
+    },
+    "reddit": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-reddit"],
+      "env": {
+        "REDDIT_CLIENT_ID": "${REDDIT_CLIENT_ID}",
+        "REDDIT_CLIENT_SECRET": "${REDDIT_CLIENT_SECRET}"
+      },
+      "description": "Reddit content and community analysis"
+    },
+    "twitter": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-twitter"],
+      "env": {
+        "TWITTER_BEARER_TOKEN": "${TWITTER_BEARER_TOKEN}"
+      },
+      "description": "Twitter/X social media integration"
+    },
+    "linkedin": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-linkedin"],
+      "env": {
+        "LINKEDIN_ACCESS_TOKEN": "${LINKEDIN_ACCESS_TOKEN}"
+      },
+      "description": "LinkedIn professional network integration"
+    },
+    "google-drive": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-google-drive"],
+      "env": {
+        "GOOGLE_DRIVE_CREDENTIALS": "${GOOGLE_DRIVE_CREDENTIALS}"
+      },
+      "description": "Google Drive file management and sharing"
+    },
+    "google-sheets": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-google-sheets"],
+      "env": {
+        "GOOGLE_SHEETS_CREDENTIALS": "${GOOGLE_SHEETS_CREDENTIALS}"
+      },
+      "description": "Google Sheets data manipulation and analysis"
+    },
+    "google-calendar": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-google-calendar"],
+      "env": {
+        "GOOGLE_CALENDAR_CREDENTIALS": "${GOOGLE_CALENDAR_CREDENTIALS}"
+      },
+      "description": "Google Calendar scheduling and event management"
+    },
+    "gmail": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gmail"],
+      "env": {
+        "GMAIL_CREDENTIALS": "${GMAIL_CREDENTIALS}"
+      },
+      "description": "Gmail email management and automation"
+    },
+    "jira": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-jira"],
+      "env": {
+        "JIRA_URL": "${JIRA_URL}",
+        "JIRA_USERNAME": "${JIRA_USERNAME}",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+      },
+      "description": "Jira project management and issue tracking"
+    },
+    "confluence": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-confluence"],
+      "env": {
+        "CONFLUENCE_URL": "${CONFLUENCE_URL}",
+        "CONFLUENCE_USERNAME": "${CONFLUENCE_USERNAME}",
+        "CONFLUENCE_API_TOKEN": "${CONFLUENCE_API_TOKEN}"
+      },
+      "description": "Confluence documentation and knowledge management"
+    },
+    "notion": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-notion"],
+      "env": {
+        "NOTION_API_KEY": "${NOTION_API_KEY}"
+      },
+      "description": "Notion workspace integration for documentation"
+    },
+    "airtable": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-airtable"],
+      "env": {
+        "AIRTABLE_API_KEY": "${AIRTABLE_API_KEY}",
+        "AIRTABLE_BASE_ID": "${AIRTABLE_BASE_ID}"
+      },
+      "description": "Airtable database and collaboration platform"
+    },
+    "zapier": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-zapier"],
+      "env": {
+        "ZAPIER_API_KEY": "${ZAPIER_API_KEY}"
+      },
+      "description": "Zapier automation and workflow integration"
+    },
+    "ifttt": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-ifttt"],
+      "env": {
+        "IFTTT_WEBHOOK_KEY": "${IFTTT_WEBHOOK_KEY}"
+      },
+      "description": "IFTTT automation and applet integration"
+    },
+    "webhook": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-webhook"],
+      "description": "Webhook management and HTTP request handling"
+    },
+    "cron": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-cron"],
+      "description": "Scheduled task and cron job management"
+    },
+    "monitoring": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-monitoring"],
+      "description": "System monitoring and health checks"
+    },
+    "logging": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-logging"],
+      "description": "Centralized logging and log analysis"
+    },
+    "metrics": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-metrics"],
+      "description": "Performance metrics and analytics"
+    },
+    "security": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-security"],
+      "description": "Security scanning and vulnerability assessment"
+    },
+    "backup": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-backup"],
+      "description": "Automated backup and recovery operations"
+    },
+    "deployment": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-deployment"],
+      "description": "Automated deployment and CI/CD operations"
     }
   },
   "tools": {
@@ -42,11 +324,95 @@
       "git_log",
       "git_diff",
       "git_status",
+      "git_commit",
+      "git_push",
+      "git_pull",
       "sqlite_query",
       "sqlite_execute",
+      "postgres_query",
+      "postgres_execute",
+      "mysql_query",
+      "mysql_execute",
       "brave_web_search",
+      "puppeteer_navigate",
+      "puppeteer_screenshot",
+      "puppeteer_scrape",
       "github_create_issue",
-      "github_list_issues"
+      "github_list_issues",
+      "github_create_pr",
+      "github_merge_pr",
+      "docker_run",
+      "docker_stop",
+      "docker_logs",
+      "kubernetes_deploy",
+      "kubernetes_scale",
+      "kubernetes_logs",
+      "aws_s3_upload",
+      "aws_s3_download",
+      "aws_ec2_list",
+      "gcp_storage_upload",
+      "gcp_compute_list",
+      "slack_send_message",
+      "slack_create_channel",
+      "discord_send_message",
+      "discord_create_channel",
+      "telegram_send_message",
+      "telegram_create_poll",
+      "openai_chat_completion",
+      "openai_embedding",
+      "anthropic_chat_completion",
+      "sequential_think",
+      "memory_store",
+      "memory_retrieve",
+      "time_get_current",
+      "time_convert_timezone",
+      "weather_get_current",
+      "weather_get_forecast",
+      "news_search",
+      "news_get_headlines",
+      "youtube_search",
+      "youtube_get_video_info",
+      "reddit_search",
+      "reddit_get_posts",
+      "twitter_search",
+      "twitter_get_tweets",
+      "linkedin_search",
+      "linkedin_get_posts",
+      "google_drive_upload",
+      "google_drive_download",
+      "google_sheets_read",
+      "google_sheets_write",
+      "google_calendar_create_event",
+      "google_calendar_list_events",
+      "gmail_send",
+      "gmail_read",
+      "jira_create_issue",
+      "jira_list_issues",
+      "confluence_create_page",
+      "confluence_search",
+      "notion_create_page",
+      "notion_search",
+      "airtable_create_record",
+      "airtable_list_records",
+      "zapier_trigger",
+      "zapier_create_webhook",
+      "ifttt_trigger",
+      "webhook_send",
+      "webhook_receive",
+      "cron_schedule",
+      "cron_list_jobs",
+      "monitoring_check_health",
+      "monitoring_get_metrics",
+      "logging_write_log",
+      "logging_search_logs",
+      "metrics_collect",
+      "metrics_analyze",
+      "security_scan",
+      "security_audit",
+      "backup_create",
+      "backup_restore",
+      "deployment_deploy",
+      "deployment_rollback"
     ],
     "security": {
       "read_only_paths": ["/etc", "/usr", "/bin"],
