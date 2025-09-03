@@ -1177,6 +1177,12 @@ class Bot:
         await query.answer()
         data = query.data or ''
 
+        # Проверяем, не является ли это кнопкой с web_app
+        if not data:
+            # Кнопки с web_app не имеют callback_data, просто отвечаем
+            logger.info("🔗 Получен callback от кнопки с web_app - ничего не делаем")
+            return
+
         if data.startswith('t:'):
             await self._handle_ticket_action(query, context, data)
         elif data.startswith('view_promotion:'):
@@ -1185,6 +1191,7 @@ class Bot:
             keyboard = [[InlineKeyboardButton(section, callback_data=f"menu:{section}") for section in SECTIONS]]
             await query.edit_message_text('Выберите интересующий раздел:', reply_markup=InlineKeyboardMarkup(keyboard))
         else:
+            logger.warning(f"❓ Неизвестный callback data: {data}")
             await query.edit_message_text('Неподдерживаемое действие.')
 
     async def _handle_ticket_action(self, query, context: ContextTypes.DEFAULT_TYPE, data: str):
