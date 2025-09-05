@@ -12,7 +12,6 @@ import signal
 import subprocess
 import psutil
 import argparse
-from pathlib import Path
 
 # Добавляем текущую директорию в PATH для импорта модулей
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

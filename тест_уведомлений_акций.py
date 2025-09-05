@@ -15,7 +15,7 @@ sys.path.append('/Users/verakoroleva/Desktop/@marketing')
 
 from promotions_client import PromotionsClient
 from sheets_client import GoogleSheetsClient
-from config import PROMOTIONS_CONFIG, PROMOTIONS_SHEET_URL, AUTH_WORKSHEET_NAME
+from config import PROMOTIONS_SHEET_URL, AUTH_WORKSHEET_NAME
 
 def test_promotions_system():
     print("🧪 === ТЕСТ СИСТЕМЫ АКЦИЙ ===\n")
@@ -47,7 +47,7 @@ def test_promotions_system():
     print(f"🎯 Активных акций: {len(active_promotions)}")
     
     # 2. Тестируем получение авторизованных пользователей
-    print(f"\n2️⃣ ТЕСТ АВТОРИЗОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ:")
+    print("\n2️⃣ ТЕСТ АВТОРИЗОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ:")
     
     sheet_url = os.getenv('SHEET_URL')
     if not sheet_url:
@@ -90,14 +90,14 @@ def test_promotions_system():
         print(f"✅ Преобразовано пользователей: {len(users_with_telegram)}")
         
         # 4. Симуляция отправки уведомлений
-        print(f"\n4️⃣ СИМУЛЯЦИЯ ОТПРАВКИ УВЕДОМЛЕНИЙ:")
+        print("\n4️⃣ СИМУЛЯЦИЯ ОТПРАВКИ УВЕДОМЛЕНИЙ:")
         
         if new_promotions and users_with_telegram:
             print(f"🎉 Будет отправлено {len(new_promotions)} уведомлений {len(users_with_telegram)} пользователям")
             
             for promo in new_promotions:
                 print(f"\n📢 Акция: {promo['name']}")
-                print(f"   Получатели:")
+                print("   Получатели:")
                 
                 for user in users_with_telegram:
                     telegram_id = user.get('telegram_id')
@@ -107,17 +107,17 @@ def test_promotions_system():
                 
                 # Здесь мы могли бы пометить уведомление как отправленное
                 # promotions_client.mark_notification_sent(promo['row'])
-                print(f"   ✅ Уведомление готово к отправке")
+                print("   ✅ Уведомление готово к отправке")
         
         elif not new_promotions:
             print("ℹ️ Нет новых акций для отправки")
         elif not users_with_telegram:
             print("⚠️ Нет авторизованных пользователей для уведомления")
         
-        print(f"\n🎉 === ТЕСТ ЗАВЕРШЕН ===")
+        print("\n🎉 === ТЕСТ ЗАВЕРШЕН ===")
         
         # Рекомендации
-        print(f"\n💡 РЕКОМЕНДАЦИИ:")
+        print("\n💡 РЕКОМЕНДАЦИИ:")
         if not new_promotions:
             print("   • Добавьте тестовую акцию со статусом 'Опубликовано' в таблицу")
         if not users_with_telegram:

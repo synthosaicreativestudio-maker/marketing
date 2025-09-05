@@ -1,8 +1,8 @@
 python-telegram-bot[job-queue]
 gspread
-gspread-formatting
 oauth2client
 python-dotenv
 openai
 psutil
 nest_asyncio
+pydantic

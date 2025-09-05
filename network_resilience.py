@@ -6,8 +6,7 @@ Network Resilience Module
 
 import logging
 import requests
-import asyncio
-from typing import Any, Callable, Optional, Tuple, Type, Union
+from typing import Any, Callable, Optional, Tuple, Type
 from functools import wraps
 
 # Импортируем tenacity
@@ -257,7 +256,7 @@ def test_network_resilience():
         logger.error(f"❌ Google Sheets тест неудачен: {e}")
     
     # Тест 3: Конфигурация
-    logger.info(f"📊 Конфигурация retry:")
+    logger.info("📊 Конфигурация retry:")
     logger.info(f"   Максимум попыток: {network_config.max_attempts}")
     logger.info(f"   Минимальная задержка: {network_config.min_wait}с")
     logger.info(f"   Максимальная задержка: {network_config.max_wait}с")

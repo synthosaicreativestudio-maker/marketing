@@ -462,7 +462,7 @@ class GoogleSheetsClient:
             else:
                 logger.info('Worksheet does not support set_row_height(); skipping row height resize')
 
-            logger.info(f'Column/row size operations completed (some operations may be no-ops on this worksheet)')
+            logger.info('Column/row size operations completed (some operations may be no-ops on this worksheet)')
             return True
             
         except Exception as e:

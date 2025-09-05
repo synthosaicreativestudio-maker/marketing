@@ -1,0 +1,68 @@
+:root{--bg:#071028;--card:rgba(255,255,255,0.03);--muted:rgba(255,255,255,0.65);--gold:linear-gradient(90deg,#d4af37,#f6e7a0);--accent:#d4af37}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:radial-gradient(1200px 600px at 10% 10%, rgba(212,175,55,0.08), transparent),linear-gradient(180deg,#081428 0%,#041226 100%);color:#fff;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial}
+
+.container{width:100%;height:100vh;position:relative;overflow:hidden}
+.screen{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;transition:transform 0.3s ease,opacity 0.3s ease;transform:translateX(100%);opacity:0}
+.screen.active{transform:translateX(0);opacity:1}
+.screen.prev{transform:translateX(-100%);opacity:0}
+
+.card{width:100%;max-width:760px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;padding:22px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 20px 50px rgba(2,6,23,0.6);max-height:90vh;overflow-y:auto}
+h1{font-family:'Playfair Display',serif;margin:0 0 20px 0;font-size:18px;text-align:center}
+.menu-grid{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+.menu-btn{padding:12px 16px;border-radius:10px;background:linear-gradient(90deg,#1a2040, #1e2442);border:1px solid rgba(212,175,55,0.15);color:rgba(255,255,255,0.65);cursor:pointer;font-weight:400;font-size:14px;min-width:220px;width:220px;display:inline-flex;align-items:center;justify-content:flex-start;text-align:left;padding-left:20px;white-space:nowrap;overflow:hidden;transition:all 0.2s ease;box-sizing:border-box;border:none}
+.menu-btn:hover{background:linear-gradient(90deg,#2a3050, #2e3452);border-color:rgba(212,175,55,0.25)}
+.back-btn{background:linear-gradient(90deg,#403020, #443822);border-color:rgba(212,175,55,0.2);margin-top:20px;width:100%;text-align:center}
+.back-btn:hover{background:linear-gradient(90deg,#504030, #544832)}
+
+/* Стили для акций */
+.loading{text-align:center;padding:40px;color:rgba(255,255,255,0.65)}
+.loading-spinner{display:inline-block;width:30px;height:30px;border:3px solid rgba(212,175,55,0.3);border-radius:50%;border-top-color:#d4af37;animation:spin 1s ease-in-out infinite;margin-bottom:15px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.promotions-list{display:flex;flex-direction:column;gap:15px}
+.promotion-card{background:rgba(255,255,255,0.03);border:1px solid rgba(212,175,55,0.2);border-radius:12px;padding:20px;position:relative;overflow:hidden;transition:all 0.3s ease}
+.promotion-card:hover{border-color:rgba(212,175,55,0.4);transform:translateY(-2px)}
+.promotion-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#d4af37,#f6e7a0)}
+
+.promotion-title{font-size:16px;font-weight:600;margin-bottom:10px;color:#d4af37;display:flex;align-items:center;gap:8px}
+.promotion-description{color:rgba(255,255,255,0.65);line-height:1.5;margin-bottom:12px;font-size:14px}
+.promotion-dates{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;font-size:12px}
+.date-item{background:rgba(212,175,55,0.1);padding:4px 10px;border-radius:15px;color:#d4af37}
+.promotion-status{display:inline-block;padding:4px 10px;border-radius:15px;font-size:11px;font-weight:600;text-transform:uppercase}
+.status-active{background:rgba(0,255,0,0.1);color:#00ff00}
+.status-published{background:rgba(255,165,0,0.1);color:#ffa500}
+.status-finished{background:rgba(128,128,128,0.1);color:#888}
+
+.no-promotions{text-align:center;padding:50px 20px;color:rgba(255,255,255,0.65)}
+.no-promotions-icon{font-size:3rem;margin-bottom:15px;opacity:0.5}
+.no-promotions h2{font-size:18px;margin-bottom:10px;color:#fff}
+.no-promotions p{font-size:14px;line-height:1.5}
+
+/* Аккордеон для акций */
+.promotion-card{background:rgba(255,255,255,0.03);border:1px solid rgba(212,175,55,0.2);border-radius:12px;padding:20px;position:relative;overflow:hidden;transition:all 0.3s ease;cursor:pointer;margin-bottom:15px}
+.promotion-card:hover{border-color:rgba(212,175,55,0.4);transform:translateY(-2px)}
+.promotion-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#d4af37,#f6e7a0)}
+.promotion-card.expanded{border-color:rgba(212,175,55,0.6);background:rgba(255,255,255,0.05)}
+
+.promotion-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.promotion-title{font-size:16px;font-weight:600;margin-bottom:10px;color:#d4af37;display:flex;align-items:center;gap:8px;flex:1}
+.promotion-toggle{font-size:20px;color:#d4af37;transition:transform 0.3s ease;margin-left:10px}
+.promotion-card.expanded .promotion-toggle{transform:rotate(180deg)}
+
+.promotion-content{max-height:0;overflow:hidden;transition:max-height 0.3s ease;margin-top:15px}
+.promotion-card.expanded .promotion-content{max-height:1000px}
+
+.promotion-description{color:rgba(255,255,255,0.8);line-height:1.6;margin-bottom:15px;font-size:14px}
+.promotion-content-text{color:rgba(255,255,255,0.8);line-height:1.6;margin-bottom:15px;font-size:14px;background:rgba(212,175,55,0.1);padding:12px;border-radius:8px;border-left:3px solid #d4af37}
+.promotion-dates{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px;font-size:12px}
+.date-item{background:rgba(212,175,55,0.15);padding:6px 12px;border-radius:15px;color:#d4af37;border:1px solid rgba(212,175,55,0.3)}
+.promotion-status{display:inline-block;padding:6px 12px;border-radius:15px;font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:15px}
+.status-active{background:rgba(0,255,0,0.15);color:#00ff00;border:1px solid rgba(0,255,0,0.3)}
+.status-published{background:rgba(255,165,0,0.15);color:#ffa500;border:1px solid rgba(255,165,0,0.3)}
+.status-finished{background:rgba(128,128,128,0.15);color:#888;border:1px solid rgba(128,128,128,0.3)}
+
+.promotion-media{margin-top:15px}
+.media-item{margin-bottom:10px;border-radius:8px;overflow:hidden}
+.media-item img{width:100%;height:auto;border-radius:8px}
+.media-item iframe{width:100%;height:200px;border-radius:8px}

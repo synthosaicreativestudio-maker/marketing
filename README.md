@@ -27,6 +27,7 @@ A **production-ready, enterprise-grade** Telegram bot for marketing teams with G
 - [Configuration](#-configuration)
 - [Usage](#-usage)
 - [Diagnostics](#-diagnostics)
+- [Problem Solving Methodology](#-problem-solving-methodology) 🆕
 - [API Reference](#-api-reference)
 - [Troubleshooting](#-troubleshooting)
 
@@ -281,6 +282,29 @@ graph TD
 - ✅ **Error handling** - Clear error messages and validation
 - ✅ **Cross-platform** - Works on iOS, Android, and Desktop
 
+## 🔍 Problem Solving Methodology 🆕
+
+**⚠️ CRITICAL:** Before making ANY changes to the project, you MUST follow this mandatory sequence:
+
+### 📋 Required Steps:
+
+1. **📊 STUDY THE PROBLEM** - Analyze logs, understand symptoms, identify root cause
+2. **🌐 ANALYZE NETWORK & MCP** - Check connections, test APIs, validate services  
+3. **📝 CREATE SUMMARY** - Write clear problem description and solution plan
+4. **🔧 ONLY THEN - IMPLEMENT FIXES** - Make changes, test, validate
+
+### 📚 Full Methodology:
+
+See detailed instructions in: **[PROBLEM_SOLVING_METHODOLOGY.md](PROBLEM_SOLVING_METHODOLOGY.md)**
+
+This methodology ensures:
+- ✅ **No breaking changes** without proper analysis
+- ✅ **Fast problem resolution** through correct diagnosis  
+- ✅ **System stability** via controlled modifications
+- ✅ **Full documentation** of all actions
+
+**🚨 NEVER skip steps 1-3 when making changes!**
+
 ## 📚 API Reference
 
 ### Authentication Flow
@@ -362,26 +386,73 @@ python bot.py
 ```
 @marketing/
 ├── README.md                           # This file
+├── PROBLEM_SOLVING_METHODOLOGY.md     # 🆕 Mandatory workflow for problem solving
 ├── README_REFACTORING.md              # Refactoring details
+├── TECHNICAL_PLAN_IMPLEMENTATION.md   # Technical implementation plan
+├── CHANGELOG_V2.md                    # Version 2.0 changes
+├── MOBILE_AUTH_UPDATE.md              # Mobile authentication guide
+├── SPECIALIST_REPLY_SYSTEM.md         # Specialist reply automation
+├── ROLLBACK_SYSTEM.md                 # Rollback and recovery system
+├── SCALING_AND_CACHE_FIX.md           # Scaling optimizations
 ├── requirements.txt                   # Python dependencies
 ├── .env.example                      # Environment template
 ├── credentials.json                   # Google Cloud credentials (not in repo)
 ├── bot.py                            # Main bot application
 ├── config.py                         # Configuration management
+├── config_manager.py                 # Advanced configuration manager
 ├── auth_cache.py                     # Authentication caching
 ├── sheets_client.py                  # Google Sheets client
+├── promotions_client.py              # Promotions system client
+├── async_promotions_client.py        # Async promotions client
 ├── openai_client.py                  # OpenAI API client
-├── process_lock.py                   # Cross-platform locking
+├── mcp_context_v7.py                 # MCP context manager
+├── network_resilience.py             # Network fault tolerance
+├── error_handler.py                  # Error handling utilities
+├── performance_monitor.py            # Performance monitoring
+├── validator.py                      # Data validation
 ├── index.html                        # Main WebApp
-├── mini_app.html                     # Mini WebApp
+├── spa_menu.html                     # SPA Menu WebApp
+├── test_mobile_auth.html             # Mobile auth testing
+├── manage_bot.sh                     # Bot management script
+├── create_rollback_point.sh          # Rollback system
+├── force_restart_bot.sh              # Emergency restart
+├── kill_all_bot_processes.sh         # Process cleanup
 ├── test_bot.py                       # Test script
 ├── simple_check.py                   # Quick diagnostics
-├── check_auth.py                     # Auth checker
-├── диагностика_авторизации.py        # Full diagnostics
+├── диагностика_авторизации.py        # Auth diagnostics (Russian)
+├── диагностика_акций.py              # Promotions diagnostics (Russian)
 └── ИНСТРУКЦИЯ_ПО_ДИАГНОСТИКЕ.md      # Diagnostic guide (Russian)
 ```
 
 ## 🤝 Contributing
+
+### 🔍 **ОБЯЗАТЕЛЬНАЯ ПОСЛЕДОВАТЕЛЬНОСТЬ РЕШЕНИЯ ПРОБЛЕМ**
+
+**⚠️ ВАЖНО:** Перед любыми исправлениями строго следуйте этапам:
+
+1. **📋 ИЗУЧЕНИЕ ПРОБЛЕМЫ**
+   - Детально анализируем проблему
+   - Читаем логи и понимаем суть
+   - Определяем точные симптомы
+
+2. **🌐 ИЗУЧЕНИЕ СЕТИ И MCP** 
+   - Проверяем состояние сетевых подключений
+   - Тестируем MCP серверы и внешние API
+   - Анализируем доступность сервисов
+
+3. **📝 СОЗДАНИЕ САММАРИ**
+   - Пишем понятным языком что именно не работает
+   - Объясняем план решения проблемы
+   - Получаем подтверждение перед действиями
+
+4. **🔧 ТОЛЬКО ПОСЛЕ ЭТОГО - ИСПРАВЛЕНИЯ**
+   - Приступаем к изменениям кода
+   - Тестируем каждое изменение
+   - Документируем результаты
+
+**❌ НЕЛЬЗЯ сразу исправлять код без предварительного анализа!**
+
+### 📋 **Development Guidelines**
 
 1. Follow the existing code structure
 2. Update diagnostics when adding features

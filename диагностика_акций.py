@@ -40,7 +40,7 @@ def main():
         print(f"❌ ОШИБКА: Файл {credentials_path} не найден!")
         return
     else:
-        print(f"✅ Файл credentials.json найден")
+        print("✅ Файл credentials.json найден")
     
     # 3. Создаем клиент и подключаемся
     print("\n2️⃣ ПОДКЛЮЧЕНИЕ К GOOGLE SHEETS:")
@@ -116,14 +116,14 @@ def main():
             if notification == 'отправлено':
                 with_notification_count += 1
         
-        print(f"\n   📊 СТАТИСТИКА:")
+        print("\n   📊 СТАТИСТИКА:")
         print(f"   • Пустых строк: {empty_rows}")
         print(f"   • Со статусом 'Опубликовано': {published_count}")
         print(f"   • Со статусом 'Активна': {active_count}")
         print(f"   • С отправленными уведомлениями: {with_notification_count}")
         
         # 6. Проверяем функции клиента
-        print(f"\n5️⃣ ТЕСТИРОВАНИЕ ФУНКЦИЙ:")
+        print("\n5️⃣ ТЕСТИРОВАНИЕ ФУНКЦИЙ:")
         
         # Тестируем получение новых акций
         new_promotions = client.get_new_published_promotions()
@@ -144,7 +144,7 @@ def main():
                 print(f"   • '{promo.get('name', 'Без названия')}' (статус UI: {promo.get('ui_status', '?')})")
         
         # 7. Проверяем права доступа
-        print(f"\n6️⃣ ПРОВЕРКА ПРАВ ДОСТУПА:")
+        print("\n6️⃣ ПРОВЕРКА ПРАВ ДОСТУПА:")
         try:
             # Пробуем записать тестовое значение
             test_cell = client.sheet.cell(1, 1)
@@ -161,10 +161,10 @@ def main():
         except Exception as e:
             print(f"   ❌ Ошибка доступа: {e}")
         
-        print(f"\n🎉 === ДИАГНОСТИКА ЗАВЕРШЕНА ===")
+        print("\n🎉 === ДИАГНОСТИКА ЗАВЕРШЕНА ===")
         
         # Рекомендации
-        print(f"\n💡 РЕКОМЕНДАЦИИ:")
+        print("\n💡 РЕКОМЕНДАЦИИ:")
         if published_count == 0 and active_count == 0:
             print("   • В таблице нет акций со статусом 'Опубликовано' или 'Активна'")
             print("   • Добавьте тестовую акцию со статусом 'Опубликовано' для проверки")

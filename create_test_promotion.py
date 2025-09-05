@@ -80,7 +80,7 @@ async def create_test_promotion():
             )
         
         logger.info("✅ Тестовая акция создана!")
-        logger.info(f"📋 Детали акции:")
+        logger.info("📋 Детали акции:")
         logger.info(f"   Название: {test_promotion[1]}")
         logger.info(f"   Статус: {test_promotion[3]}")
         logger.info(f"   Период: {test_promotion[4]} - {test_promotion[5]}")

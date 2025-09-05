@@ -6,7 +6,7 @@
 import time
 import threading
 from collections import defaultdict, deque
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from dataclasses import dataclass, field
 import logging
 

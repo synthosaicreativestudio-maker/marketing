@@ -7,7 +7,6 @@
 
 import os
 import sys
-import asyncio
 import json
 import time
 from pathlib import Path
