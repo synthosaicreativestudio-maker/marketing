@@ -1,0 +1,24 @@
+name: Deploy Mini App to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main # Deploy when changes are pushed to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs # This is the directory that GitHub Pages will serve
+          # The branch to deploy to. Defaults to gh-pages.
+          # If you want to deploy to the main branch (for user pages), set publish_branch: main
+          # If you want to deploy to the docs folder in main branch (for project pages), set publish_dir: ./docs and publish_branch: main
+          # For project pages, the URL will be https://<username>.github.io/<repository-name>/
+          # For user pages, the URL will be https://<username>.github.io/

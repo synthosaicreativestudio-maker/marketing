@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marketing Auth</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: var(--tg-theme-text-color);
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+        h2 {
+            color: var(--tg-theme-hint-color);
+            font-size: 1.2em;
+            margin-top: 0;
+            margin-bottom: 30px;
+        }
+        .card {
+            background-color: var(--tg-theme-secondary-bg-color);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--tg-theme-text-color);
+            font-size: 0.9em;
+        }
+        input[type="text"],
+        input[type="tel"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            border: 1px solid var(--tg-theme-hint-color);
+            border-radius: 5px;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+        input[type="tel"]::before {
+            content: '8'; /* This won't work directly in CSS for input value */
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border: none;
+            border-radius: 5px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        button:active {
+            background-color: var(--tg-theme-button-color); /* Keep same color on active for Telegram feel */
+            filter: brightness(90%);
+        }
+        .footer {
+            margin-top: auto; /* Pushes footer to the bottom */
+            font-size: 0.8em;
+            color: var(--tg-theme-hint-color);
+            text-align: center;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MARKETING</h1>
+    <h2>кабинет авторизации партнера</h2>
+
+    <div class="card">
+        <div class="form-group">
+            <label for="partner-code">Код партнера</label>
+            <input type="text" id="partner-code" placeholder="Например, 111098" inputmode="numeric" pattern="[0-9]*">
+        </div>
+        <div class="form-group">
+            <label for="partner-phone">Телефон партнера из КОСМОС</label>
+            <input type="tel" id="partner-phone" placeholder="9827701055" maxlength="10">
+        </div>
+        <button id="auth-button">Авторизоваться</button>
+    </div>
+
+    <div class="footer">
+        produced by SYNTHOS AI®
+    </div>
+
+    <script>
+        // Set theme colors from Telegram WebApp
+        document.documentElement.style.setProperty('--tg-theme-bg-color', Telegram.WebApp.themeParams.bg_color);
+        document.documentElement.style.setProperty('--tg-theme-text-color', Telegram.WebApp.themeParams.text_color);
+        document.documentElement.style.setProperty('--tg-theme-hint-color', Telegram.WebApp.themeParams.hint_color);
+        document.documentElement.style.setProperty('--tg-theme-link-color', Telegram.WebApp.themeParams.link_color);
+        document.documentElement.style.setProperty('--tg-theme-button-color', Telegram.WebApp.themeParams.button_color);
+        document.documentElement.style.setProperty('--tg-theme-button-text-color', Telegram.WebApp.themeParams.button_text_color);
+        document.documentElement.style.setProperty('--tg-theme-secondary-bg-color', Telegram.WebApp.themeParams.secondary_bg_color);
+
+        // Handle phone input prefix
+        const partnerPhoneInput = document.getElementById('partner-phone');
+        partnerPhoneInput.addEventListener('focus', () => {
+            if (!partnerPhoneInput.value.startsWith('8')) {
+                partnerPhoneInput.value = '8' + partnerPhoneInput.value;
+            }
+        });
+        partnerPhoneInput.addEventListener('blur', () => {
+            if (partnerPhoneInput.value === '8') {
+                partnerPhoneInput.value = '';
+            }
+        });
+        // Ensure '8' is always there if user types
+        partnerPhoneInput.addEventListener('input', () => {
+            if (!partnerPhoneInput.value.startsWith('8')) {
+                partnerPhoneInput.value = '8' + partnerPhoneInput.value.substring(1);
+            }
+            if (partnerPhoneInput.value.length > 11) { // 8 + 10 digits
+                partnerPhoneInput.value = partnerPhoneInput.value.substring(0, 11);
+            }
+        });
+        // Initial check in case of pre-filled values
+        if (partnerPhoneInput.value && !partnerPhoneInput.value.startsWith('8')) {
+            partnerPhoneInput.value = '8' + partnerPhoneInput.value;
+        }
+
+
+        document.getElementById('auth-button').addEventListener('click', () => {
+            const partnerCode = document.getElementById('partner-code').value;
+            const partnerPhone = document.getElementById('partner-phone').value;
+
+            // Basic validation
+            if (!partnerCode || !partnerPhone) {
+                Telegram.WebApp.showAlert('Пожалуйста, заполните все поля.');
+                return;
+            }
+            if (!/^\d+$/.test(partnerCode)) {
+                Telegram.WebApp.showAlert('Код партнера должен содержать только цифры.');
+                return;
+            }
+            if (!/^8\d{10}$/.test(partnerPhone)) {
+                Telegram.WebApp.showAlert('Телефон партнера должен быть в формате 8XXXXXXXXXX (11 цифр).');
+                return;
+            }
+
+            const authData = JSON.stringify({
+                code: partnerCode,
+                phone: partnerPhone
+            });
+
+            // Send data to the bot
+            if (Telegram.WebApp.sendData) {
+                Telegram.WebApp.sendData(authData);
+            } else {
+                // Fallback for testing outside Telegram WebApp
+                console.log('Telegram.WebApp.sendData is not available. Data:', authData);
+                Telegram.WebApp.showAlert('Данные отправлены (только в консоль, так как это не Telegram WebApp).');
+            }
+            // Telegram.WebApp.close(); // Mini App will close automatically after sendData
+        });
+
+        // Close Mini App if user navigates back or clicks close button
+        Telegram.WebApp.onEvent('mainButtonClicked', () => {
+            Telegram.WebApp.close();
+        });
+        Telegram.WebApp.onEvent('backButtonClicked', () => {
+            Telegram.WebApp.close();
+        });
+
+        // Show main button if needed (though sendData usually closes it)
+        Telegram.WebApp.ready();
+        Telegram.WebApp.MainButton.setText('Отправить данные');
+        Telegram.WebApp.MainButton.show();
+        Telegram.WebApp.MainButton.onClick(() => {
+            document.getElementById('auth-button').click(); // Trigger form submission
+        });
+
+    </script>
+</body>
+</html>
