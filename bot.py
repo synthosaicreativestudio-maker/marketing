@@ -26,18 +26,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     name = escape_markdown(user.first_name or "пользователь")
     welcome_message = f"Добрый день, {name}, для продолжения вам необходимо авторизоваться"
 
-    # Кнопка для открытия Web App
-    keyboard = [
-        [
-            {
-                "text": "Авторизоваться",
-                "web_app": {"url": WEB_APP_URL},
-            }
-        ]
-    ]
-    reply_markup = {"keyboard": keyboard, "resize_keyboard": True}
-
-    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+    await update.message.reply_text(welcome_message)
 
 
 def main() -> None:
