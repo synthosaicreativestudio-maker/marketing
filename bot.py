@@ -1,4 +1,3 @@
-
 import logging
 import os
 
@@ -6,6 +5,9 @@ from dotenv import load_dotenv
 from telegram import Update, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler
 from telegram.helpers import escape_markdown
+
+# New import for modular handler
+from handlers.start_handler import start
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
@@ -18,15 +20,6 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEB_APP_URL = os.getenv("WEB_APP_AUTH_URL")
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет приветственное сообщение при команде /start."""
-    user = update.effective_user
-    name = escape_markdown(user.first_name or "пользователь")
-    welcome_message = f"Добрый день, {name}, для продолжения вам необходимо авторизоваться"
-
-    await update.message.reply_text(welcome_message)
 
 
 def main() -> None:
@@ -48,4 +41,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
