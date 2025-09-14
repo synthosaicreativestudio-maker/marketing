@@ -1,6 +1,7 @@
 import logging
 import os
 import datetime
+import gspread
 from google_sheets_service import GoogleSheetsService
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,11 @@ class AuthService:
         self.sheet_url = os.getenv("SHEET_URL")
         self.sheet = None
         if self.sheet_url:
-            self.sheet = self.sheets_service.get_sheet_by_url(self.sheet_url)
+            spreadsheet = self.sheets_service.get_sheet_by_url(self.sheet_url)
+            if spreadsheet:
+                self.sheet = spreadsheet.sheet1  # Получаем первый лист
+            else:
+                 logger.error("Не удалось получить доступ к таблице.")
         else:
             logger.error("SHEET_URL не найден в .env файле.")
 
@@ -80,7 +85,7 @@ class AuthService:
                 return status == "Авторизован"
             return False
         except gspread.exceptions.CellNotFound:
-             # Это ожидаемое исключение, если пользователь не найден
+            # Это ожидаемое исключение, если пользователь не найден
             return False
         except Exception as e:
             logger.error(f"Ошибка при проверке статуса пользователя {telegram_id}: {e}")
