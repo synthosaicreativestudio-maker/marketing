@@ -2,7 +2,7 @@ import logging
 import os
 import json
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from auth_service import AuthService
 
@@ -53,7 +53,7 @@ def web_app_data_handler(auth_service: AuthService):
             # Логика авторизации
             if auth_service.find_and_update_user(partner_code, partner_phone, user.id):
                 await update.message.reply_text("Авторизация прошла успешно! Добро пожаловать.")
-                 # TODO: Показать основное меню
+                # TODO: Показать основное меню
             else:
                 keyboard = [[InlineKeyboardButton("Повторить авторизацию", web_app=WebAppInfo(url=WEB_APP_URL))]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
