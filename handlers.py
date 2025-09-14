@@ -27,6 +27,14 @@ def start_command_handler(auth_service: AuthService):
             await update.message.reply_text(f"Добрый день, {user.first_name}! Вы уже авторизованы.")
             # TODO: Здесь можно добавить основное меню для авторизованных пользователей
         else:
+            logger.info(f"WEB_APP_URL loaded from .env: {WEB_APP_URL}")
+            if not WEB_APP_URL:
+                logger.error("WEB_APP_URL is None or empty. Check your .env file.")
+                await update.message.reply_text(
+                    f"Добрый день, {user.first_name}! К сожалению, система авторизации временно недоступна. Пожалуйста, попробуйте позже."
+                )
+                return
+                
             keyboard = [
                 [InlineKeyboardButton("Авторизоваться", web_app=WebAppInfo(url=WEB_APP_URL))]
             ]
@@ -55,6 +63,14 @@ def web_app_data_handler(auth_service: AuthService):
                 await update.message.reply_text("Авторизация прошла успешно! Добро пожаловать.")
                 # TODO: Показать основное меню
             else:
+                logger.info(f"WEB_APP_URL loaded from .env: {WEB_APP_URL}")
+                if not WEB_APP_URL:
+                    logger.error("WEB_APP_URL is None or empty. Check your .env file.")
+                    await update.message.reply_text(
+                        "К сожалению, система авторизации временно недоступна. Пожалуйста, попробуйте позже."
+                    )
+                    return
+                    
                 keyboard = [[InlineKeyboardButton("Повторить авторизацию", web_app=WebAppInfo(url=WEB_APP_URL))]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(
