@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 from dotenv import load_dotenv
 
 from telegram import Update
@@ -19,7 +20,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def main() -> None:
+async def main() -> None:
     """Основная функция для инициализации и запуска бота."""
     # --- Проверка наличия токена ---
     token = os.getenv("TELEGRAM_TOKEN")
@@ -43,6 +44,12 @@ def main() -> None:
     logger.info("Создание экземпляра бота...")
     application = Application.builder().token(token).build()
 
+    # --- Удаление предыдущих вебхуков (если есть) ---
+    # Это помогает избежать ошибок Conflict: terminated by other getUpdates request
+    # если бот был некорректно остановлен ранее.
+    logger.info("Удаление предыдущих вебхуков...")
+    await application.bot.delete_webhook()
+
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
     setup_handlers(application, auth_service)
@@ -53,4 +60,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
