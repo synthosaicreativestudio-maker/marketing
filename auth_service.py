@@ -65,13 +65,15 @@ class AuthService:
             return False
 
         try:
+            # Получаем первую worksheet из spreadsheet
+            worksheet = self.sheet.get_worksheet(0)
             # Получаем все значения из 5-й колонки (E)
-            telegram_ids = self.sheet.col_values(5)
+            telegram_ids = worksheet.col_values(5)
             # Ищем индекс строки с нужным ID (начинаем с 1, так как 0 - заголовок)
             try:
                 row_index = telegram_ids.index(str(telegram_id)) + 1
                 # Проверяем статус в 4-й колонке (D) той же строки
-                status = self.sheet.cell(row_index, 4).value
+                status = worksheet.cell(row_index, 4).value
                 return status == "Авторизован"
             except ValueError:
                 # ID не найден в списке
