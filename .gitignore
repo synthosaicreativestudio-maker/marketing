@@ -1,0 +1,13 @@
+# Local environment files
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Encrypted backups
+.env.enc
+
+# Editor directories
+.vscode/
+.idea/
