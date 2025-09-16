@@ -72,14 +72,50 @@ class TelegramBot:
         webapp_url = os.environ.get("WEBAPP_URL", "https://your-webapp-url.com/auth")
         
         keyboard = {
-            'inline_keyboard': [[{
+            'keyboard': [[{
                 'text': 'Авторизоваться',
                 'web_app': {'url': webapp_url}
-            }]]
+            }]],
+            'resize_keyboard': True,
+            'one_time_keyboard': True
         }
         
         self.send_message(chat_id, text, keyboard)
     
+    def handle_web_app_data(self, update):
+        """Handle data received from Web App."""
+        message = update.get('message', {})
+        chat_id = message.get('chat', {}).get('id')
+        web_app_data = message.get('web_app_data', {})
+        data = web_app_data.get('data', '')
+        
+        log.info(f"Received web app data from chat {chat_id}: {data}")
+        
+        try:
+            # Parse JSON data from web app
+            import json
+            auth_data = json.loads(data)
+            partner_code = auth_data.get('partner_code', '')
+            partner_phone = auth_data.get('partner_phone', '')
+            
+            # Simple validation
+            if not partner_code.isdigit():
+                self.send_message(chat_id, "❌ Код партнёра должен содержать только цифры")
+                return
+            
+            if not partner_phone:
+                self.send_message(chat_id, "❌ Введите номер телефона")
+                return
+            
+            # For now, simple success response (later integrate with sheets)
+            if partner_code == '111098' and '1055' in partner_phone:
+                self.send_message(chat_id, "✅ Авторизация успешна!")
+            else:
+                self.send_message(chat_id, "❌ Партнёр не найден в базе")
+                
+        except Exception as e:
+            log.error(f"Error processing web app data: {e}")
+            self.send_message(chat_id, "❌ Ошибка обработки данных")
     
     def process_update(self, update):
         """Process single update."""
@@ -91,9 +127,9 @@ class TelegramBot:
                 if text == '/start':
                     self.handle_start(update)
             
-            # Handle web app data (if needed in future)
-            elif 'web_app_data' in update:
-                log.info(f"Received web app data: {update['web_app_data']}")
+            # Handle web app data from keyboard button
+            elif 'message' in update and 'web_app_data' in update['message']:
+                self.handle_web_app_data(update)
         
         except Exception as e:
             log.error(f"Error processing update: {e}")

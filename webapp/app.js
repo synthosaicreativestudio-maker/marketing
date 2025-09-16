@@ -40,21 +40,21 @@ document.addEventListener('DOMContentLoaded', function () {
     setMessage('Проверяю...', false)
 
     try {
-  const resp = await fetch('/api/webapp/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData, partner_code: code, partner_phone: phone })
-      })
-
-      const body = await resp.json().catch(() => null)
-      if (resp.ok && body && body.ok !== false) {
-        setMessage(body.message || 'Авторизация успешна', false)
+      // Use Telegram Web App sendData for keyboard button
+      if (window.Telegram && window.Telegram.WebApp) {
+        const dataToSend = JSON.stringify({
+          partner_code: code,
+          partner_phone: phone
+        })
+        
+        console.log('Отправляем данные через sendData:', dataToSend)
+        window.Telegram.WebApp.sendData(dataToSend)
+        setMessage('Данные отправлены боту...', false)
       } else {
-        const err = body || { error: 'unknown', message: 'Неизвестная ошибка' }
-        setMessage((err.message || err.error || 'Ошибка') , true)
+        setMessage('Ошибка: Telegram Web App недоступен', true)
       }
     } catch (e) {
-      setMessage('Ошибка сети: ' + e.message, true)
+      setMessage('Ошибка отправки: ' + e.message, true)
     } finally {
       authBtn.disabled = false
     }
