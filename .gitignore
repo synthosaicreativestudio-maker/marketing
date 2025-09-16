@@ -12,3 +12,7 @@ __pycache__/
 .vscode/
 .idea/
 credentials.json
+
+# Virtualenvs
+.venv/
+.venv312/
