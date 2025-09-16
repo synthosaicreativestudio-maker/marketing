@@ -1,0 +1,68 @@
+Starting MarketingBot...
+Token: 8232668997...
+INFO:plugins.loader:Loaded plugin auth
+INFO:plugins.loader:Plugin loader is disabled in config
+INFO:__main__:Starting bot polling (python-telegram-bot v21+)
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/telegram/ext/_application.py", line 1069, in __run
+    loop.run_until_complete(self.initialize())
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 701, in run_until_complete
+    self._check_running()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 637, in _check_running
+    raise RuntimeError('This event loop is already running')
+RuntimeError: This event loop is already running
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/telegram/ext/_application.py", line 1094, in __run
+    loop.run_until_complete(self.shutdown())
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 701, in run_until_complete
+    self._check_running()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 637, in _check_running
+    raise RuntimeError('This event loop is already running')
+RuntimeError: This event loop is already running
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/verakoroleva/Desktop/marketingbot/bot.py", line 95, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/verakoroleva/Desktop/marketingbot/bot.py", line 85, in main
+    await app.run_polling()  # type: ignore
+          ~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/telegram/ext/_application.py", line 868, in run_polling
+    return self.__run(
+           ~~~~~~~~~~^
+        updater_coroutine=self.updater.start_polling(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+        stop_signals=stop_signals,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/telegram/ext/_application.py", line 1099, in __run
+    loop.close()
+    ~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/unix_events.py", line 70, in close
+    super().close()
+    ~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/selector_events.py", line 101, in close
+    raise RuntimeError("Cannot close a running event loop")
+RuntimeError: Cannot close a running event loop
+<sys>:0: RuntimeWarning: coroutine 'Application.shutdown' was never awaited
+<sys>:0: RuntimeWarning: coroutine 'Application.initialize' was never awaited
