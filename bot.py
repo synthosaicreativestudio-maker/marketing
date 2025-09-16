@@ -92,13 +92,4 @@ async def main():
                     unregister_func()
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except RuntimeError as e:
-        if "This event loop is already running" in str(e):
-            # If there's already a running loop, use it
-            import nest_asyncio
-            nest_asyncio.apply()
-            asyncio.run(main())
-        else:
-            raise
+    asyncio.run(main())
