@@ -30,3 +30,34 @@
 2. Запустить `python3 tools/log_chat.py "Пользователь" "текст"`
 
 Статус: работает
+
+---
+
+Дата: 2025-09-16
+
+Заголовок реализации: Стабильный запуск бота на Python 3.12 (ptb v13)
+
+Краткое описание: Исправлены импорты/зависимости и код для стабильного запуска бота в проектном виртуальном окружении Python 3.12. Добавлены фиксы `.gitignore` и зафиксированы зависимости.
+
+Техническое решение (файлы, патчи, скрипты, конфигурация):
+- `bot.py` — добавлена поддержка запуска для python-telegram-bot v13 (Updater) и fallback для v20 (ApplicationBuilder). Исправлена обёртка start.
+- `requirements.txt` — добавлены pins: `urllib3==1.26.16`, `six==1.17.0`.
+- `.gitignore` — добавлены `.venv/`, `.venv312/`, `logs/`.
+- `scripts/restart_bot.sh` — предпочитает `.venv312` при запуске, грузит `.env`, останавливает старые экземпляры и стартует новый.
+
+Коммиты/PR (хэши или ссылки):
+- a6598dd Pin urllib3 and six to match ptb v13 vendored expectations
+- 8cff4c2 Commit bot.py fixes; ignore project virtualenvs (.venv, .venv312); pin deps
+- 2d7bf5b Ignore logs/ to keep local logs out of source control
+
+Шаги для воспроизведения/установка:
+1. Установить Python 3.12 и создать venv в `.venv312` (или использовать проектный venv).
+2. pip install -r requirements.txt
+3. Создать `.env` с `TELEGRAM_TOKEN`.
+4. Запустить `bash scripts/restart_bot.sh`.
+5. В Telegram отправить /start боту и проверить ответ в чате и логи `logs/bot.log`.
+
+Статус: работает
+
+Примечания и ограничения:
+- Решение зафиксировано под PTB v13. Для перехода на PTB v20 требуется рефакторинг плагинов и handler-API.
