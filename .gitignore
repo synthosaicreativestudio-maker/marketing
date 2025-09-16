@@ -16,3 +16,6 @@ credentials.json
 # Virtualenvs
 .venv/
 .venv312/
+
+# Logs
+logs/
