@@ -2,9 +2,12 @@
 """Minimal Telegram bot: /start handler greets the user and requests authorization."""
 import os
 import logging
+from pathlib import Path
 
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
+
+from plugins.loader import load_plugins
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -32,9 +35,21 @@ def main() -> None:
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start))
 
+    # load plugins
+    cfg_path = Path('config/plugins.json')
+    plugins = load_plugins(dp, updater.bot, cfg_path)
+
     log.info("Starting bot polling")
     updater.start_polling()
-    updater.idle()
+    try:
+        updater.idle()
+    finally:
+        # cleanup plugins
+        for h in plugins:
+            try:
+                h.get('unregister', lambda: None)()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
