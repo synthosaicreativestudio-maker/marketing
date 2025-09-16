@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', function () {
     tg.ready();
     tg.expand();
     
+    console.log('🔍 Telegram Web App initialized:', tg);
+    console.log('🔍 MainButton available:', !!tg.MainButton);
+    
     // Set theme colors
     document.body.style.backgroundColor = tg.themeParams.bg_color || '#ffffff';
     document.body.style.color = tg.themeParams.text_color || '#000000';
@@ -13,17 +16,17 @@ document.addEventListener('DOMContentLoaded', function () {
     tg.MainButton.setText('Авторизоваться');
     tg.MainButton.show();
     
-    // Hide HTML button when using MainButton
-    const authBtn = document.getElementById('authBtn');
-    if (authBtn) {
-      authBtn.style.display = 'none';
-    }
+    console.log('🔍 MainButton configured and shown');
+    
     
     // Handle Main Button click
     tg.MainButton.onClick(doAuth);
+    console.log('🔍 MainButton onClick handler set');
+  } else {
+    console.log('❌ Telegram Web App not available - no fallback button');
+    setMessage('Ошибка: Откройте через Telegram бота', true);
   }
 
-  const authBtn = document.getElementById('authBtn')
   const msg = document.getElementById('msg')
 
   function setMessage(text, isError) {
@@ -32,10 +35,14 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   async function doAuth() {
+    console.log('🚀 doAuth function called');
+    
     const codeEl = document.getElementById('partner_code')
     const phoneEl = document.getElementById('partner_phone')
     const code = codeEl.value.trim()
     const phone = phoneEl.value.trim()
+
+    console.log('🔍 Начинаем авторизацию:', { code, phone })
 
     if (!/^[0-9]{1,20}$/.test(code)) {
       setMessage('Код партнёра должен содержать только цифры (1-20)', true)
@@ -79,8 +86,5 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // HTML button fallback for testing outside Telegram
-  if (authBtn) {
-    authBtn.addEventListener('click', doAuth)
-  }
+  // No HTML button - only Telegram MainButton supported
 })
