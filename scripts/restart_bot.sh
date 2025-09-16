@@ -5,7 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/.."
 LOG_DIR="${PROJECT_ROOT}/logs"
 LOG_FILE="${LOG_DIR}/bot.log"
-PYTHON=python3
+# Prefer project virtualenv python if present (try .venv312 then .venv), fall back to system python3
+if [ -x "${PROJECT_ROOT}/.venv312/bin/python" ]; then
+  PYTHON="${PROJECT_ROOT}/.venv312/bin/python"
+elif [ -x "${PROJECT_ROOT}/.venv/bin/python" ]; then
+  PYTHON="${PROJECT_ROOT}/.venv/bin/python"
+else
+  PYTHON=python3
+fi
 
 mkdir -p "${LOG_DIR}"
 
