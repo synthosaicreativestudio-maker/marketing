@@ -63,6 +63,33 @@
         min-height: 20px;
         margin-top: 15px;
       }
+      .keyboard-button {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        z-index: 1000;
+        background: rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 10px;
+      }
+      .keyboard-button button {
+        width: 100%;
+        padding: 15px;
+        background: var(--tg-theme-button-color, #0088cc);
+        color: var(--tg-theme-button-text-color, #ffffff);
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+      .keyboard-button button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
     </style>
   </head>
   <body>
@@ -77,6 +104,12 @@
         <input id="partner_phone" inputmode="tel" placeholder="например +7 (910) 123-45-55" />
       </label>
     </div>
+    
+    <!-- Floating button for keyboard -->
+    <div id="keyboard-button" class="keyboard-button" style="display: none;">
+      <button id="auth-keyboard-btn" type="button">Авторизоваться</button>
+    </div>
+    
     <div id="msg" role="status" aria-live="polite"></div>
 
     <script src="/webapp/app.js"></script>
