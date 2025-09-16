@@ -8,6 +8,19 @@ document.addEventListener('DOMContentLoaded', function () {
     // Set theme colors
     document.body.style.backgroundColor = tg.themeParams.bg_color || '#ffffff';
     document.body.style.color = tg.themeParams.text_color || '#000000';
+    
+    // Setup Main Button instead of HTML button
+    tg.MainButton.setText('Авторизоваться');
+    tg.MainButton.show();
+    
+    // Hide HTML button when using MainButton
+    const authBtn = document.getElementById('authBtn');
+    if (authBtn) {
+      authBtn.style.display = 'none';
+    }
+    
+    // Handle Main Button click
+    tg.MainButton.onClick(doAuth);
   }
 
   const authBtn = document.getElementById('authBtn')
@@ -36,7 +49,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // initData from Telegram Web App (when opened inside Telegram). If not present, still allow for local testing.
     const initData = (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) || ''
 
-    authBtn.disabled = true
+    // Disable MainButton and show loader
+    if (window.Telegram && window.Telegram.WebApp) {
+      window.Telegram.WebApp.MainButton.showProgress();
+    }
     setMessage('Проверяю...', false)
 
     try {
@@ -56,9 +72,15 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (e) {
       setMessage('Ошибка отправки: ' + e.message, true)
     } finally {
-      authBtn.disabled = false
+      // Hide loader and enable MainButton
+      if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.MainButton.hideProgress();
+      }
     }
   }
 
-  authBtn.addEventListener('click', doAuth)
+  // HTML button fallback for testing outside Telegram
+  if (authBtn) {
+    authBtn.addEventListener('click', doAuth)
+  }
 })
