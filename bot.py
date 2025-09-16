@@ -4,8 +4,8 @@ import os
 import logging
 from pathlib import Path
 
-from telegram import Update
-from telegram.ext import CommandHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CommandHandler, CallbackQueryHandler
 try:
     # v13.x
     from telegram.ext import Updater, CallbackContext
@@ -32,8 +32,22 @@ def start(update: Update, context: CallbackContext) -> None:
         name = user.first_name or user.username
     display_name = name if name else "пользователь"
     text = f"Привет, {display_name}!\nВам необходимо пройти авторизацию."
-    # You can extend here: send buttons, request phone, link to web-auth, etc.
-    update.message.reply_text(text)
+    # Inline button to start authorization flow
+    keyboard = [[InlineKeyboardButton('Авторизоваться', callback_data='authorize')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text(text, reply_markup=reply_markup)
+
+
+def handle_authorize_callback(update: Update, context: CallbackContext) -> None:
+    # Simple callback handler - in real flow we'd start auth (send link or request data)
+    query = update.callback_query
+    if not query:
+        return
+    try:
+        query.answer()
+        query.edit_message_text('Спасибо — теперь начнём процесс авторизации. Следуйте инструкциям.')
+    except Exception:
+        pass
 
 
 def main() -> None:
@@ -49,6 +63,7 @@ def main() -> None:
         updater = Updater(token=token, use_context=True)
         dp = updater.dispatcher
         dp.add_handler(CommandHandler("start", start))
+        dp.add_handler(CallbackQueryHandler(handle_authorize_callback, pattern='^authorize$'))
 
         # load plugins (v13 expects bot instance)
         cfg_path = Path('config/plugins.json')
@@ -83,6 +98,15 @@ def main() -> None:
                 pass
 
         app.add_handler(CommandHandler("start", _start))
+        # v20+ callback handler (async wrapper)
+        async def _handle_authorize(update: Update, context):
+            try:
+                # call sync handler
+                handle_authorize_callback(update, context)
+            except Exception:
+                pass
+
+        app.add_handler(CallbackQueryHandler(_handle_authorize, pattern='^authorize$'))
 
         # load plugins - plugins should handle both sync and async handlers
         cfg_path = Path('config/plugins.json')
