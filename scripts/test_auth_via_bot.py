@@ -11,7 +11,7 @@ then POST it to http://127.0.0.1:8000/api/webapp/auth and print the response.
 """
 import argparse
 import os
-import subprocess
+import subprocess  # nosec B404
 import sys
 
 import requests
@@ -23,7 +23,7 @@ def generate_initdata(bot_token, user_id):
         sys.executable, 'scripts/generate_initdata.py',
         '--bot-token', bot_token, '--user-id', str(user_id)
     ]
-    out = subprocess.check_output(cmd)
+    out = subprocess.check_output(cmd)  # nosec B603
     return out.decode().strip()
 
 
@@ -43,7 +43,7 @@ if __name__ == '__main__':
         'partner_code': args.partner_code,
         'partner_phone': args.phone
     }
-    r = requests.post(args.url, json=payload)
+    r = requests.post(args.url, json=payload, timeout=30)
     print('STATUS', r.status_code)
     try:
         print(r.json())

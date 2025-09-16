@@ -24,9 +24,12 @@ except Exception:
 
 def _send_sync(token: str, telegram_id: int, text: str) -> bool:
     try:
+        import asyncio
+
         from telegram import Bot
         bot = Bot(token=token)
-        bot.send_message(chat_id=telegram_id, text=text)
+        # Run the async method in a new event loop
+        asyncio.run(bot.send_message(chat_id=telegram_id, text=text))
         return True
     except Exception as e:
         logger.exception('send_message failed: %s', e)
@@ -53,7 +56,7 @@ def send_message_to(
             logger.exception('Failed to enqueue send job: %s', e)
             # fallthrough to direct send
 
-    def _worker():
+    def _worker() -> bool:
         attempt = 0
         while True:
             attempt += 1

@@ -14,4 +14,4 @@ def test_real_sheet_update():
     resp = requests.post('http://127.0.0.1:8080/api/webapp/auth', json={
         'initData': 'ok', 'partner_code': '111098', 'partner_phone': '89827701055'
     }, timeout=10)
-    pytest.assume(resp.status_code == 200)
+    assert resp.status_code == 200

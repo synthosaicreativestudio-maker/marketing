@@ -21,7 +21,7 @@ def make_initdata_for_test(bot_token: str, user: dict):
 
 
 def test_parse_and_extract():
-    bot_token = 'test-token-123'  # noqa: S105
+    bot_token = 'test-token-123'  # nosec B105
     user = {'id': 99999, 'first_name': 'Unit'}
     initdata = make_initdata_for_test(bot_token, user)
     parsed = tg.parse_init_data(initdata)
@@ -33,7 +33,7 @@ def test_parse_and_extract():
 
 
 def test_validate_initdata():
-    test_bot_token_alt = 'another-token'  # noqa: S105
+    test_bot_token_alt = 'another-token'  # nosec B105
     bot_token = test_bot_token_alt
     user = {'id': 5}
     initdata = make_initdata_for_test(bot_token, user)

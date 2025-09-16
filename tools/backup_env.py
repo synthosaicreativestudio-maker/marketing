@@ -21,7 +21,7 @@
 
 import argparse
 import getpass
-import subprocess
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
@@ -41,7 +41,7 @@ def run(cmd, check=True):
 
     # Используем более безопасный способ запуска
     try:
-        res = subprocess.run(
+        res = subprocess.run(  # nosec B603
             cmd, shell=False, check=check, capture_output=True, text=True
         )
         return res

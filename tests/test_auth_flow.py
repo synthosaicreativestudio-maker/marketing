@@ -18,7 +18,7 @@ def patch_sheets_and_bot(monkeypatch):
     if not FASTAPI_AVAILABLE:
         yield
         return
-        
+
     # Mock sheets.find_row_by_partner_and_phone and update_row_with_auth
     class DummySheets:
         # provide SheetsNotConfigured attribute expected by app.main exception handling

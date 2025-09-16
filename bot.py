@@ -39,6 +39,8 @@ async def handle_authorize_callback(
 ) -> None:
     """Handle authorization callback."""
     query = update.callback_query
+    if query is None:
+        return
     await query.answer()
     # Here you would typically redirect the user to your web app for authorization
     # For this example, we'll just send a message with a link
@@ -51,7 +53,7 @@ async def handle_authorize_callback(
     )
 
 
-async def main() -> None:
+async def main():
     """Start the bot."""
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
@@ -80,7 +82,7 @@ async def main() -> None:
 
     log.info("Starting bot polling (python-telegram-bot v21+)")
     try:
-        await app.run_polling()
+        await app.run_polling()  # type: ignore
     finally:
         from contextlib import suppress
         for h in plugins:

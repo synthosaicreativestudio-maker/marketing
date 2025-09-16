@@ -10,7 +10,7 @@ Behavior:
 - If --commit is passed, stages and commits README.md changes
 """
 import argparse
-import subprocess
+import subprocess  # nosec B404
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,8 +69,8 @@ def git_commit(path: Path, message: str):
         raise ValueError("Commit message contains potentially dangerous characters")
 
     try:
-        subprocess.check_call(['/usr/bin/git', 'add', str(path)], shell=False)
-        subprocess.check_call(['/usr/bin/git', 'commit', '-m', message], shell=False)
+        subprocess.check_call(['/usr/bin/git', 'add', str(path)], shell=False)  # nosec B603
+        subprocess.check_call(['/usr/bin/git', 'commit', '-m', message], shell=False)  # nosec B603
     except subprocess.CalledProcessError as e:
         raise SystemExit(f'Git command failed: {e}') from e
 

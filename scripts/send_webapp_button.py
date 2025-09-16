@@ -21,7 +21,7 @@ def send_button(bot_token: str, chat_id: int, url: str, text: str = 'Open Web Ap
             'inline_keyboard': [[{'text': 'Авторизоваться', 'web_app': {'url': url}}]]
         })
     }
-    r = requests.post(api, data=payload)
+    r = requests.post(api, data=payload, timeout=30)
     r.raise_for_status()
     return r.json()
 

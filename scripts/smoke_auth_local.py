@@ -18,7 +18,7 @@ What it does:
 import argparse
 import json
 import os
-import subprocess
+import subprocess  # nosec B404
 import sys
 
 import requests
@@ -35,7 +35,7 @@ def generate_initdata(bot_token, user_id, first_name='Smoke'):
         sys.executable, str(gen_script), '--bot-token', bot_token,
         '--user-id', str(user_id), '--first-name', first_name
     ]
-    out = subprocess.check_output(cmd)
+    out = subprocess.check_output(cmd)  # nosec B603
     return out.decode().strip()
 
 

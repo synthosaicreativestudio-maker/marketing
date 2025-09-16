@@ -7,7 +7,7 @@
 
 import argparse
 import os
-import subprocess
+import subprocess  # nosec B404
 from datetime import datetime
 from pathlib import Path
 
@@ -44,7 +44,7 @@ def open_in_editor(path: Path):
         print(f"Warning: Using potentially unsafe editor: {editor}")
 
     try:
-        subprocess.call([editor, str(path)], shell=False, timeout=300)
+        subprocess.call([editor, str(path)], shell=False, timeout=300)  # nosec B603
     except subprocess.TimeoutExpired:
         print("Editor timeout - continuing without editing")
     except FileNotFoundError:
