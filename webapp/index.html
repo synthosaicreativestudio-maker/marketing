@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Авторизация — MiniApp</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body>
+    <h2>Авторизация</h2>
+    <div>
+      <label>Код партнёра<br/>
+        <input id="partner_code" inputmode="numeric" pattern="[0-9]*" placeholder="только цифры, например 111098" />
+      </label>
+    </div>
+    <div>
+      <label>Телефон партнёра<br/>
+        <input id="partner_phone" inputmode="tel" placeholder="например +7 (910) 123-45-55" />
+      </label>
+    </div>
+    <div>
+      <button id="authBtn">Авторизоваться</button>
+    </div>
+    <div id="msg" role="status" aria-live="polite"></div>
+
+    <script src="/webapp/app.js"></script>
+  </body>
+</html>

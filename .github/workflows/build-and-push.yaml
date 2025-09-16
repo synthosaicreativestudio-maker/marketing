@@ -1,0 +1,28 @@
+name: Build and Push
+on:
+  push:
+    branches: [ "main", "staging" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-QEMU-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to registry
+        run: |
+          if [ -n "${GITHUB_REGISTRY_TOKEN}" ]; then
+            echo ${GITHUB_REGISTRY_TOKEN} | docker login ghcr.io -u ${GITHUB_ACTOR} --password-stdin
+          fi
+        env:
+          GITHUB_REGISTRY_TOKEN: ${{ secrets.GITHUB_REGISTRY_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/marketingbot:${{ github.sha }}

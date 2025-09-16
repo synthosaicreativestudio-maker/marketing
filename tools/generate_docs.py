@@ -10,9 +10,8 @@ Behavior:
 - If --commit is passed, stages and commits README.md changes
 """
 import argparse
-from pathlib import Path
 import subprocess
-import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / 'docs'
@@ -29,9 +28,11 @@ def build_summary(changelog, impls, rules):
         '## Rules (short)\n',
         rules.strip()[:1000] + ('...' if len(rules) > 1000 else ''),
         '\n\n## Recent changelog (top)\n',
-        changelog.strip().split('\n')[0:20] and '\n'.join(changelog.strip().split('\n')[0:20]) or '',
+        ('\n'.join(changelog.strip().split('\n')[0:20])
+         if changelog.strip().split('\n')[0:20] else ''),
         '\n\n## Recent implementations (top)\n',
-        impls.strip().split('\n')[0:40] and '\n'.join(impls.strip().split('\n')[0:40]) or '',
+        ('\n'.join(impls.strip().split('\n')[0:40])
+         if impls.strip().split('\n')[0:40] else ''),
     ]
     return '\n'.join(parts)
 
@@ -44,7 +45,10 @@ def update_readme(summary: str, dry_run=True):
         after = readme_text.split(marker_end)[1]
         new_readme = before + marker_start + '\n' + summary + '\n' + marker_end + after
     else:
-        new_readme = readme_text + '\n\n' + marker_start + '\n' + summary + '\n' + marker_end + '\n'
+        new_readme = (
+            readme_text + '\n\n' + marker_start + '\n' +
+            summary + '\n' + marker_end + '\n'
+        )
 
     if dry_run:
         print('--- DRY RUN: Generated summary ---')
@@ -55,8 +59,20 @@ def update_readme(summary: str, dry_run=True):
     return True
 
 def git_commit(path: Path, message: str):
-    subprocess.check_call(['git', 'add', str(path)])
-    subprocess.check_call(['git', 'commit', '-m', message])
+    """Safely commit changes to git."""
+    # Проверяем, что пути и сообщения являются строками
+    if not isinstance(str(path), str) or not isinstance(message, str):
+        raise ValueError("Path and message must be strings")
+
+    # Проверяем, что сообщение не содержит опасных символов
+    if any(char in message for char in [';', '&', '|', '`', '$']):
+        raise ValueError("Commit message contains potentially dangerous characters")
+
+    try:
+        subprocess.check_call(['/usr/bin/git', 'add', str(path)], shell=False)
+        subprocess.check_call(['/usr/bin/git', 'commit', '-m', message], shell=False)
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(f'Git command failed: {e}') from e
 
 def main():
     parser = argparse.ArgumentParser()

@@ -1,3 +1,37 @@
-python-telegram-bot==13.1
-urllib3==1.26.16
-six==1.17.0
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.0
+
+# Google Sheets integration
+gspread==6.1.4
+google-auth==2.37.0
+
+# Environment and configuration
+python-dotenv==1.0.1
+
+# Telegram bot (updated to v20)
+python-telegram-bot==21.9
+
+# HTTP clients
+requests==2.32.3
+httpx==0.28.1
+
+# Background tasks
+redis==5.2.1
+rq==2.0.0
+
+# Logging and monitoring
+python-json-logger==2.0.7
+prometheus-client==0.21.1
+
+# Code quality
+ruff==0.8.4
+mypy==1.13.0
+
+# Security
+cryptography==44.0.0

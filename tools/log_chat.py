@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Простая утилита для дописывания сообщений в лог переписки `docs/CONVERSATION_LOG.md`."""
+"""Простая утилита для дописывания сообщений в лог переписки
+`docs/CONVERSATION_LOG.md`."""
 
 import sys
 from datetime import datetime
 from pathlib import Path
-
 
 LOG_PATH = Path(__file__).resolve().parents[1] / 'docs' / 'CONVERSATION_LOG.md'
 

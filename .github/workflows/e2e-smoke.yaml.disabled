@@ -1,0 +1,3 @@
+name: E2E Smoke Test (DISABLED)
+
+# Disabled copy to avoid editor diagnostics referencing secrets

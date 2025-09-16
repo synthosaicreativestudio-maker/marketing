@@ -1,0 +1,89 @@
+name: Build and Deploy Web + Worker to Cloud Run
+
+on:
+  push:
+    branches: [ main, safe/push-sheets-clean ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python for preflight tests
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies for tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run preflight tests
+        run: |
+          PYTHONPATH=. pytest -q
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_JSON }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_JSON }}
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker --quiet
+
+      - name: Build and push image to GCR
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          IMAGE=gcr.io/$PROJECT_ID/marketing:${{ github.sha }}
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+          docker build -t $IMAGE .
+          docker push $IMAGE
+
+      - name: Deploy web service to Cloud Run
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          SERVICE=${WEB_SERVICE_NAME:-marketing-web}
+          gcloud run deploy $SERVICE \
+            --image $IMAGE \
+            --region $REGION --platform managed \
+            --set-env-vars TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }},SHEET_ID=${{ secrets.SHEET_ID }} \
+            --allow-unauthenticated --quiet
+          # obtain URL and healthcheck
+          URL=$(gcloud run services describe $SERVICE --region $REGION --format='value(status.url)')
+          echo "Deployed $SERVICE to $URL"
+          # wait for the service to be ready
+          for i in {1..10}; do
+            status=$(curl -fsS -o /dev/null -w "%{http_code}" $URL/healthz || true)
+            if [ "$status" = "200" ]; then echo "Health OK"; break; fi
+            echo "Waiting for health... ($i)"; sleep 3; done
+
+      - name: Deploy worker service to Cloud Run
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          WORKER=${WORKER_SERVICE_NAME:-marketing-worker}
+          gcloud run deploy $WORKER \
+            --image $IMAGE \
+            --region $REGION --platform managed \
+            --set-env-vars TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }},SHEET_ID=${{ secrets.SHEET_ID }},REDIS_URL=${{ secrets.REDIS_URL }} \
+            --no-allow-unauthenticated --quiet
+
+# Required GitHub secrets for this workflow:
+# - GCP_SA_JSON: JSON key of a service account with Cloud Run Admin, Storage Admin (for pushing images) and Cloud Build permissions
+# - GCP_PROJECT_ID: GCP project id
+# - GCP_REGION: region to deploy (e.g., us-central1)
+# - TELEGRAM_BOT_TOKEN: Telegram bot token
+# - SHEET_ID: Google Sheet ID used by the app
+# - REDIS_URL: URL for Redis instance used by RQ (for worker)

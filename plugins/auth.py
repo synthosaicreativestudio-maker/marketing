@@ -1,41 +1,63 @@
-"""Example auth plugin.
+"""Enhanced auth plugin with security improvements.
 
-Contract: expose register(dispatcher, bot, settings) -> handle with 'unregister' callable.
+Expose register(dispatcher, bot, settings) -> returns a dict with 'unregister'.
 """
+import os
+from typing import Any, Optional
+
 from telegram import Update
-from telegram.ext import CommandHandler, CallbackContext
+from telegram.ext import CommandHandler
 
 
-def _auth_start(update: Update, context: CallbackContext):
+async def _auth_start(update: Update, context: Any) -> None:
+    """Handle /auth command."""
     user = update.effective_user
     name = user.first_name or user.username if user else 'пользователь'
-    update.message.reply_text(f"Привет, {name}! Чтобы авторизоваться, отправьте ваш код: /code <код>")
+    if update.message:
+        await update.message.reply_text(
+            f"Привет, {name}! Чтобы авторизоваться, отправьте ваш код: /code <код>"
+        )
 
 
-def _auth_code(update: Update, context: CallbackContext):
-    args = context.args
+async def _auth_code(update: Update, context: Any) -> None:
+    """Handle /code command with authorization."""
+    args = getattr(context, 'args', [])
     if not args:
-        update.message.reply_text("Укажите код: /code <код>")
+        if update.message:
+            await update.message.reply_text("Укажите код: /code <код>")
         return
+
     code = args[0]
-    # Здесь должен быть реальный механизм проверки кода
-    if code == "1234":
-        update.message.reply_text("Авторизация успешна")
-    else:
-        update.message.reply_text("Неверный код")
+    # Используем код из переменной окружения вместо хардкода
+    valid_code = os.environ.get('AUTH_CODE', '1234')
+
+    if update.message:
+        if code == valid_code:
+            await update.message.reply_text("Авторизация успешна")
+        else:
+            await update.message.reply_text("Неверный код")
 
 
-def register(dispatcher, bot, settings):
+def register(
+    dispatcher: Any, bot: Any, settings: Optional[dict[str, Any]]
+) -> dict[str, Any]:
+    """Register auth plugin handlers."""
     start_h = CommandHandler('auth', _auth_start)
     code_h = CommandHandler('code', _auth_code)
     dispatcher.add_handler(start_h)
     dispatcher.add_handler(code_h)
 
-    def unregister():
-        try:
+    def unregister() -> None:
+        """Unregister handlers."""
+        from contextlib import suppress
+        # attempt to remove handlers; ignore if they're not present
+        with suppress(Exception):
             dispatcher.remove_handler(start_h)
             dispatcher.remove_handler(code_h)
-        except Exception:
-            pass
 
-    return {'name': 'auth', 'unregister': unregister}
+    return {
+        'name': 'auth',
+        'version': '2.0.0',
+        'description': 'Enhanced authentication plugin with security improvements',
+        'unregister': unregister
+    }

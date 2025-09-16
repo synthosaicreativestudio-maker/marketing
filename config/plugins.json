@@ -4,7 +4,7 @@
   ],
   "settings": {
     "auth": {
-      "code": "1234"
+      "note": "Auth code is now read from AUTH_CODE environment variable"
     }
   }
 }
