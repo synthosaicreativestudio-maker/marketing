@@ -67,10 +67,30 @@ document.addEventListener('DOMContentLoaded', function () {
   const msg = document.getElementById('msg')
   const keyboardButton = document.getElementById('keyboard-button')
   const authKeyboardBtn = document.getElementById('auth-keyboard-btn')
+  const hideKeyboardBtn = document.getElementById('hide-keyboard-btn')
 
   function setMessage(text, isError) {
     msg.textContent = text
     msg.style.color = isError ? 'crimson' : 'green'
+  }
+
+  // Function to hide keyboard
+  function hideKeyboard() {
+    if (document.activeElement) {
+      document.activeElement.blur();
+      console.log('🔍 Keyboard hidden programmatically');
+    }
+  }
+
+  // Function to normalize phone number and check if complete
+  function normalizePhone(phone) {
+    const digits = phone.replace(/\D/g, ''); // Remove non-digits
+    return digits;
+  }
+
+  function isPhoneComplete(phone) {
+    const digits = normalizePhone(phone);
+    return digits.length >= 11; // Russian phone number
   }
 
   async function doAuth() {
@@ -179,14 +199,30 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
     
-    // Update button state on input
+    // Update button state on input and auto-hide keyboard
     if (codeInput && phoneInput) {
       codeInput.addEventListener('input', updateButtonState);
-      phoneInput.addEventListener('input', updateButtonState);
+      
+      phoneInput.addEventListener('input', (e) => {
+        updateButtonState();
+        
+        // Auto-hide keyboard when phone number is complete (11 digits)
+        const phone = e.target.value;
+        if (isPhoneComplete(phone)) {
+          setTimeout(() => {
+            hideKeyboard();
+            setMessage('Номер телефона введён полностью', false);
+          }, 500); // Small delay for better UX
+        }
+      });
     }
     
-    // Add click handler to floating button
+    // Add click handlers
     authKeyboardBtn.addEventListener('click', doAuth);
+    
+    if (hideKeyboardBtn) {
+      hideKeyboardBtn.addEventListener('click', hideKeyboard);
+    }
     
     // Modern viewport API support (if available)
     if (window.visualViewport) {

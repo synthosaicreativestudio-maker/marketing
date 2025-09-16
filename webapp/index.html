@@ -101,6 +101,13 @@
         opacity: 0.6;
         cursor: not-allowed;
       }
+      .hide-keyboard-btn {
+        background: rgba(255, 255, 255, 0.2) !important;
+        color: var(--tg-theme-text-color, #ffffff) !important;
+        margin-bottom: 8px !important;
+        font-size: 14px !important;
+        padding: 10px !important;
+      }
     </style>
   </head>
   <body>
@@ -116,8 +123,9 @@
       </label>
     </div>
     
-    <!-- Floating button for keyboard -->
+    <!-- Floating buttons for keyboard -->
     <div id="keyboard-button" class="keyboard-button" style="display: none;">
+      <button id="hide-keyboard-btn" type="button" class="hide-keyboard-btn">Скрыть клавиатуру</button>
       <button id="auth-keyboard-btn" type="button">Авторизоваться</button>
     </div>
     
