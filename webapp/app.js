@@ -161,6 +161,12 @@ document.addEventListener('DOMContentLoaded', function () {
       const code = codeInput.value.trim();
       const phone = phoneInput.value.trim();
       
+      // Show buttons if any field has content
+      if (code || phone) {
+        keyboardButton.style.display = 'block';
+        document.body.classList.add('keyboard-open');
+      }
+      
       if (code && phone) {
         authKeyboardBtn.disabled = false;
         authKeyboardBtn.textContent = 'Авторизоваться';
@@ -232,5 +238,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     console.log('🔍 iOS-compatible keyboard button setup complete');
+    
+    // DEBUG: Force show buttons for testing
+    setTimeout(() => {
+      if (keyboardButton) {
+        keyboardButton.style.display = 'block';
+        document.body.classList.add('keyboard-open');
+        console.log('🔍 DEBUG: Force showing keyboard buttons for testing');
+      }
+    }, 2000);
   }
 })
