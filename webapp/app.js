@@ -12,21 +12,20 @@ document.addEventListener('DOMContentLoaded', function () {
     document.body.style.backgroundColor = tg.themeParams.bg_color || '#ffffff';
     document.body.style.color = tg.themeParams.text_color || '#000000';
     
-    // Setup Main Button instead of HTML button
-    tg.MainButton.setText('Авторизоваться');
-    tg.MainButton.show();
-    
-    console.log('🔍 MainButton configured and shown');
-    
-    
-    // Handle Main Button click
-    tg.MainButton.onClick(doAuth);
-    console.log('🔍 MainButton onClick handler set');
+    // Try to setup MainButton as additional option
+    try {
+      tg.MainButton.setText('Авторизоваться');
+      tg.MainButton.show();
+      tg.MainButton.onClick(doAuth);
+      console.log('🔍 MainButton configured as additional option');
+    } catch (e) {
+      console.log('❌ MainButton setup failed:', e);
+    }
   } else {
-    console.log('❌ Telegram Web App not available - no fallback button');
-    setMessage('Ошибка: Откройте через Telegram бота', true);
+    console.log('❌ Telegram Web App not available');
   }
 
+  const authBtn = document.getElementById('authBtn')
   const msg = document.getElementById('msg')
 
   function setMessage(text, isError) {
@@ -56,7 +55,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // initData from Telegram Web App (when opened inside Telegram). If not present, still allow for local testing.
     const initData = (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) || ''
 
-    // Disable MainButton and show loader
+    // Disable buttons and show loader
+    if (authBtn) {
+      authBtn.disabled = true;
+    }
     if (window.Telegram && window.Telegram.WebApp) {
       window.Telegram.WebApp.MainButton.showProgress();
     }
@@ -79,12 +81,19 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (e) {
       setMessage('Ошибка отправки: ' + e.message, true)
     } finally {
-      // Hide loader and enable MainButton
+      // Hide loader and enable buttons
+      if (authBtn) {
+        authBtn.disabled = false;
+      }
       if (window.Telegram && window.Telegram.WebApp) {
         window.Telegram.WebApp.MainButton.hideProgress();
       }
     }
   }
 
-  // No HTML button - only Telegram MainButton supported
+  // Setup HTML button as primary option
+  if (authBtn) {
+    authBtn.addEventListener('click', doAuth);
+    console.log('🔍 HTML button event listener added');
+  }
 })
