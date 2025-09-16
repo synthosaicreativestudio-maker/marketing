@@ -64,15 +64,26 @@
         margin-top: 15px;
       }
       .keyboard-button {
-        position: fixed;
+        position: absolute;
         bottom: 20px;
         left: 20px;
         right: 20px;
-        z-index: 1000;
-        background: rgba(0, 0, 0, 0.1);
+        z-index: 9999;
+        background: rgba(0, 0, 0, 0.9);
+        -webkit-backdrop-filter: blur(10px);
         backdrop-filter: blur(10px);
         border-radius: 12px;
         padding: 10px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+      }
+      .keyboard-open .keyboard-button {
+        bottom: 290px; /* Above iOS keyboard */
+      }
+      body {
+        position: relative;
+        min-height: 100vh;
       }
       .keyboard-button button {
         width: 100%;

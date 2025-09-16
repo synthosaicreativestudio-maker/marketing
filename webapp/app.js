@@ -125,17 +125,21 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Setup floating keyboard button
+  // Setup floating keyboard button with iOS Safari support
   if (keyboardButton && authKeyboardBtn) {
     const codeInput = document.getElementById('partner_code');
     const phoneInput = document.getElementById('partner_phone');
     
-    // Show/hide floating button based on keyboard visibility
-    const showKeyboardButton = () => {
+    // Check if input should trigger keyboard
+    const isKeyboardInput = (elem) => {
+      return elem.tagName === 'INPUT' && 
+             !['button', 'submit', 'checkbox', 'file', 'image'].includes(elem.type);
+    };
+    
+    // Update button state based on input values
+    const updateButtonState = () => {
       const code = codeInput.value.trim();
       const phone = phoneInput.value.trim();
-      
-      keyboardButton.style.display = 'block';
       
       if (code && phone) {
         authKeyboardBtn.disabled = false;
@@ -146,28 +150,51 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     };
     
-    const hideKeyboardButton = () => {
-      keyboardButton.style.display = 'none';
+    // Show keyboard button
+    const showKeyboardButton = () => {
+      document.body.classList.add('keyboard-open');
+      keyboardButton.style.display = 'block';
+      updateButtonState();
+      console.log('🔍 Keyboard opened - button shown');
     };
     
-    // Event listeners for input fields
+    // Hide keyboard button
+    const hideKeyboardButton = () => {
+      document.body.classList.remove('keyboard-open');
+      keyboardButton.style.display = 'none';
+      console.log('🔍 Keyboard closed - button hidden');
+    };
+    
+    // Modern approach: Use focusin/focusout events (iOS Safari compatible)
+    document.addEventListener('focusin', (e) => {
+      if (e.target && isKeyboardInput(e.target)) {
+        showKeyboardButton();
+      }
+    });
+    
+    document.addEventListener('focusout', (e) => {
+      if (e.target && isKeyboardInput(e.target)) {
+        // Delay to allow button click before hiding
+        setTimeout(hideKeyboardButton, 150);
+      }
+    });
+    
+    // Update button state on input
     if (codeInput && phoneInput) {
-      codeInput.addEventListener('focus', showKeyboardButton);
-      phoneInput.addEventListener('focus', showKeyboardButton);
-      codeInput.addEventListener('input', showKeyboardButton);
-      phoneInput.addEventListener('input', showKeyboardButton);
-      
-      codeInput.addEventListener('blur', () => {
-        setTimeout(hideKeyboardButton, 100); // Delay to allow button click
-      });
-      phoneInput.addEventListener('blur', () => {
-        setTimeout(hideKeyboardButton, 100); // Delay to allow button click
-      });
+      codeInput.addEventListener('input', updateButtonState);
+      phoneInput.addEventListener('input', updateButtonState);
     }
     
     // Add click handler to floating button
     authKeyboardBtn.addEventListener('click', doAuth);
     
-    console.log('🔍 Floating keyboard button setup complete');
+    // Modern viewport API support (if available)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        console.log('🔍 Viewport resized:', window.visualViewport.height);
+      });
+    }
+    
+    console.log('🔍 iOS-compatible keyboard button setup complete');
   }
 })
