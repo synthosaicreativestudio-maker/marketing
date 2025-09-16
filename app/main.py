@@ -59,6 +59,13 @@ class AuthRequest(BaseModel):
     partner_phone: str
 
 
+@app.get("/")
+async def root():
+    """Redirect to webapp."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/webapp/index.html")
+
+
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
