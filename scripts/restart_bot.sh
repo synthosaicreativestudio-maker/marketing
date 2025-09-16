@@ -27,6 +27,24 @@ else
   echo "No running bot processes found." | tee -a "${LOG_FILE}"
 fi
 
+# Load environment from .env if present (safe export)
+if [ -f "${PROJECT_ROOT}/.env" ]; then
+  echo "Loading environment from .env" | tee -a "${LOG_FILE}"
+  # Export all variables defined in .env (ignore lines starting with #)
+  set -a
+  # shellcheck disable=SC1090
+  source "${PROJECT_ROOT}/.env" || echo "Warning: failed to source .env" | tee -a "${LOG_FILE}"
+  set +a
+else
+  echo ".env not found, relying on current environment" | tee -a "${LOG_FILE}"
+fi
+
+# Optionally validate required vars
+if [ -z "${TELEGRAM_TOKEN}" ]; then
+  echo "ERROR: TELEGRAM_TOKEN is not set in environment" | tee -a "${LOG_FILE}"
+  # Continue starting anyway so logs capture the bot's own error if any
+fi
+
 # Start new bot in background
 cd "${PROJECT_ROOT}"
 nohup ${PYTHON} bot.py >> "${LOG_FILE}" 2>&1 &
