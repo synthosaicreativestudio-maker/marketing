@@ -11,3 +11,4 @@ __pycache__/
 # Editor directories
 .vscode/
 .idea/
+credentials.json
