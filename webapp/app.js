@@ -21,11 +21,49 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (e) {
       console.log('❌ MainButton setup failed:', e);
     }
+
+    // Setup keyboard button for input fields
+    try {
+      // Show keyboard button when user focuses on input fields
+      const codeInput = document.getElementById('partner_code');
+      const phoneInput = document.getElementById('partner_phone');
+      
+      if (codeInput && phoneInput) {
+        const updateMainButton = () => {
+          const code = codeInput.value.trim();
+          const phone = phoneInput.value.trim();
+          
+          if (tg.MainButton) {
+            if (code && phone) {
+              tg.MainButton.setText('Авторизоваться');
+              tg.MainButton.show();
+              tg.MainButton.enable();
+            } else {
+              tg.MainButton.setText('Заполните поля');
+              tg.MainButton.show();
+              tg.MainButton.disable();
+            }
+          }
+        };
+        
+        // Show/update button on focus and input
+        codeInput.addEventListener('focus', updateMainButton);
+        phoneInput.addEventListener('focus', updateMainButton);
+        codeInput.addEventListener('input', updateMainButton);
+        phoneInput.addEventListener('input', updateMainButton);
+        
+        // Initial check
+        updateMainButton();
+        
+        console.log('🔍 Smart keyboard button setup for input fields');
+      }
+    } catch (e) {
+      console.log('❌ Keyboard button setup failed:', e);
+    }
   } else {
     console.log('❌ Telegram Web App not available');
   }
 
-  const authBtn = document.getElementById('authBtn')
   const msg = document.getElementById('msg')
 
   function setMessage(text, isError) {
@@ -55,10 +93,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // initData from Telegram Web App (when opened inside Telegram). If not present, still allow for local testing.
     const initData = (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) || ''
 
-    // Disable buttons and show loader
-    if (authBtn) {
-      authBtn.disabled = true;
-    }
+    // Show loader on MainButton
     if (window.Telegram && window.Telegram.WebApp) {
       window.Telegram.WebApp.MainButton.showProgress();
     }
@@ -81,19 +116,12 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (e) {
       setMessage('Ошибка отправки: ' + e.message, true)
     } finally {
-      // Hide loader and enable buttons
-      if (authBtn) {
-        authBtn.disabled = false;
-      }
+      // Hide loader on MainButton
       if (window.Telegram && window.Telegram.WebApp) {
         window.Telegram.WebApp.MainButton.hideProgress();
       }
     }
   }
 
-  // Setup HTML button as primary option
-  if (authBtn) {
-    authBtn.addEventListener('click', doAuth);
-    console.log('🔍 HTML button event listener added');
-  }
+  // Only keyboard MainButton - no HTML buttons
 })
