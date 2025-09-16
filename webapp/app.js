@@ -1,4 +1,15 @@
 document.addEventListener('DOMContentLoaded', function () {
+  // Initialize Telegram Web App
+  if (window.Telegram && window.Telegram.WebApp) {
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+    
+    // Set theme colors
+    document.body.style.backgroundColor = tg.themeParams.bg_color || '#ffffff';
+    document.body.style.color = tg.themeParams.text_color || '#000000';
+  }
+
   const authBtn = document.getElementById('authBtn')
   const msg = document.getElementById('msg')
 
