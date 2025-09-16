@@ -69,29 +69,17 @@ class TelegramBot:
         name = user.get('first_name') or user.get('username') or "пользователь"
         text = f"Привет, {name}!\nВам необходимо пройти авторизацию."
         
+        webapp_url = os.environ.get("WEBAPP_URL", "https://your-webapp-url.com/auth")
+        
         keyboard = {
             'inline_keyboard': [[{
                 'text': 'Авторизоваться',
-                'callback_data': 'authorize'
+                'web_app': {'url': webapp_url}
             }]]
         }
         
         self.send_message(chat_id, text, keyboard)
     
-    def handle_authorize_callback(self, update):
-        """Handle authorization callback."""
-        callback_query = update.get('callback_query', {})
-        callback_query_id = callback_query.get('id')
-        message = callback_query.get('message', {})
-        chat_id = message.get('chat', {}).get('id')
-        message_id = message.get('message_id')
-        
-        self.answer_callback_query(callback_query_id)
-        
-        webapp_url = os.environ.get("WEBAPP_URL", "https://your-webapp-url.com/auth")
-        text = f"Для авторизации, пожалуйста, перейдите по ссылке: {webapp_url}"
-        
-        self.edit_message_text(chat_id, message_id, text)
     
     def process_update(self, update):
         """Process single update."""
@@ -103,12 +91,9 @@ class TelegramBot:
                 if text == '/start':
                     self.handle_start(update)
             
-            # Handle callback queries
-            elif 'callback_query' in update:
-                callback_query = update['callback_query']
-                data = callback_query.get('data', '')
-                if data == 'authorize':
-                    self.handle_authorize_callback(update)
+            # Handle web app data (if needed in future)
+            elif 'web_app_data' in update:
+                log.info(f"Received web app data: {update['web_app_data']}")
         
         except Exception as e:
             log.error(f"Error processing update: {e}")
