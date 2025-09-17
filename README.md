@@ -24,14 +24,14 @@
 marketingbot/
 ├── 🤖 bot.py                 # Основной файл бота (весь код)
 ├── 📊 sheets.py              # Google Sheets интеграция
-├── 🌐 server.py              # Веб-сервер для статических файлов
 ├── 🌐 webapp/                # Веб-интерфейс авторизации
 │   ├── index.html           # HTML страница
 │   ├── app.js               # JavaScript логика
 │   └── README.md            # Документация WebApp
 ├── 📚 docs/                  # Документация проекта
-├── 🐳 Dockerfile            # Docker конфигурация
-├── 🐳 docker-compose.yml    # Docker Compose
+├── � requirements.txt       # Зависимости Python
+├── 🔒 .env.example          # Пример переменных окружения
+└── � README.md             # Этот файл
 ├── 📦 requirements.txt       # Зависимости Python
 ├── 🔒 .env.example          # Пример переменных окружения
 └── 📋 README.md             # Этот файл
@@ -119,18 +119,62 @@ mypy .
 black --check .
 ```
 
-## 🐳 Docker
+## Run without Docker (recommended/simple)
+
+You can run the bot as a regular Python process — no Docker required. This is the simplest setup for small deployments or a VPS.
+
+1) Create and activate a virtual environment
 
 ```bash
-# Сборка образа
-docker build -t marketingbot .
-
-# Запуск контейнера
-docker run -d --name marketingbot \
-  --env-file .env \
-  -p 8080:8080 \
-  marketingbot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
+
+2) Configure environment variables
+
+```bash
+cp .env.example .env
+# Edit .env and set TELEGRAM_BOT_TOKEN and WEBAPP_URL
+export $(cat .env | xargs)
+```
+
+3) Run bot
+
+```bash
+python3 bot.py
+```
+
+4) (Optional) systemd service example for running as a service
+
+Create `/etc/systemd/system/marketingbot.service` with:
+
+```ini
+[Unit]
+Description=MarketingBot Telegram service
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/marketingbot
+EnvironmentFile=/path/to/marketingbot/.env
+ExecStart=/path/to/marketingbot/.venv/bin/python3 bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now marketingbot
+```
+
+If you prefer containerized deployment, keep `Dockerfile` and `docker-compose.yml` in the repo; otherwise they can be removed.
 
 ## 🛠️ Разработка
 
