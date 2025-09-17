@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # Telegram бот
   marketingbot:
     build: .
     container_name: marketingbot
@@ -26,3 +27,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  # Веб-сервер для статических файлов WebApp
+  webapp:
+    build: .
+    container_name: marketingbot-webapp
+    restart: unless-stopped
+    command: python server.py
+    environment:
+      - PORT=${WEBAPP_PORT:-8080}
+    ports:
+      - "${WEBAPP_PORT:-8080}:${WEBAPP_PORT:-8080}"
+    volumes:
+      - ./webapp:/app/webapp:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${WEBAPP_PORT:-8080}/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

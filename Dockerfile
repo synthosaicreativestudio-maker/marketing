@@ -14,11 +14,11 @@ RUN groupadd -r botuser && useradd -r -g botuser botuser
 WORKDIR /app
 
 # Copy requirements and install dependencies
-COPY pyproject.toml .
-RUN pip install requests python-dotenv gspread google-auth
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY --chown=botuser:botuser bot.py sheets.py ./
+COPY --chown=botuser:botuser bot.py sheets.py server.py ./
 COPY --chown=botuser:botuser webapp/ ./webapp/
 COPY --chown=botuser:botuser .env.example .
 

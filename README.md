@@ -24,6 +24,7 @@
 marketingbot/
 ├── 🤖 bot.py                 # Основной файл бота (весь код)
 ├── 📊 sheets.py              # Google Sheets интеграция
+├── 🌐 server.py              # Веб-сервер для статических файлов
 ├── 🌐 webapp/                # Веб-интерфейс авторизации
 │   ├── index.html           # HTML страница
 │   ├── app.js               # JavaScript логика
@@ -31,7 +32,7 @@ marketingbot/
 ├── 📚 docs/                  # Документация проекта
 ├── 🐳 Dockerfile            # Docker конфигурация
 ├── 🐳 docker-compose.yml    # Docker Compose
-├── ⚙️ pyproject.toml        # Конфигурация и зависимости
+├── 📦 requirements.txt       # Зависимости Python
 ├── 🔒 .env.example          # Пример переменных окружения
 └── 📋 README.md             # Этот файл
 ```
