@@ -1,7 +1,7 @@
 import logging
 import os
 import json
-from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from auth_service import AuthService
@@ -32,10 +32,12 @@ def start_command_handler(auth_service: AuthService):
             # TODO: Здесь можно добавить основное меню для авторизованных пользователей
         else:
             if WEB_APP_URL:
-                keyboard = [
-                    [InlineKeyboardButton("Авторизоваться", web_app=WebAppInfo(url=WEB_APP_URL))]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+                # Используем ReplyKeyboardMarkup вместо InlineKeyboardMarkup
+                keyboard_button = KeyboardButton(
+                    text="Авторизоваться в приложении",
+                    web_app=WebAppInfo(url=WEB_APP_URL)
+                )
+                reply_markup = ReplyKeyboardMarkup.from_button(keyboard_button, resize_keyboard=True)
                 await update.message.reply_text(
                     f"Добрый день, {user.first_name}! Для продолжения работы вам необходимо авторизоваться.",
                     reply_markup=reply_markup,
@@ -82,8 +84,12 @@ def web_app_data_handler(auth_service: AuthService):
                  # TODO: Показать основное меню
             else:
                 logger.warning("Авторизация не удалась - данные не найдены")
-                keyboard = [[InlineKeyboardButton("Повторить авторизацию", web_app=WebAppInfo(url=WEB_APP_URL))]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+                # Используем ReplyKeyboardMarkup для повторной авторизации
+                keyboard_button = KeyboardButton(
+                    text="Повторить авторизацию",
+                    web_app=WebAppInfo(url=WEB_APP_URL)
+                )
+                reply_markup = ReplyKeyboardMarkup.from_button(keyboard_button, resize_keyboard=True)
                 await update.message.reply_text(
                     "Данные не найдены. Пожалуйста, проверьте код партнера и телефон и попробуйте снова.",
                     reply_markup=reply_markup

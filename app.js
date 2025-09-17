@@ -133,10 +133,10 @@ document.addEventListener('DOMContentLoaded', function () {
         window.Telegram.WebApp.sendData(dataToSend)
         setMessage('Данные отправлены боту...', false)
         
-        // Закрываем WebApp после отправки данных
+        // Закрываем WebApp после отправки данных с небольшой задержкой для предотвращения race condition
         setTimeout(() => {
           window.Telegram.WebApp.close();
-        }, 2000); // Небольшая задержка для отображения сообщения
+        }, 300); // Задержка 300мс для предотвращения race condition
       } else {
         setMessage('Ошибка: Telegram Web App недоступен', true)
       }
