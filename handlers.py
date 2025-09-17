@@ -11,6 +11,10 @@ logger = logging.getLogger(__name__)
 # Получаем URL веб-приложения из .env
 WEB_APP_URL = os.getenv("WEB_APP_URL")
 
+# Проверка наличия WEB_APP_URL
+if not WEB_APP_URL:
+    logger.critical("WEB_APP_URL не найден в .env файле. Кнопка авторизации будет недоступна.")
+
 def setup_handlers(application, auth_service: AuthService):
     """Регистрирует все обработчики в приложении."""
     application.add_handler(CommandHandler("start", start_command_handler(auth_service)))
@@ -27,14 +31,20 @@ def start_command_handler(auth_service: AuthService):
             await update.message.reply_text(f"Добрый день, {user.first_name}! Вы уже авторизованы.")
             # TODO: Здесь можно добавить основное меню для авторизованных пользователей
         else:
-            keyboard = [
-                [InlineKeyboardButton("Авторизоваться", web_app=WebAppInfo(url=WEB_APP_URL))]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(
-                f"Добрый день, {user.first_name}! Для продолжения работы вам необходимо авторизоваться.",
-                reply_markup=reply_markup,
-            )
+            if WEB_APP_URL:
+                keyboard = [
+                    [InlineKeyboardButton("Авторизоваться", web_app=WebAppInfo(url=WEB_APP_URL))]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    f"Добрый день, {user.first_name}! Для продолжения работы вам необходимо авторизоваться.",
+                    reply_markup=reply_markup,
+                )
+            else:
+                logger.error("WEB_APP_URL не задан, кнопка авторизации не может быть создана.")
+                await update.message.reply_text(
+                    f"Добрый день, {user.first_name}! К сожалению, в данный момент авторизация недоступна. Пожалуйста, попробуйте позже."
+                )
     return start
 
 def web_app_data_handler(auth_service: AuthService):

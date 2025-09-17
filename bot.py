@@ -49,8 +49,10 @@ def main() -> None:
 
     # --- Запуск бота ---
     logger.info("Запуск бота...")
-    application.run_polling()
-
+    try:
+        application.run_polling()
+    except Exception as e:
+        logger.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
 
 if __name__ == "__main__":
     main()

@@ -13,8 +13,13 @@ WebApp состоит из статических файлов (`index.html`, `a
 **Шаги:**
 1. Создайте отдельный репозиторий для WebApp или используйте ветку `gh-pages`
 2. Скопируйте файлы из папки `webapp/` в корень репозитория
-3. Включите GitHub Pages в настройках репозитория
-4. Используйте URL: `https://username.github.io/repository-name/`
+3. Включите GitHub Pages в настройках репозитория:
+   - Перейдите в Settings → Pages
+   - В разделе "Source" выберите "GitHub Actions"
+4. Автоматический деплой через GitHub Actions:
+   - При пуше в ветку `main` автоматически запускается деплой
+   - Статус деплоя можно посмотреть во вкладке "Actions"
+5. Используйте URL: `https://username.github.io/repository-name/`
 
 **Пример структуры репозитория:**
 ```
@@ -23,6 +28,56 @@ your-webapp-repo/
 ├── app.js        # Скопировать из webapp/app.js
 └── README.md     # Описание WebApp
 ```
+
+**Workflow GitHub Actions:**
+
+В репозитории уже настроен автоматический деплой через GitHub Actions:
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+ group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+        
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+          
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+```
+
+**Проверка статуса деплоя:**
+- Перейдите во вкладку "Actions" в вашем репозитории
+- Найдите workflow "Deploy to GitHub Pages"
+- Проверьте статус последнего запуска (должен быть зеленым)
 
 ### 2. Netlify
 

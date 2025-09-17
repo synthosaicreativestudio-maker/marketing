@@ -8,6 +8,7 @@
 - **🌐 WebApp-интерфейс** для авторизации пользователей.
 - **📊 Интеграция с Google Sheets** для управления данными.
 - **🔐 Безопасная авторизация** партнеров.
+- **🚀 Автоматический деплой** через GitHub Actions.
 - **🐳 Docker-поддержка** для легкого развертывания.
 - **🔧 Минимальные зависимости** и простая архитектура.
 
@@ -15,13 +16,15 @@
 
 ```
 marketingbot/
-├── 🤖 bot.py             # Основной файл бота
-├── 📊 sheets.py          # Интеграция с Google Sheets
-├── 🌐 webapp/            # Файлы WebApp (index.html, app.js)
-├── 📚 docs/              # Подробная документация
-├── requirements.txt   # Зависимости Python
-├── .env.example       # Пример переменных окружения
-└── README.md          # Этот файл
+├── 🤖 bot.py                  # Основной файл бота
+├── 📊 sheets.py               # Интеграция с Google Sheets
+├── 🌐 index.html              # Файлы WebApp
+├── 🌐 app.js                  # Файлы WebApp
+├── 📚 docs/                   # Подробная документация
+├── 🔄 .github/workflows/      # GitHub Actions
+├── requirements.txt        # Зависимости Python
+├── .env.example           # Пример переменных окружения
+└── README.md              # Этот файл
 ```
 
 ## 🚀 Быстрый старт
@@ -31,7 +34,7 @@ marketingbot/
     pip install -r requirements.txt
     ```
 
-2.  **Настройте `.env`:**
+2. **Настройте `.env`:**
     ```bash
     cp .env.example .env
     # Укажите ваш TELEGRAM_BOT_TOKEN
@@ -42,7 +45,12 @@ marketingbot/
     ```bash
     python3 bot.py
     ```
-Подробные инструкции доступны в [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
+
+4.  **Деплой WebApp:**
+    - Для автоматического деплоя на GitHub Pages просто запушьте изменения в ветку `main`
+    - Подробные инструкции доступны в [`docs/WEBAPP_DEPLOY.md`](./docs/WEBAPP_DEPLOY.md).
+
+    Подробные инструкции по развертыванию доступны в [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
 
 ## 📚 Документация
 

@@ -65,12 +65,12 @@ class AuthService:
             return False
 
         try:
-            # Ищем ячейку с Telegram ID в 5-й колонке (E)
-            cell = self.sheet.find(str(telegram_id), in_column=5)
-            if cell:
-                # Проверяем статус в 4-й колонке (D) той же строки
-                status = self.sheet.cell(cell.row, 4).value
-                return status == "Авторизован"
+            records = self.sheet.get_all_records()
+            for row in records:
+                # Проверяем, есть ли 'Telegram ID' в строке и совпадает ли он
+                if str(row.get('Telegram ID')) == str(telegram_id):
+                    # Проверяем статус в колонке 'Статус'
+                    return row.get('Статус') == "Авторизован"
             return False
         except Exception as e:
             logger.error(f"Ошибка при проверке статуса пользователя: {e}")
