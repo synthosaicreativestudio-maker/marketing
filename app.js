@@ -65,21 +65,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   const msg = document.getElementById('msg')
-  const keyboardButton = document.getElementById('keyboard-button')
-  const authKeyboardBtn = document.getElementById('auth-keyboard-btn')
-  const hideKeyboardBtn = document.getElementById('hide-keyboard-btn')
 
   function setMessage(text, isError) {
     msg.textContent = text
     msg.style.color = isError ? 'crimson' : 'green'
-  }
-
-  // Function to hide keyboard
-  function hideKeyboard() {
-    if (document.activeElement) {
-      document.activeElement.blur();
-      console.log('🔍 Keyboard hidden programmatically');
-    }
   }
 
   // Function to normalize phone number and check if complete
@@ -149,109 +138,5 @@ document.addEventListener('DOMContentLoaded', function () {
         window.Telegram.WebApp.MainButton.hideProgress();
       }
     }
-  }
-
-  // Setup floating keyboard button with iOS Safari support
-  if (keyboardButton && authKeyboardBtn) {
-    const codeInput = document.getElementById('partner_code');
-    const phoneInput = document.getElementById('partner_phone');
-    
-    // Check if input should trigger keyboard
-    const isKeyboardInput = (elem) => {
-      return elem.tagName === 'INPUT' && 
-             !['button', 'submit', 'checkbox', 'file', 'image'].includes(elem.type);
-    };
-    
-    // Update button state based on input values
-    const updateButtonState = () => {
-      const code = codeInput.value.trim();
-      const phone = phoneInput.value.trim();
-      
-      // Show buttons if any field has content
-      if (code || phone) {
-        keyboardButton.style.display = 'block';
-        document.body.classList.add('keyboard-open');
-      }
-      
-      if (code && phone) {
-        authKeyboardBtn.disabled = false;
-        authKeyboardBtn.textContent = 'Авторизоваться';
-      } else {
-        authKeyboardBtn.disabled = true;
-        authKeyboardBtn.textContent = 'Заполните поля';
-      }
-    };
-    
-    // Show keyboard button
-    const showKeyboardButton = () => {
-      document.body.classList.add('keyboard-open');
-      keyboardButton.style.display = 'block';
-      updateButtonState();
-      console.log('🔍 Keyboard opened - button shown');
-    };
-    
-    // Hide keyboard button
-    const hideKeyboardButton = () => {
-      document.body.classList.remove('keyboard-open');
-      keyboardButton.style.display = 'none';
-      console.log('🔍 Keyboard closed - button hidden');
-    };
-    
-    // Modern approach: Use focusin/focusout events (iOS Safari compatible)
-    document.addEventListener('focusin', (e) => {
-      if (e.target && isKeyboardInput(e.target)) {
-        showKeyboardButton();
-      }
-    });
-    
-    document.addEventListener('focusout', (e) => {
-      if (e.target && isKeyboardInput(e.target)) {
-        // Delay to allow button click before hiding
-        setTimeout(hideKeyboardButton, 150);
-      }
-    });
-    
-    // Update button state on input and auto-hide keyboard
-    if (codeInput && phoneInput) {
-      codeInput.addEventListener('input', updateButtonState);
-      
-      phoneInput.addEventListener('input', (e) => {
-        updateButtonState();
-        
-        // Auto-hide keyboard when phone number is complete (11 digits)
-        const phone = e.target.value;
-        if (isPhoneComplete(phone)) {
-          setTimeout(() => {
-            hideKeyboard();
-            setMessage('Номер телефона введён полностью', false);
-          }, 500); // Small delay for better UX
-        }
-      });
-    }
-    
-    // Add click handlers
-    authKeyboardBtn.addEventListener('click', doAuth);
-    
-    if (hideKeyboardBtn) {
-      hideKeyboardBtn.addEventListener('click', hideKeyboard);
-    }
-    
-    // Modern viewport API support (if available)
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', () => {
-        console.log('🔍 Viewport resized:', window.visualViewport.height);
-      });
-    }
-    
-    console.log('🔍 iOS-compatible keyboard button setup complete');
-    
-    // DEBUG: Force show buttons for testing
-    setTimeout(() => {
-      if (keyboardButton) {
-        keyboardButton.style.display = 'block';
-        document.body.classList.add('keyboard-open');
-        console.log('🔍 DEBUG: Force showing keyboard buttons for testing');
-      }
-    }, 2000);
   }
 })

@@ -63,51 +63,6 @@
         min-height: 20px;
         margin-top: 15px;
       }
-      .keyboard-button {
-        position: absolute;
-        bottom: 20px;
-        left: 20px;
-        right: 20px;
-        z-index: 9999;
-        background: rgba(0, 0, 0, 0.9);
-        -webkit-backdrop-filter: blur(10px);
-        backdrop-filter: blur(10px);
-        border-radius: 12px;
-        padding: 10px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        -webkit-transform: translateZ(0);
-        transform: translateZ(0);
-      }
-      .keyboard-open .keyboard-button {
-        bottom: 290px; /* Above iOS keyboard */
-      }
-      body {
-        position: relative;
-        min-height: 100vh;
-      }
-      .keyboard-button button {
-        width: 100%;
-        padding: 15px;
-        background: var(--tg-theme-button-color, #0088cc);
-        color: var(--tg-theme-button-text-color, #ffffff);
-        border: none;
-        border-radius: 8px;
-        font-size: 16px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: opacity 0.2s;
-      }
-      .keyboard-button button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-      .hide-keyboard-btn {
-        background: rgba(255, 255, 255, 0.2) !important;
-        color: var(--tg-theme-text-color, #ffffff) !important;
-        margin-bottom: 8px !important;
-        font-size: 14px !important;
-        padding: 10px !important;
-      }
     </style>
   </head>
   <body>
