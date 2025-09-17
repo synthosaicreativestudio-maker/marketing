@@ -1,9 +1,0 @@
-TELEGRAM_TOKEN="8232668997:AAHCvWtcjtqw5b5tuYrYwg1lCz0oItjhUEg"
-ADMIN_TELEGRAM_ID=284355186
-OPENAI_API_KEY="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"
-OPENAI_ASSISTANT_ID="asst_FHzxvddwB3OF0WUo4NbsVhs0"
-
-SHEET_URL="https://docs.google.com/spreadsheets/d/1_SB04LMuGB7ba3aog2xxN6N3g99ZfOboT-vdWXxrh_8/edit?gid=1791656386#gid=1791656386"
-TICKETS_SHEET_URL="https://docs.google.com/spreadsheets/d/15XxSIpD_gMZaSOIrqDVCNI2EqBzphEGiG0ZNJ3HR8hI/edit?gid=480871946#gid=480871946"
-WEB_APP_URL="https://synthosaicreativestudio-maker.github.io/marketing/"
-WEB_APP_MENU_URL="https://synthosaicreativestudio-maker.github.io/marketing/mini_app.html"
