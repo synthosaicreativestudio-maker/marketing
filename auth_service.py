@@ -6,6 +6,13 @@ from google_sheets_service import GoogleSheetsService
 logger = logging.getLogger(__name__)
 
 class AuthService:
+    # Константы для номеров колонок
+    PARTNER_CODE_COL = 1
+    PARTNER_PHONE_COL = 2
+    STATUS_COL = 4
+    TELEGRAM_ID_COL = 5
+    DATE_COL = 6
+
     def __init__(self, sheets_service: GoogleSheetsService):
         self.sheets_service = sheets_service
         self.sheet_url = os.getenv("SHEET_URL")
@@ -44,9 +51,9 @@ class AuthService:
                 if code_in_sheet == partner_code and normalized_phone_in_sheet == normalized_phone_from_app:
                     row_index = i + 2
                     
-                    self.sheet.update_cell(row_index, 4, "Авторизован") # Колонка D: Статус
-                    self.sheet.update_cell(row_index, 5, telegram_id)   # Колонка E: Telegram ID
-                    self.sheet.update_cell(row_index, 6, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")) # Колонка F: Дата
+                    self.sheet.update_cell(row_index, self.STATUS_COL, "Авторизован")
+                    self.sheet.update_cell(row_index, self.TELEGRAM_ID_COL, telegram_id)
+                    self.sheet.update_cell(row_index, self.DATE_COL, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                     
                     logger.info(f"Пользователь с кодом {partner_code} успешно авторизован.")
                     return True
@@ -59,25 +66,22 @@ class AuthService:
 
     def get_user_auth_status(self, telegram_id: int) -> bool:
         """
-        Проверяет статус авторизации пользователя по Telegram ID.
+        Проверяет статус авторизации пользователя по Telegram ID, используя эффективный поиск.
         """
         if not self.sheet:
             return False
 
         try:
-            # Получаем первую worksheet из spreadsheet
-            worksheet = self.sheet.get_worksheet(0)
-            # Получаем все значения из 5-й колонки (E)
-            telegram_ids = worksheet.col_values(5)
-            # Ищем индекс строки с нужным ID (начинаем с 1, так как 0 - заголовок)
-            try:
-                row_index = telegram_ids.index(str(telegram_id)) + 1
-                # Проверяем статус в 4-й колонке (D) той же строки
-                status = worksheet.cell(row_index, 4).value
+            # Ищем ячейку с Telegram ID в колонке TELEGRAM_ID_COL
+            cell = self.sheet.find(str(telegram_id), in_column=self.TELEGRAM_ID_COL)
+            if cell:
+                # Если ячейка найдена, проверяем статус в колонке STATUS_COL той же строки
+                status = self.sheet.cell(cell.row, self.STATUS_COL).value
                 return status == "Авторизован"
-            except ValueError:
-                # ID не найден в списке
-                return False
+            return False
+        except gspread.exceptions.CellNotFound:
+             # Это ожидаемое исключение, если пользователь не найден
+            return False
         except Exception as e:
-            logger.error(f"Ошибка при проверке статуса пользователя: {e}")
+            logger.error(f"Ошибка при проверке статуса пользователя {telegram_id}: {e}")
             return False

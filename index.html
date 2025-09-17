@@ -59,7 +59,7 @@
 
         <form id="auth-form">
             <input type="text" id="partner-code" placeholder="Код партнера" inputmode="numeric" pattern="\d*">
-            <input type="tel" id="partner-phone" placeholder="Телефон партнера из КОСМОС" value="8">
+            <input type="tel" id="partner-phone" placeholder="Телефон партнера из КОСМОС" value="">
             <button type="submit" id="auth-button">Авторизоваться</button>
         </form>
     </div>
@@ -73,24 +73,36 @@
         const form = document.getElementById('auth-form');
         const partnerCodeInput = document.getElementById('partner-code');
         const partnerPhoneInput = document.getElementById('partner-phone');
+        const authButton = document.getElementById('auth-button');
         
         form.addEventListener('submit', function(event) {
             event.preventDefault();
+
+            // Блокируем кнопку, чтобы избежать повторных нажатий
+            authButton.disabled = true;
+            authButton.innerText = 'Проверка...';
 
             const partnerCode = partnerCodeInput.value;
             const partnerPhone = partnerPhoneInput.value;
 
             if (!partnerCode.trim() || !partnerPhone.trim()) {
                 tg.showAlert('Пожалуйста, заполните все поля.');
+                authButton.disabled = false;
+                authButton.innerText = 'Авторизоваться';
                 return;
             }
             if (!/^\d+$/.test(partnerCode)) {
                 tg.showAlert('Код партнера должен содержать только цифры.');
+                authButton.disabled = false;
+                authButton.innerText = 'Авторизоваться';
                 return;
             }
-            if (!/^8\d{10}$/.test(partnerPhone)) {
-                tg.showAlert('Телефон должен быть в формате 8XXXXXXXXXX (11 цифр).');
-                return;
+            // Ослабляем валидацию: разрешаем 7 или 8 в начале, или 10 цифр без кода страны
+            if (!/^[78]?\d{10}$/.test(partnerPhone.replace(/\D/g, ''))) {
+                 tg.showAlert('Телефон должен содержать 10 или 11 цифр.');
+                 authButton.disabled = false;
+                 authButton.innerText = 'Авторизоваться';
+                 return;
             }
 
             const data = {
@@ -99,19 +111,12 @@
             };
             
             tg.sendData(JSON.stringify(data));
+
+            // В идеале, Mini App должно закрыться после отправки данных.
+            // Но на случай, если этого не произойдет, можно оставить кнопку заблокированной.
         });
 
-        // Защита поля телефона
-        partnerPhoneInput.addEventListener('input', function(e) {
-            if (!e.target.value.startsWith('8')) {
-                e.target.value = '8';
-            }
-        });
-        partnerPhoneInput.addEventListener('keydown', function(e) {
-             if (e.target.selectionStart === 1 && (e.key === 'Backspace' || e.key === 'Delete')) {
-                e.preventDefault();
-            }
-        });
+        // Убираем жесткую привязку к "8"
     </script>
 
 </body>
