@@ -15,14 +15,17 @@ class GoogleSheetsService:
         """
         Инициализирует клиент gspread для доступа к Google Sheets.
         """
+        logger.info("Инициализация Google Sheets сервиса...")
         try:
             scope = [
                 'https://spreadsheets.google.com/feeds',
                 'https://www.googleapis.com/auth/drive'
             ]
+            logger.info("Попытка загрузки credentials.json...")
             creds = ServiceAccountCredentials.from_json_keyfile_name(
                 'credentials.json', scope
             )
+            logger.info("Попытка авторизации в Google Sheets...")
             self.client = gspread.authorize(creds)
             logger.info("Успешная аутентификация в Google Sheets.")
         except FileNotFoundError:

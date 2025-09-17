@@ -132,6 +132,11 @@ document.addEventListener('DOMContentLoaded', function () {
         console.log('Отправляем данные через sendData:', dataToSend)
         window.Telegram.WebApp.sendData(dataToSend)
         setMessage('Данные отправлены боту...', false)
+        
+        // Закрываем WebApp после отправки данных
+        setTimeout(() => {
+          window.Telegram.WebApp.close();
+        }, 2000); // Небольшая задержка для отображения сообщения
       } else {
         setMessage('Ошибка: Telegram Web App недоступен', true)
       }

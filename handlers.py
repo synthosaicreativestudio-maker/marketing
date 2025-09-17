@@ -51,20 +51,30 @@ def web_app_data_handler(auth_service: AuthService):
     """Фабрика для создания обработчика данных из Mini App."""
     async def handle_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
+        logger.info(f"Получены данные Web App от пользователя {user.id} ({user.first_name})")
         await update.message.reply_text("Проверяю ваши данные...")
         
         try:
-            data = json.loads(update.effective_message.web_app_data.data)
+            web_app_data = update.effective_message.web_app_data.data
+            logger.info(f"Сырые данные из Web App: {web_app_data}")
+            data = json.loads(web_app_data)
             logger.info(f"Получены данные из Web App от пользователя {user.id}: {data}")
             
             partner_code = data.get('partner_code')
             partner_phone = data.get('partner_phone')
+            
+            logger.info(f"Код партнера: {partner_code}, Телефон: {partner_phone}")
 
             # Логика авторизации
-            if auth_service.find_and_update_user(partner_code, partner_phone, user.id):
+            logger.info("Запуск процесса авторизации...")
+            auth_result = auth_service.find_and_update_user(partner_code, partner_phone, user.id)
+            logger.info(f"Результат авторизации: {auth_result}")
+            
+            if auth_result:
                 await update.message.reply_text("Авторизация прошла успешно! Добро пожаловать.")
                  # TODO: Показать основное меню
             else:
+                logger.warning("Авторизация не удалась - данные не найдены")
                 keyboard = [[InlineKeyboardButton("Повторить авторизацию", web_app=WebAppInfo(url=WEB_APP_URL))]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(

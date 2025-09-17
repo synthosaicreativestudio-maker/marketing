@@ -29,12 +29,16 @@ def main() -> None:
 
     # --- Инициализация сервисов ---
     logger.info("Инициализация сервисов...")
+    logger.info("Инициализация Google Sheets сервиса...")
     sheets_service = GoogleSheetsService()
+    logger.info(f"Google Sheets клиент инициализирован: {sheets_service.client is not None}")
     if not sheets_service.client:
         logger.critical("Не удалось инициализировать GoogleSheetsService. Проверьте credentials.json и доступы.")
         return
         
+    logger.info("Инициализация AuthService...")
     auth_service = AuthService(sheets_service)
+    logger.info(f"AuthService sheet инициализирован: {auth_service.sheet is not None}")
     if not auth_service.sheet:
         logger.critical("Не удалось загрузить таблицу авторизации. Проверьте SHEET_URL в .env.")
         return
