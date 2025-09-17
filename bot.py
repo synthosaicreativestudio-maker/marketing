@@ -19,6 +19,7 @@ def main() -> None:
     """Основная функция для инициализации и запуска бота."""
     # --- Проверка наличия токена ---
     token = os.getenv("TELEGRAM_TOKEN")
+    logger.info(f"Загружен TELEGRAM_TOKEN: {'<TOKEN_FOUND>' if token else 'None'}")
     if not token:
         logger.critical("TELEGRAM_TOKEN не найден в .env файле! Бот не может быть запущен.")
         return

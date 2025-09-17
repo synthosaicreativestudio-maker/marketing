@@ -11,11 +11,17 @@ class AuthService:
         self.sheet_url = os.getenv("SHEET_URL")
         self.spreadsheet = None
         self.sheet = None
+        logger.info(f"Загружен SHEET_URL: {self.sheet_url}")
         if self.sheet_url:
+            logger.info("Попытка открыть таблицу по URL...")
             self.spreadsheet = self.sheets_service.get_sheet_by_url(self.sheet_url)
             if self.spreadsheet:
+                logger.info(f"Таблица успешно открыта: {self.spreadsheet.title}")
                 # Get the first worksheet from the spreadsheet
                 self.sheet = self.spreadsheet.sheet1
+                logger.info("Первый лист таблицы успешно загружен")
+            else:
+                logger.error("Не удалось открыть таблицу по URL")
         else:
             logger.error("SHEET_URL не найден в .env файле.")
 

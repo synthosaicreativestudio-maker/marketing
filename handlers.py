@@ -10,10 +10,18 @@ logger = logging.getLogger(__name__)
 
 # Получаем URL веб-приложения из .env
 WEB_APP_URL = os.getenv("WEB_APP_URL")
+logger.info(f"Загружен WEB_APP_URL: {WEB_APP_URL}")
 
 # Проверка наличия WEB_APP_URL
 if not WEB_APP_URL:
     logger.critical("WEB_APP_URL не найден в .env файле. Кнопка авторизации будет недоступна.")
+    # Дополнительная отладочная информация
+    import os
+    logger.info("Все переменные окружения:")
+    for key, value in os.environ.items():
+        logger.info(f"  {key}: {value}")
+else:
+    logger.info(f"WEB_APP_URL успешно загружен: {WEB_APP_URL}")
 
 def setup_handlers(application, auth_service: AuthService):
     """Регистрирует все обработчики в приложении."""

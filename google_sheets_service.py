@@ -31,6 +31,7 @@ class GoogleSheetsService:
             self.client = None
         except Exception as e:
             logger.error(f"Ошибка аутентификации в Google Sheets: {e}")
+            logger.exception(e)  # Добавляем полную трассировку ошибки
             self.client = None
 
     def get_sheet_by_url(self, sheet_url: str):
