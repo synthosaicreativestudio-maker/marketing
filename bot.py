@@ -49,7 +49,12 @@ def main() -> None:
 
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
-    setup_handlers(application, auth_service)
+    try:
+        setup_handlers(application, auth_service)
+        logger.info("Обработчики успешно зарегистрированы")
+    except Exception as e:
+        logger.error(f"Ошибка регистрации обработчиков: {e}")
+        return
 
     # --- Запуск бота ---
     logger.info("Запуск бота...")

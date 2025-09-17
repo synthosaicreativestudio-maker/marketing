@@ -142,6 +142,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     } catch (e) {
       setMessage('Ошибка отправки: ' + e.message, true)
+      console.error('Ошибка отправки данных:', e);
     } finally {
       // Hide loader on MainButton
       if (window.Telegram && window.Telegram.WebApp) {

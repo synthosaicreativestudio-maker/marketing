@@ -34,6 +34,11 @@ class AuthService:
             records = self.sheet.get_all_records()
             logger.info(f"Получено {len(records)} записей из таблицы")
             
+            # Добавляем проверку на пустые данные
+            if not partner_code or not partner_phone:
+                logger.warning("Получены пустые данные для поиска пользователя")
+                return False
+            
             for i, row in enumerate(records):
                 logger.info(f"Проверка записи {i+1}: {row}")
                 

@@ -57,6 +57,13 @@ def web_app_data_handler(auth_service: AuthService):
         try:
             web_app_data = update.effective_message.web_app_data.data
             logger.info(f"Сырые данные из Web App: {web_app_data}")
+            
+            # Добавляем проверку на пустые данные
+            if not web_app_data:
+                logger.warning("Получены пустые данные из Web App")
+                await update.message.reply_text("Произошла ошибка при обработке данных. Попробуйте позже.")
+                return
+                
             data = json.loads(web_app_data)
             logger.info(f"Получены данные из Web App от пользователя {user.id}: {data}")
             
@@ -81,8 +88,8 @@ def web_app_data_handler(auth_service: AuthService):
                     "Данные не найдены. Пожалуйста, проверьте код партнера и телефон и попробуйте снова.",
                     reply_markup=reply_markup
                 )
-        except json.JSONDecodeError:
-            logger.error("Ошибка декодирования JSON из Web App.")
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка декодирования JSON из Web App: {e}")
             await update.message.reply_text("Произошла ошибка при обработке данных. Попробуйте позже.")
         except Exception as e:
             logger.error(f"Непредвиденная ошибка в web_app_data_handler: {e}")
