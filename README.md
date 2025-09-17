@@ -29,9 +29,9 @@ marketingbot/
 │   ├── app.js               # JavaScript логика
 │   └── README.md            # Документация WebApp
 ├── 📚 docs/                  # Документация проекта
-├── � requirements.txt       # Зависимости Python
+├──  requirements.txt       # Зависимости Python
 ├── 🔒 .env.example          # Пример переменных окружения
-└── � README.md             # Этот файл
+└──  README.md             # Этот файл
 ├── 📦 requirements.txt       # Зависимости Python
 ├── 🔒 .env.example          # Пример переменных окружения
 └── 📋 README.md             # Этот файл
@@ -45,6 +45,13 @@ marketingbot/
 - 🔄 `docs/IMPLEMENTATIONS.md` — лог реализаций
 - 🛡️ `docs/SECURITY.md` — политика безопасности
 - 🚀 `docs/INSTALLATION.md` — инструкция по установке
+
+## 🚀 Запуск и остановка
+
+Для удобного управления ботом были созданы специальные скрипты:
+
+*   **Запуск:** Выполните `./start.sh` из корня проекта.
+*   **Остановка:** Выполните `./stop.sh` из корня проекта.
 
 ## 🚀 Быстрый старт
 
