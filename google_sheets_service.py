@@ -1,8 +1,6 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import logging
-import os
-from dotenv import load_dotenv
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
