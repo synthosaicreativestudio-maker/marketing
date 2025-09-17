@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  marketingbot:
+    build: .
+    container_name: marketingbot
+    restart: unless-stopped
+    environment:
+      # Переменные окружения из .env файла
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - WEBAPP_URL=${WEBAPP_URL}
+      - SHEET_ID=${SHEET_ID:-}
+      - SHEET_NAME=${SHEET_NAME:-Sheet1}
+      - GCP_SA_JSON=${GCP_SA_JSON:-}
+      - GCP_SA_FILE=${GCP_SA_FILE:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Монтируем .env файл для конфигурации
+      - ./.env:/app/.env:ro
+      # Опционально: монтируем service account файл
+      - ${GCP_SA_FILE:-/dev/null}:${GCP_SA_FILE:-/dev/null}:ro
+    # Нет портов - бот работает через Telegram API
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*bot.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

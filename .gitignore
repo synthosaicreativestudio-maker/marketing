@@ -1,21 +1,96 @@
-# Local environment files
+# 🔒 КОНФИДЕНЦИАЛЬНЫЕ ФАЙЛЫ (НИКОГДА НЕ КОММИТИТЬ!)
+# Переменные окружения
 .env
-
-# Python
-__pycache__/
-*.py[cod]
-
-# Encrypted backups
+.env.local
+.env.production
+.env.staging
+.env.backup
 .env.enc
 
-# Editor directories
-.vscode/
-.idea/
-credentials.json
+# Файлы credentials и приватные ключи
+*.json
+!.env.example
+!package.json
+!pyproject.toml
+!docker-compose.yml
+service-account*.json
+credentials*.json
+secrets*.json
 
-# Virtualenvs
+# Приватные ключи и сертификаты
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# 🐍 PYTHON
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 🔧 ВИРТУАЛЬНЫЕ ОКРУЖЕНИЯ
 .venv/
 .venv312/
+venv/
+ENV/
+env/
 
-# Logs
+# 📝 ЛОГИ И ВРЕМЕННЫЕ ФАЙЛЫ
 logs/
+*.log
+*.tmp
+*.temp
+.cache/
+.pytest_cache/
+.coverage
+.nyc_output
+
+# 🎛️ РЕДАКТОРЫ И IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# 🔍 ИНСТРУМЕНТЫ АНАЛИЗА
+.mypy_cache/
+.ruff_cache/
+.bandit
+.tox/
+
+# 📦 ЗАВИСИМОСТИ
+node_modules/
+.npm
+.yarn-integrity
+
+# 🐳 DOCKER
+.dockerignore
+
+# 🚨 ВРЕМЕННЫЕ ФАЙЛЫ АУДИТА (удалить после завершения)
+DOCS_ANALYSIS.md
+DOCS_OPTIMIZATION_REPORT.md
+AUDIT_REPORT*.md
+ULTRA_SIMPLE_PLAN.md
+OPTIMIZATION_PLAN.md
+SIMPLIFICATION_CHECKLIST.md

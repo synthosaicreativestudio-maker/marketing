@@ -1,169 +1,213 @@
 #!/usr/bin/env python3
-"""Synchronous Telegram bot using HTTP API directly."""
+"""MarketingBot - упрощенный бот для авторизации партнеров"""
 import json
 import logging
 import os
 import time
+from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO)
+# Загрузка переменных окружения
+load_dotenv()
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 log = logging.getLogger(__name__)
 
 
-class TelegramBot:
-    def __init__(self, token):
+class MarketingBot:
+    """Простой Telegram бот для авторизации партнеров"""
+    
+    def __init__(self, token: str, webapp_url: str):
         self.token = token
         self.api_url = f"https://api.telegram.org/bot{token}"
+        self.webapp_url = webapp_url
         self.offset = 0
         self.running = False
 
-    def send_message(self, chat_id, text, reply_markup=None):
-        """Send message via HTTP API."""
+    def send_message(self, chat_id: int, text: str, reply_markup=None) -> dict:
+        """Отправка сообщения через Telegram API"""
         data = {
             'chat_id': chat_id,
             'text': text
         }
         if reply_markup:
             data['reply_markup'] = json.dumps(reply_markup)
+        
+        try:
+            response = requests.post(
+                f"{self.api_url}/sendMessage", 
+                json=data, 
+                timeout=30
+            )
+            return response.json()
+        except requests.RequestException as e:
+            log.error(f"Error sending message: {e}")
+            return {'ok': False, 'error': str(e)}
 
-        url = f"{self.api_url}/sendMessage"
-        response = requests.post(url, json=data, timeout=30)
-        return response.json()
-
-    def answer_callback_query(self, callback_query_id):
-        """Answer callback query."""
-        data = {'callback_query_id': callback_query_id}
-        url = f"{self.api_url}/answerCallbackQuery"
-        response = requests.post(url, json=data, timeout=30)
-        return response.json()
-
-    def edit_message_text(self, chat_id, message_id, text):
-        """Edit message text."""
-        data = {
-            'chat_id': chat_id,
-            'message_id': message_id,
-            'text': text
-        }
-        url = f"{self.api_url}/editMessageText"
-        response = requests.post(url, json=data, timeout=30)
-        return response.json()
-
-    def get_updates(self):
-        """Get updates from Telegram."""
+    def get_updates(self) -> dict:
+        """Получение обновлений от Telegram"""
         params = {
             'offset': self.offset,
             'timeout': 30
         }
-        url = f"{self.api_url}/getUpdates"
         try:
-            response = requests.get(url, params=params, timeout=35)
+            response = requests.get(
+                f"{self.api_url}/getUpdates", 
+                params=params, 
+                timeout=35
+            )
             return response.json()
         except requests.RequestException as e:
             log.error(f"Error getting updates: {e}")
             return {'ok': False, 'result': []}
 
-    def handle_start(self, update):
-        """Handle /start command."""
+    def handle_start(self, update: dict):
+        """Обработка команды /start"""
         message = update.get('message', {})
         chat_id = message.get('chat', {}).get('id')
         user = message.get('from', {})
-
+        
+        if not chat_id:
+            return
+        
         name = user.get('first_name') or user.get('username') or "пользователь"
-        text = f"Привет, {name}!\nВам необходимо пройти авторизацию."
-
-        webapp_url = os.environ.get("WEBAPP_URL", "https://your-webapp-url.com/auth")
-
+        text = f"Привет, {name}!\n\nДля авторизации нажмите кнопку ниже:"
+        
+        # Создаем клавиатуру с WebApp кнопкой
         keyboard = {
             'keyboard': [[{
-                'text': 'Авторизоваться',
-                'web_app': {'url': webapp_url}
+                'text': '🔐 Авторизоваться',
+                'web_app': {'url': self.webapp_url}
             }]],
             'resize_keyboard': True,
             'one_time_keyboard': True
         }
+        
+        result = self.send_message(chat_id, text, keyboard)
+        if result.get('ok'):
+            log.info(f"Sent start message to user {chat_id}")
+        else:
+            log.error(f"Failed to send start message: {result}")
 
-        self.send_message(chat_id, text, keyboard)
-
-    def handle_web_app_data(self, update):
-        """Handle data received from Web App."""
+    def handle_web_app_data(self, update: dict):
+        """Обработка данных из WebApp"""
         message = update.get('message', {})
         chat_id = message.get('chat', {}).get('id')
         web_app_data = message.get('web_app_data', {})
         data = web_app_data.get('data', '')
-
-        log.info(f"Received web app data from chat {chat_id}: {data}")
-
+        
+        if not chat_id:
+            return
+        
+        log.info(f"Received web app data from chat {chat_id}")
+        
         try:
-            # Parse JSON data from web app
+            # Парсим JSON данные из WebApp
             auth_data = json.loads(data)
-            partner_code = auth_data.get('partner_code', '')
-            partner_phone = auth_data.get('partner_phone', '')
-
-            # Simple validation
+            partner_code = auth_data.get('partner_code', '').strip()
+            partner_phone = auth_data.get('partner_phone', '').strip()
+            
+            # Валидация данных
             if not partner_code.isdigit():
-                msg = "❌ Код партнёра должен содержать только цифры"
-                self.send_message(chat_id, msg)
+                self.send_message(chat_id, "❌ Код партнёра должен содержать только цифры")
                 return
-
+            
             if not partner_phone:
                 self.send_message(chat_id, "❌ Введите номер телефона")
                 return
-
-            # For now, simple success response (later integrate with sheets)
-            # This is a fallback for testing and should be configured via env vars.
-            debug_partner_code = os.environ.get("DEBUG_PARTNER_CODE", "111098")
-            debug_phone_contains = os.environ.get("DEBUG_PARTNER_PHONE_CONTAINS", "1055")
-
-            if (partner_code == debug_partner_code and
-                    debug_phone_contains in partner_phone):
+            
+            # Проверка авторизации
+            if self.check_authorization(partner_code, partner_phone, chat_id):
                 self.send_message(chat_id, "✅ Авторизация успешна!")
             else:
                 self.send_message(chat_id, "❌ Партнёр не найден в базе")
-
+                
+        except json.JSONDecodeError:
+            log.error(f"Invalid JSON data from WebApp: {data}")
+            self.send_message(chat_id, "❌ Ошибка обработки данных")
         except Exception as e:
             log.error(f"Error processing web app data: {e}")
             self.send_message(chat_id, "❌ Ошибка обработки данных")
 
-    def process_update(self, update):
-        """Process single update."""
+    def check_authorization(self, partner_code: str, partner_phone: str, telegram_id: int) -> bool:
+        """Проверка авторизации партнера"""
         try:
-            # Handle messages
+            # Пытаемся использовать Google Sheets
+            from sheets import normalize_phone, find_row_by_partner_and_phone, update_row_with_auth, SheetsNotConfiguredError
+            
+            phone_norm = normalize_phone(partner_phone)
+            row = find_row_by_partner_and_phone(partner_code, phone_norm)
+            
+            if row:
+                update_row_with_auth(row, telegram_id, status='authorized')
+                log.info(f"Authorized partner {partner_code} with phone {phone_norm}")
+                return True
+            else:
+                log.warning(f"Partner {partner_code} with phone {phone_norm} not found")
+                return False
+                
+        except (ImportError, SheetsNotConfiguredError):
+            # Fallback: простая проверка для разработки
+            log.info("Using fallback authorization (Google Sheets not configured)")
+            return self.fallback_authorization(partner_code, partner_phone)
+        except Exception as e:
+            log.error(f"Error in authorization check: {e}")
+            return False
+
+    def fallback_authorization(self, partner_code: str, partner_phone: str) -> bool:
+        """Fallback авторизация для разработки"""
+        # Простая проверка для демо (как в оригинальном коде)
+        if partner_code == '111098' and '1055' in partner_phone:
+            log.info(f"Fallback authorization successful for {partner_code}")
+            return True
+        return False
+
+    def process_update(self, update: dict):
+        """Обработка одного обновления"""
+        try:
             if 'message' in update:
                 message = update['message']
                 text = message.get('text', '')
+                
+                # Обработка команды /start
                 if text == '/start':
                     self.handle_start(update)
-
-            # Handle web app data from keyboard button
-            elif 'message' in update and 'web_app_data' in update['message']:
-                self.handle_web_app_data(update)
-
+                # Обработка данных из WebApp
+                elif 'web_app_data' in message:
+                    self.handle_web_app_data(update)
+                    
         except Exception as e:
             log.error(f"Error processing update: {e}")
 
     def start_polling(self):
-        """Start polling for updates."""
+        """Запуск бота в режиме polling"""
         self.running = True
-        log.info("Starting bot polling (HTTP API)")
-
+        log.info("🚀 MarketingBot запущен!")
+        log.info(f"📱 WebApp URL: {self.webapp_url}")
+        
         while self.running:
             try:
                 result = self.get_updates()
-
+                
                 if result.get('ok'):
                     updates = result.get('result', [])
-
+                    
                     for update in updates:
                         self.process_update(update)
                         self.offset = update['update_id'] + 1
-
+                        
                 else:
                     log.error(f"API error: {result}")
                     time.sleep(5)
-
+                    
             except KeyboardInterrupt:
-                log.info("Stopping bot...")
+                log.info("Остановка бота...")
                 self.running = False
                 break
             except Exception as e:
@@ -171,26 +215,42 @@ class TelegramBot:
                 time.sleep(5)
 
     def stop(self):
-        """Stop the bot."""
+        """Остановка бота"""
         self.running = False
+        log.info("Бот остановлен")
 
 
 def main():
-    """Start the bot."""
+    """Запуск бота"""
+    # Получаем конфигурацию из переменных окружения
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    webapp_url = os.environ.get("WEBAPP_URL", "https://your-domain.com/webapp")
+    
     if not token:
-        log.error("TELEGRAM_BOT_TOKEN env var not set!")
-        return
-
-    bot = TelegramBot(token)
-
+        log.error("❌ TELEGRAM_BOT_TOKEN не установлен!")
+        log.error("Установите переменную окружения или добавьте в .env файл")
+        return 1
+    
+    # Проверяем наличие WebApp URL
+    if webapp_url == "https://your-domain.com/webapp":
+        log.warning("⚠️ WEBAPP_URL не настроен, используется заглушка")
+    
+    log.info(f"🔧 Конфигурация:")
+    log.info(f"   Token: {token[:15]}...")
+    log.info(f"   WebApp URL: {webapp_url}")
+    
+    # Создаем и запускаем бота
+    bot = MarketingBot(token, webapp_url)
+    
     try:
         bot.start_polling()
     except KeyboardInterrupt:
-        log.info("Bot stopped by user")
+        log.info("Бот остановлен пользователем")
     finally:
         bot.stop()
+    
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())
