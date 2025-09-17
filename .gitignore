@@ -93,4 +93,6 @@ AUDIT_REPORT*.md
 ULTRA_SIMPLE_PLAN.md
 OPTIMIZATION_PLAN.md
 SIMPLIFICATION_CHECKLIST.md
-\n# Файлы с учетными данными Google Cloud\ncredentials.json
+
+# Файлы с учетными данными Google Cloud
+credentials.json
