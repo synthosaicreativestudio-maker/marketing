@@ -26,13 +26,13 @@ def _send_sync(token: str, telegram_id: int, text: str) -> bool:
     try:
         # Use requests to send message via Telegram Bot API (synchronous)
         import requests
-        
+
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         data = {
             "chat_id": telegram_id,
             "text": text
         }
-        
+
         response = requests.post(url, json=data, timeout=30)
         response.raise_for_status()
         return True

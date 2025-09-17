@@ -40,15 +40,12 @@ jobs:
       
     - name: Run mypy
       run: mypy . --ignore-missing-imports
-      continue-on-error: true
       
     - name: Check formatting with black
       run: black --check .
-      continue-on-error: true
       
     - name: Check import sorting
       run: isort --check-only .
-      continue-on-error: true
 
   test:
     name: Tests
@@ -108,7 +105,6 @@ jobs:
       
     - name: Run bandit security scan
       run: bandit -r . -f json -o bandit-report.json
-      continue-on-error: true
       
     - name: Upload bandit report
       uses: actions/upload-artifact@v3

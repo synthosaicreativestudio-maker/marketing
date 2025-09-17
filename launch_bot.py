@@ -1,36 +1,35 @@
 #!/usr/bin/env python3
 """Launch bot in isolated subprocess to avoid event loop conflicts."""
 
+import os
 import subprocess
 import sys
-import os
-from pathlib import Path
+
+from dotenv import load_dotenv
+
 
 def main():
-    # Read token from .env
-    env_file = Path('.env')
-    if not env_file.exists():
-        print("❌ .env file not found!")
-        return 1
-    
-    token = None
-    with open(env_file) as f:
-        for line in f:
-            if line.startswith('TELEGRAM_TOKEN='):
-                token = line.split('=', 1)[1].strip().strip('"')
-                break
-    
+    # Load .env file
+    load_dotenv()
+
+    # Read token from environment
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
-        print("❌ TELEGRAM_TOKEN not found in .env!")
+        # Check for legacy name for compatibility
+        token = os.environ.get("TELEGRAM_TOKEN")
+
+    if not token:
+        print("❌ TELEGRAM_BOT_TOKEN or TELEGRAM_TOKEN not found in .env or environment!")
         return 1
-    
-    print(f"🚀 Starting MarketingBot...")
+
+    print("🚀 Starting MarketingBot...")
     print(f"📱 Token: {token[:15]}...")
-    
-    # Set up environment
+
+    # The current environment is already updated by load_dotenv.
+    # We ensure the specific variable the bot script expects is set.
     env = os.environ.copy()
     env['TELEGRAM_BOT_TOKEN'] = token
-    
+
     # Start bot in subprocess
     try:
         proc = subprocess.Popen(
@@ -42,25 +41,7 @@ def main():
             bufsize=1,
             universal_newlines=True
         )
-        
+
         print(f"✅ Bot started with PID: {proc.pid}")
         print("📋 Bot output:")
-        print("-" * 50)
-        
-        # Stream output
-        for line in proc.stdout:
-            print(line.rstrip())
-            
-    except KeyboardInterrupt:
-        print("\n🛑 Stopping bot...")
-        proc.terminate()
-        proc.wait()
-        print("✅ Bot stopped")
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return 1
-    
-    return 0
-
-if __name__ == "__main__":
-    sys.exit(main())
+        print("-

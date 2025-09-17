@@ -1,3 +1,0 @@
-name: Build and Push (DISABLED)
-
-# Disabled to avoid IDE YAML diagnostics on secrets

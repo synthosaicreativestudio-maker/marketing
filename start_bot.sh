@@ -5,19 +5,14 @@ if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs)
 fi
 
-# Set TELEGRAM_BOT_TOKEN from TELEGRAM_TOKEN if it exists
-if [ ! -z "$TELEGRAM_TOKEN" ]; then
-    export TELEGRAM_BOT_TOKEN="$TELEGRAM_TOKEN"
-fi
+# Load environment variables directly
+export TELEGRAM_BOT_TOKEN="8232668997:AAHCvWtcjtqw5b5tuYrYwg1lCz0oItjhUEg"
+export ADMIN_TELEGRAM_ID=284355186
 
-# Check if TELEGRAM_BOT_TOKEN is set
-if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "Error: TELEGRAM_BOT_TOKEN is not set"
-    exit 1
-fi
+# Create logs directory
+mkdir -p logs
 
+# Start the bot with proper logging
 echo "Starting MarketingBot..."
-echo "Token: ${TELEGRAM_BOT_TOKEN:0:10}..."
-
-# Start the bot
-python3 bot.py
+echo "Bot starting at $(date)" > logs/bot.log
+python3 bot.py 2>&1 | tee -a logs/bot.log
