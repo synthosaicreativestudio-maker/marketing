@@ -84,7 +84,7 @@ def web_app_data_handler(auth_service: AuthService):
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
                     text="Кнопка авторизации удалена. Вы можете продолжить работу.",
-                    reply_markup=ReplyKeyboardMarkup([], resize_keyboard=True)
+                    reply_markup=ReplyKeyboardMarkup([[]], resize_keyboard=True)
                 )
                 # TODO: Показать основное меню
             else:
