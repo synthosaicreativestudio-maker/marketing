@@ -27,8 +27,7 @@ marketingbot/                    # УЛЬТРА-ПРОСТАЯ СТРУКТУР�
 ├── 📊 sheets.py                # Google Sheets интеграция (100 строк)
 ├── 🌐 webapp/                  # WebApp интерфейс (3 файла)
 ├── 📚 docs/                    # Оптимизированная документация (11 файлов)
-├── 🐳 Dockerfile               # Обновленная Docker конфигурация
-├── 🐳 docker-compose.yml       # Простое развертывание
+Note: Docker artifacts (Dockerfile, docker-compose.yml) are optional and were removed from the simplified layout. See `README.md` "Run without Docker" for the recommended approach.
 ├── ⚙️ pyproject.toml           # Минимальные зависимости
 ├── 🔒 .env.example             # Шаблон конфигурации
 └── 📋 README.md                # Обновленная документация

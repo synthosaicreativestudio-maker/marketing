@@ -6,7 +6,7 @@
 - [ ] Все тесты проходят локально: `python3 -m pytest`
 - [ ] Код проверен линтерами: `ruff check .` и `mypy .`
 - [ ] Нет ошибок безопасности: проверить отсутствие секретов в коде
-- [ ] Docker образ собирается: `docker build -t marketingbot .`
+- [ ] (optional) Docker image can be built for containerized deployments. See `README.md` for guidance.
 - [ ] Бот запускается без ошибок: `python3 bot.py`
 
 ### Документация:
@@ -143,10 +143,8 @@ git commit -m "🚨 Hotfix: critical security issue"
 git tag -a v1.0.1 -m "Hotfix v1.0.1"
 
 # Немедленное развертывание
-docker build -t marketingbot:v1.0.1 .
-docker-compose up -d
 ```
-
+(Container commands removed — see README.md "Run without Docker" or keep local legacy commands if you still use containers.)
 ## 📊 Пост-релизные проверки
 
 ### Сразу после релиза:

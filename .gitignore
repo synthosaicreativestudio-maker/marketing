@@ -12,7 +12,6 @@
 !.env.example
 !package.json
 !pyproject.toml
-!docker-compose.yml
 service-account*.json
 credentials*.json
 secrets*.json

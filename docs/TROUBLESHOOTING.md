@@ -91,41 +91,11 @@ python3 -c "from sheets import _get_client_and_sheet; client, sheet = _get_clien
 - Если Google Sheets не настроены, используется простая проверка
 - Тестовые данные: код `111098`, телефон с `1055`
 
-### 4. Docker проблемы
+### 4. Container notes (optional)
 
-**Симптомы:**
-- Контейнер не запускается
-- Ошибки при сборке образа
+Containerization (Docker) was supported previously but is optional in the simplified project layout. The recommended workflow is to run the bot without Docker; see `README.md` -> "Run without Docker" for step-by-step instructions.
 
-**Решения:**
-
-#### Проблемы сборки:
-```bash
-# Очистка Docker кэша
-docker system prune -f
-
-# Пересборка образа
-docker build --no-cache -t marketingbot .
-```
-
-#### Проблемы с переменными окружения:
-```bash
-# Проверка .env файла
-cat .env | grep -v "^#" | grep "="
-
-# Проверка переменных в контейнере
-docker run --rm --env-file .env marketingbot env | grep TELEGRAM
-```
-
-#### Проблемы с правами:
-```bash
-# Проверка прав на файлы
-ls -la .env
-chmod 600 .env
-
-# Проверка прав Docker
-sudo usermod -aG docker $USER
-```
+If you still rely on containers for your environment (legacy), keep your local Docker commands and troubleshooting steps. Container troubleshooting is considered out-of-scope for the simplified guide, but feel free to ask and I will assist with specific issues.
 
 ### 5. Проблемы с зависимостями
 

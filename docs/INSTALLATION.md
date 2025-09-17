@@ -105,39 +105,15 @@ pip install python-dotenv
 2. Убедитесь, что токен корректный
 3. Перезапустите бота
 
-## 🐳 Запуск через Docker
-
-### Быстрый запуск с Docker Compose:
-```bash
-# Настройка переменных окружения
-cp .env.example .env
-nano .env
-
-# Запуск бота
 docker-compose up -d
-
-# Просмотр логов
 docker-compose logs -f marketingbot
-
-# Остановка
 docker-compose down
-```
-
-### Ручная сборка Docker образа:
-```bash
-# Сборка образа
 docker build -t marketingbot .
-
-# Запуск контейнера
 docker run -d \
-  --name marketingbot \
-  --env-file .env \
-  --restart unless-stopped \
-  marketingbot
-
-# Просмотр логов
 docker logs -f marketingbot
-```
+## Container usage (optional)
+
+Using Docker is optional. The recommended, simpler path is to run the bot without Docker as described in `README.md` (Run without Docker). If your environment requires containers (Cloud Run, Kubernetes, etc.), consult the README or keep local copy of Docker commands as legacy references.
 
 ## 🔧 Разработка
 

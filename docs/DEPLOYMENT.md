@@ -16,18 +16,10 @@ docker-compose logs -f marketingbot
 
 # 4. Остановка
 docker-compose down
-```
-
-### Ручная сборка Docker образа:
-```bash
 # Сборка образа
-docker build -t marketingbot .
+> NOTE: Containerized deployment is optional for this project. The preferred simple workflow is documented in `README.md` under "Run without Docker". If you still need container instructions (legacy), keep a local copy or consult the Docker section in the repository history.
 
-# Запуск контейнера
-docker run -d \
-  --name marketingbot \
-  --env-file .env \
-  --restart unless-stopped \
+For cloud deployments (Cloud Run, etc.) you can package the app as a container; see `README.md` for guidance and examples.
   marketingbot
 
 # Просмотр логов
