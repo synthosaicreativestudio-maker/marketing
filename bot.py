@@ -2,6 +2,9 @@ import logging
 import os
 from dotenv import load_dotenv
 
+# Загрузка переменных окружения
+load_dotenv()
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -9,9 +12,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from google_sheets_service import GoogleSheetsService
 from auth_service import AuthService
 from handlers import setup_handlers
-
-# Загрузка переменных окружения
-load_dotenv()
 
 # Настройка логирования
 logging.basicConfig(
