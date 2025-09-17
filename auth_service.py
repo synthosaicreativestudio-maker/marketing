@@ -9,9 +9,13 @@ class AuthService:
     def __init__(self, sheets_service: GoogleSheetsService):
         self.sheets_service = sheets_service
         self.sheet_url = os.getenv("SHEET_URL")
+        self.spreadsheet = None
         self.sheet = None
         if self.sheet_url:
-            self.sheet = self.sheets_service.get_sheet_by_url(self.sheet_url)
+            self.spreadsheet = self.sheets_service.get_sheet_by_url(self.sheet_url)
+            if self.spreadsheet:
+                # Get the first worksheet from the spreadsheet
+                self.sheet = self.spreadsheet.sheet1
         else:
             logger.error("SHEET_URL не найден в .env файле.")
 
