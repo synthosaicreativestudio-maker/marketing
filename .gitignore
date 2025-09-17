@@ -96,3 +96,4 @@ SIMPLIFICATION_CHECKLIST.md
 
 # Файлы с учетными данными Google Cloud
 credentials.json
+sheet_summary*.json
