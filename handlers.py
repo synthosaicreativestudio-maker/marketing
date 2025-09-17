@@ -80,7 +80,13 @@ def web_app_data_handler(auth_service: AuthService):
             
             if auth_result:
                 await update.message.reply_text("Авторизация прошла успешно! Добро пожаловать.")
-                 # TODO: Показать основное меню
+                # Удаление кнопки авторизации после успешной авторизации
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="Кнопка авторизации удалена. Вы можете продолжить работу.",
+                    reply_markup=ReplyKeyboardMarkup([], resize_keyboard=True)
+                )
+                # TODO: Показать основное меню
             else:
                 logger.warning("Авторизация не удалась - данные не найдены")
                 keyboard_button = KeyboardButton(
