@@ -1,0 +1,44 @@
+{
+  "spreadsheet_id": "15XxSIpD_gMZaSOIrqDVCNI2EqBzphEGiG0ZNJ3HR8hI",
+  "title": "чат бот маркетинг",
+  "worksheets": [
+    {
+      "title": "данные",
+      "rows": 1000,
+      "cols": 26,
+      "data_rows": 3,
+      "preview": [
+        [
+          "апи ассистента",
+          "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"
+        ],
+        [
+          "токен тг",
+          "8232668997:AAHCvWtcjtqw5b5tuYrYwg1lCz0oItjhUEg"
+        ],
+        [
+          "апи гемини",
+          "AIzaSyC89B0GVVmF5sDnVX0BJihd8NRZXwlxjDc"
+        ]
+      ]
+    },
+    {
+      "title": "обращения",
+      "rows": 1000,
+      "cols": 26,
+      "data_rows": 1,
+      "preview": [
+        [
+          "код",
+          "телефон",
+          "ФИО",
+          "telegram_id",
+          "текст_обращений",
+          "статус",
+          "специалист_ответ",
+          "время_обновления"
+        ]
+      ]
+    }
+  ]
+}
