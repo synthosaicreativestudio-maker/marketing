@@ -32,7 +32,6 @@ def start_command_handler(auth_service: AuthService):
             # TODO: Здесь можно добавить основное меню для авторизованных пользователей
         else:
             if WEB_APP_URL:
-                # Используем ReplyKeyboardMarkup вместо InlineKeyboardMarkup
                 keyboard_button = KeyboardButton(
                     text="Авторизоваться в приложении",
                     web_app=WebAppInfo(url=WEB_APP_URL)
@@ -84,7 +83,6 @@ def web_app_data_handler(auth_service: AuthService):
                  # TODO: Показать основное меню
             else:
                 logger.warning("Авторизация не удалась - данные не найдены")
-                # Используем ReplyKeyboardMarkup для повторной авторизации
                 keyboard_button = KeyboardButton(
                     text="Повторить авторизацию",
                     web_app=WebAppInfo(url=WEB_APP_URL)
