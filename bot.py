@@ -1,63 +1,41 @@
-import logging
 import os
-import asyncio
+import logging
 from dotenv import load_dotenv
-
+from telegram.ext import Application, CommandHandler
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-
-# Импорт наших модулей
 from google_sheets_service import GoogleSheetsService
 from auth_service import AuthService
 from handlers import setup_handlers
-
-# Загрузка переменных окружения
-load_dotenv()
 
 # Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
-async def main() -> None:
-    """Основная функция для инициализации и запуска бота."""
-    # --- Проверка наличия токена ---
-    token = os.getenv("TELEGRAM_TOKEN")
-    if not token:
-        logger.critical("TELEGRAM_TOKEN не найден в .env файле! Бот не может быть запущен.")
+async def main():
+    load_dotenv()
+    telegram_token = os.getenv("TELEGRAM_TOKEN")
+    
+    if not telegram_token:
+        logger.error("TELEGRAM_TOKEN не установлен в .env файле.")
         return
 
-    # --- Инициализация сервисов ---
-    logger.info("Инициализация сервисов...")
-    sheets_service = GoogleSheetsService()
-    if not sheets_service.client:
-        logger.critical("Не удалось инициализировать GoogleSheetsService. Проверьте credentials.json и доступы.")
-        return
-        
-    auth_service = AuthService(sheets_service)
-    if not auth_service.sheet:
-        logger.critical("Не удалось загрузить таблицу авторизации. Проверьте SHEET_URL в .env.")
-        return
+    # Инициализация сервисов (пока заглушки)
+    # В реальном проекте здесь будет логика инициализации GoogleSheetsService
+    # и AuthService с передачей необходимых параметров, например credentials.json
+    google_sheets_service = GoogleSheetsService() # Заглушка
+    auth_service = AuthService(google_sheets_service) # Заглушка
 
-    # --- Создание и настройка приложения ---
-    logger.info("Создание экземпляра бота...")
-    application = Application.builder().token(token).build()
+    application = Application.builder().token(telegram_token).build()
 
-    # --- Удаление предыдущих вебхуков (если есть) ---
-    # Это помогает избежать ошибок Conflict: terminated by other getUpdates request
-    # если бот был некорректно остановлен ранее.
-    logger.info("Удаление предыдущих вебхуков...")
-    await application.bot.delete_webhook()
-
-    # --- Регистрация обработчиков ---
-    logger.info("Регистрация обработчиков...")
     setup_handlers(application, auth_service)
 
-    # --- Запуск бота ---
-    logger.info("Запуск бота...")
-    application.run_polling()
-
+    logger.info("Бот запущен...")
+    await application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
