@@ -47,6 +47,11 @@ class AuthService:
                 return False
 
             phone_norm = normalize_phone(partner_phone)
+            logger.info(f"Нормализованный телефон из формы: '{phone_norm}'")
+            try:
+                logger.info(f"Worksheet: '{self.worksheet.title}' — получаем записи...")
+            except Exception:
+                pass
             row_index: Optional[int] = find_row_by_partner_and_phone(partner_code, phone_norm)
 
             if row_index:
@@ -102,7 +107,8 @@ class AuthService:
                 # Проверяем статус в колонке 'Статус' или 'Статус авторизации'
                     status = row.get('Статус') or row.get('Статус авторизации')
                     logger.info(f"Найден пользователь с Telegram ID {telegram_id}, статус: {status}")
-                    result = status in ("Авторизован", "authorized")
+                    status_norm = str(status or '').strip().lower()
+                    result = status_norm in ("авторизован", "authorized")
                     logger.info(f"Результат проверки авторизации: {result}")
                     return result
                 else:
