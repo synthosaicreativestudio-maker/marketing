@@ -12,6 +12,7 @@
 !.env.example
 !package.json
 !pyproject.toml
+!.env.example
 service-account*.json
 credentials*.json
 secrets*.json
@@ -64,7 +65,7 @@ logs/
 .nyc_output
 
 # 🎛️ РЕДАКТОРЫ И IDE
-.vscode/
+
 .idea/
 *.swp
 *.swo

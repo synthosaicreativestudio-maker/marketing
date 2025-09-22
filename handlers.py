@@ -1,27 +1,16 @@
 import logging
 import os
 import json
-from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 
-# Получаем URL веб-приложения из .env
-WEB_APP_URL = os.getenv("WEB_APP_URL")
-logger.info(f"Загружен WEB_APP_URL: {WEB_APP_URL}")
-
-# Проверка наличия WEB_APP_URL
-if not WEB_APP_URL:
-    logger.critical("WEB_APP_URL не найден в .env файле. Кнопка авторизации будет недоступна.")
-    # Дополнительная отладочная информация
-    import os
-    logger.info("Все переменные окружения:")
-    for key, value in os.environ.items():
-        logger.info(f"  {key}: {value}")
-else:
-    logger.info(f"WEB_APP_URL успешно загружен: {WEB_APP_URL}")
+def get_web_app_url() -> str:
+    """Ленивое чтение URL WebApp из окружения (после загрузки .env)."""
+    return os.getenv("WEB_APP_URL") or ""
 
 def setup_handlers(application, auth_service: AuthService):
     """Регистрирует все обработчики в приложении."""
@@ -39,6 +28,7 @@ def start_command_handler(auth_service: AuthService):
             await update.message.reply_text(f"Добрый день, {user.first_name}! Вы уже авторизованы.")
             # TODO: Здесь можно добавить основное меню для авторизованных пользователей
         else:
+            WEB_APP_URL = get_web_app_url()
             if WEB_APP_URL:
                 keyboard_button = KeyboardButton(
                     text="Авторизоваться в приложении",
@@ -87,18 +77,16 @@ def web_app_data_handler(auth_service: AuthService):
             logger.info(f"Результат авторизации: {auth_result}")
             
             if auth_result:
-                await update.message.reply_text("Авторизация прошла успешно! Добро пожаловать.")
-                # Удаление кнопки авторизации после успешной авторизации
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    reply_markup=ReplyKeyboardMarkup([[]], resize_keyboard=True)
+                await update.message.reply_text(
+                    "Авторизация прошла успешно! Добро пожаловать.",
+                    reply_markup=ReplyKeyboardRemove()
                 )
                 # TODO: Показать основное меню
             else:
                 logger.warning("Авторизация не удалась - данные не найдены")
                 keyboard_button = KeyboardButton(
                     text="Повторить авторизацию",
-                    web_app=WebAppInfo(url=WEB_APP_URL)
+                    web_app=WebAppInfo(url=get_web_app_url())
                 )
                 reply_markup = ReplyKeyboardMarkup.from_button(keyboard_button, resize_keyboard=True)
                 await update.message.reply_text(

@@ -1,89 +1,76 @@
 import logging
-import os
 import datetime
-from google_sheets_service import GoogleSheetsService
+from typing import Optional
+
+from sheets import (
+    _get_client_and_sheet,
+    find_row_by_partner_and_phone,
+    update_row_with_auth,
+    normalize_phone,
+    SheetsNotConfiguredError,
+)
 
 logger = logging.getLogger(__name__)
 
 class AuthService:
-    def __init__(self, sheets_service: GoogleSheetsService):
-        self.sheets_service = sheets_service
-        self.sheet_url = os.getenv("SHEET_URL")
-        self.spreadsheet = None
-        self.sheet = None
-        logger.info(f"Загружен SHEET_URL: {self.sheet_url}")
-        if self.sheet_url:
-            logger.info("Попытка открыть таблицу по URL...")
-            self.spreadsheet = self.sheets_service.get_sheet_by_url(self.sheet_url)
-            if self.spreadsheet:
-                logger.info(f"Таблица успешно открыта: {self.spreadsheet.title}")
-                # Get the first worksheet from the spreadsheet
-                self.sheet = self.spreadsheet.sheet1
-                logger.info("Первый лист таблицы успешно загружен")
-            else:
-                logger.error("Не удалось открыть таблицу по URL")
-        else:
-            logger.error("SHEET_URL не найден в .env файле.")
+    def __init__(self):
+        """Инициализация сервиса авторизации на основе sheets.py (вариант A).
+
+        Используются переменные окружения:
+        - SHEET_ID (обязательно)
+        - SHEET_NAME (опционально, по умолчанию Sheet1)
+        - GCP_SA_JSON или GCP_SA_FILE (обязательно один из)
+        """
+        self.worksheet = None
+        try:
+            _, worksheet = _get_client_and_sheet()
+            self.worksheet = worksheet
+            logger.info("Worksheet успешно инициализирован через sheets.py")
+        except SheetsNotConfiguredError as e:
+            logger.critical(f"Sheets не сконфигурирован: {e}")
+        except Exception as e:
+            logger.critical(f"Не удалось инициализировать доступ к Google Sheets: {e}")
 
     def find_and_update_user(self, partner_code: str, partner_phone: str, telegram_id: int) -> bool:
         """
         Ищет пользователя и обновляет его статус авторизации.
         """
         logger.info(f"Поиск пользователя: код={partner_code}, телефон={partner_phone}, telegram_id={telegram_id}")
-        
-        if not self.sheet:
-            logger.error("Таблица авторизации не загружена.")
+
+        if not self.worksheet:
+            logger.error("Worksheet не инициализирован (Sheets конфигурация отсутствует).")
             return False
-            
+
         try:
-            logger.info("Получение всех записей из таблицы...")
-            records = self.sheet.get_all_records()
-            logger.info(f"Получено {len(records)} записей из таблицы")
-            
-            # Добавляем проверку на пустые данные
             if not partner_code or not partner_phone:
                 logger.warning("Получены пустые данные для поиска пользователя")
                 return False
-            
-            for i, row in enumerate(records):
-                logger.info(f"Проверка записи {i+1}: {row}")
-                
-                # Колонки в таблице могут иметь разные названия, используем get()
-                code_in_sheet = str(row.get('Код партнера', ''))
-                phone_in_sheet = str(row.get('Телефон партнера', ''))
-                
-                logger.info(f"Сравнение: код в таблице='{code_in_sheet}' vs код из формы='{partner_code}'")
 
-                # Нормализуем оба номера, оставляя только цифры
-                normalized_phone_from_app = ''.join(filter(str.isdigit, partner_phone))
-                normalized_phone_in_sheet = ''.join(filter(str.isdigit, phone_in_sheet))
-                
-                logger.info(f"Нормализованные телефоны: из формы='{normalized_phone_from_app}' vs из таблицы='{normalized_phone_in_sheet}'")
+            phone_norm = normalize_phone(partner_phone)
+            row_index: Optional[int] = find_row_by_partner_and_phone(partner_code, phone_norm)
 
-                # Убираем '7' или '8' в начале для унификации
-                if normalized_phone_from_app.startswith('7') or normalized_phone_from_app.startswith('8'):
-                    normalized_phone_from_app = normalized_phone_from_app[1:]
-                
-                if normalized_phone_in_sheet.startswith('7') or normalized_phone_in_sheet.startswith('8'):
-                    normalized_phone_in_sheet = normalized_phone_in_sheet[1:]
-                
-                logger.info(f"Телефоны после нормализации: из формы='{normalized_phone_from_app}' vs из таблицы='{normalized_phone_in_sheet}'")
+            if row_index:
+                logger.info(f"Найдена строка с пользователем: {row_index}")
+                # Обновляем статус/telegram_id через batch API из sheets.py
+                try:
+                    update_row_with_auth(row_index, telegram_id, status='authorized')
+                except Exception as e:
+                    logger.error(f"Ошибка обновления строки {row_index}: {e}")
+                    return False
 
-                if code_in_sheet == partner_code and normalized_phone_in_sheet == normalized_phone_from_app:
-                    logger.info(f"Найдено совпадение в записи {i+1}")
-                    row_index = i + 2
-                    
-                    logger.info(f"Обновление статуса в строке {row_index}")
-                    self.sheet.update_cell(row_index, 4, "Авторизован") # Колонка D: Статус
-                    self.sheet.update_cell(row_index, 5, telegram_id)   # Колонка E: Telegram ID
-                    self.sheet.update_cell(row_index, 6, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")) # Колонка F: Дата
-                    
-                    logger.info(f"Пользователь с кодом {partner_code} успешно авторизован.")
-                    return True
-                else:
-                    logger.info(f"Запись {i+1} не совпадает")
-            
-            logger.warning(f"Пользователь с кодом {partner_code} и телефоном {partner_phone} не найден.")
+                # Дополнительно обновим столбец с датой (F)
+                try:
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self.worksheet.update(f'F{row_index}', timestamp)
+                except Exception as e:
+                    logger.warning(f"Не удалось записать дату авторизации: {e}")
+
+                logger.info(f"Пользователь с кодом {partner_code} успешно авторизован.")
+                return True
+
+            logger.warning(
+                f"Пользователь с кодом {partner_code} и телефоном {partner_phone} не найден."
+            )
             return False
         except Exception as e:
             logger.error(f"Ошибка при поиске и обновлении пользователя: {e}")
@@ -95,13 +82,13 @@ class AuthService:
         """
         logger.info(f"Проверка статуса авторизации для пользователя {telegram_id}")
         
-        if not self.sheet:
-            logger.error("Таблица авторизации не загружена.")
+        if not self.worksheet:
+            logger.error("Worksheet не инициализирован (Sheets конфигурация отсутствует).")
             return False
 
         try:
             logger.info("Получение всех записей из таблицы для проверки статуса...")
-            records = self.sheet.get_all_records()
+            records = self.worksheet.get_all_records()
             logger.info(f"Получено {len(records)} записей из таблицы для проверки статуса")
             
             for i, row in enumerate(records):
@@ -115,7 +102,7 @@ class AuthService:
                     # Проверяем статус в колонке 'Статус'
                     status = row.get('Статус')
                     logger.info(f"Найден пользователь с Telegram ID {telegram_id}, статус: {status}")
-                    result = status == "Авторизован"
+                    result = status in ("Авторизован", "authorized")
                     logger.info(f"Результат проверки авторизации: {result}")
                     return result
                 else:

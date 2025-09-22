@@ -13,7 +13,7 @@
 #### Проблема с токеном:
 ```bash
 # Проверка токена
-python3 -c "from dotenv import load_dotenv; import os; load_dotenv(); print('Token:', 'OK' if os.getenv('TELEGRAM_BOT_TOKEN') else 'MISSING')"
+python3 -c "from dotenv import load_dotenv; import os; load_dotenv(); print('Token:', 'OK' if os.getenv('TELEGRAM_TOKEN') else 'MISSING')"
 
 # Проверка валидности токена
 curl "https://api.telegram.org/bot<YOUR_TOKEN>/getMe"
@@ -58,8 +58,8 @@ curl -I $WEBAPP_URL
 #### Проверка файлов WebApp:
 ```bash
 # Проверка наличия файлов
-ls -la webapp/
-cat webapp/index.html | head -10
+ls -la
+cat index.html | head -10
 ```
 
 #### Проблемы с HTTPS:
@@ -136,7 +136,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 print(f'Python: {sys.version}')
-print(f'Token: {\"OK\" if os.getenv(\"TELEGRAM_BOT_TOKEN\") else \"MISSING\"}')
+print(f'Token: {\"OK\" if os.getenv(\"TELEGRAM_TOKEN\") else \"MISSING\"}')
 print(f'WebApp URL: {os.getenv(\"WEBAPP_URL\", \"NOT SET\")}')
 
 try:
@@ -203,7 +203,7 @@ echo "OS: $(uname -a)" >> debug_report.txt
 echo "" >> debug_report.txt
 
 echo "=== Environment ===" >> debug_report.txt
-python3 -c "import os; print('Token:', 'SET' if os.getenv('TELEGRAM_BOT_TOKEN') else 'NOT SET')" >> debug_report.txt
+python3 -c "import os; print('Token:', 'SET' if os.getenv('TELEGRAM_TOKEN') else 'NOT SET')" >> debug_report.txt
 echo "WebApp URL: $WEBAPP_URL" >> debug_report.txt
 echo "" >> debug_report.txt
 

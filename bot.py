@@ -2,12 +2,14 @@ import logging
 import os
 from dotenv import load_dotenv
 from telegram.ext import Application
-from google_sheets_service import GoogleSheetsService
+
+# Загружаем .env как можно раньше, до импортов, читающих переменные окружения
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
+
 from auth_service import AuthService
 from handlers import setup_handlers
 
-# Загрузка переменных окружения
-load_dotenv()
+# .env уже загружен выше
 
 # Настройка логирования
 logging.basicConfig(
@@ -26,18 +28,10 @@ def main() -> None:
 
     # --- Инициализация сервисов ---
     logger.info("Инициализация сервисов...")
-    logger.info("Инициализация Google Sheets сервиса...")
-    sheets_service = GoogleSheetsService()
-    logger.info(f"Google Sheets клиент инициализирован: {sheets_service.client is not None}")
-    if not sheets_service.client:
-        logger.critical("Не удалось инициализировать GoogleSheetsService. Проверьте credentials.json и доступы.")
-        return
-        
-    logger.info("Инициализация AuthService...")
-    auth_service = AuthService(sheets_service)
-    logger.info(f"AuthService sheet инициализирован: {auth_service.sheet is not None}")
-    if not auth_service.sheet:
-        logger.critical("Не удалось загрузить таблицу авторизации. Проверьте SHEET_URL в .env.")
+    logger.info("Инициализация AuthService (sheets.py)...")
+    auth_service = AuthService()
+    if not auth_service.worksheet:
+        logger.critical("Не удалось инициализировать доступ к Google Sheets. Проверьте SHEET_ID/GCP_SA_JSON.")
         return
 
     # --- Создание и настройка приложения ---

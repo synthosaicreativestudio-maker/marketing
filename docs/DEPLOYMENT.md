@@ -36,7 +36,7 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Редактирование .env файла
-# Укажите как минимум TELEGRAM_BOT_TOKEN
+# Укажите как минимум TELEGRAM_TOKEN
 nano .env
 ```
 
@@ -82,7 +82,7 @@ gcloud run deploy marketingbot \
   --image gcr.io/PROJECT_ID/marketingbot \
   --platform managed \
   --region us-central1 \
-  --set-env-vars TELEGRAM_BOT_TOKEN=your-token \
+  --set-env-vars TELEGRAM_TOKEN=your-token \
   --no-allow-unauthenticated
 ```
 
@@ -92,7 +92,7 @@ gcloud run deploy marketingbot \
 Убедитесь, что вы активировали виртуальное окружение и выполнили `pip install -r requirements.txt`.
 
 ### Бот не отвечает:
-1.  Проверьте правильность `TELEGRAM_BOT_TOKEN` в `.env`.
+1.  Проверьте правильность `TELEGRAM_TOKEN` в `.env`.
 2.  Проверьте логи на наличие ошибок.
 3.  Убедитесь, что сервер имеет доступ в интернет.
 

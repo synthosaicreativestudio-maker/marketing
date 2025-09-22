@@ -79,18 +79,29 @@ def _get_client_and_sheet():
 
 
 def find_row_by_partner_and_phone(partner_code: str, phone_norm: str) -> Optional[int]:
-    """Поиск строки по коду партнера и телефону"""
+    """Поиск строки по коду партнера и телефону.
+
+    Поддерживаются заголовки как на английском, так и на русском:
+    - English: 'partner_code', 'phone'
+    - Russian: 'Код партнера', 'Телефон партнера'
+    """
     try:
         _, worksheet = _get_client_and_sheet()
         records = worksheet.get_all_records()
-        
+
         for i, record in enumerate(records, start=2):  # start=2 because row 1 is header
-            if (str(record.get('partner_code', '')) == partner_code and 
-                normalize_phone(str(record.get('phone', ''))) == phone_norm):
+            code_in_row = str(
+                record.get('partner_code', record.get('Код партнера', ''))
+            )
+            phone_in_row = str(
+                record.get('phone', record.get('Телефон партнера', ''))
+            )
+
+            if code_in_row == partner_code and normalize_phone(phone_in_row) == phone_norm:
                 return i
-        
+
         return None
-    
+
     except SheetsNotConfiguredError:
         raise
     except Exception as e:

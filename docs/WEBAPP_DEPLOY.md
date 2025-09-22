@@ -14,7 +14,7 @@ WebApp состоит из статических файлов (`index.html`, `a
 
 **Шаги:**
 1. Создайте отдельный репозиторий для WebApp или используйте ветку `gh-pages`
-2. Скопируйте файлы из папки `webapp/` в корень репозитория
+2. Скопируйте файлы `index.html` и `app.js` в корень репозитория
 3. Включите GitHub Pages в настройках репозитория:
    - Перейдите в Settings → Pages
    - В разделе "Source" выберите "GitHub Actions"
@@ -26,9 +26,9 @@ WebApp состоит из статических файлов (`index.html`, `a
 **Пример структуры репозитория:**
 ```
 your-webapp-repo/
-├── index.html    # Скопировать из webapp/index.html
-├── app.js        # Скопировать из webapp/app.js
-└── README.md     # Описание WebApp
+├── index.html
+├── app.js
+└── README.md
 ```
 
 **Workflow GitHub Actions:**
@@ -98,7 +98,7 @@ jobs:
 **Шаги:**
 1. Зарегистрируйтесь на [vercel.com](https://vercel.com)
 2. Импортируйте проект из GitHub
-3. Настройте папку `webapp/` как корневую
+3. Настройте корневую папку репозитория как корень проекта
 4. Получите URL: `https://your-app.vercel.app/`
 
 ### 4. Собственный сервер
@@ -160,7 +160,7 @@ docker-compose up webapp
 
 **1. Ошибка 404 для app.js**
 - ✅ Проверьте путь в `index.html`: `<script src="app.js"></script>`
-- ❌ Неправильно: `<script src="/webapp/app.js"></script>`
+- ❌ Неправильно: пути с поддиректориями вроде `/webapp/app.js`
 
 **2. CORS ошибки**
 - Убедитесь, что сервер отдает правильные CORS заголовки
