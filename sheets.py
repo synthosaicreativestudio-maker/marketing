@@ -103,7 +103,21 @@ def find_row_by_partner_and_phone(partner_code: str, phone_norm: str) -> Optiona
                 record.get('phone', record.get('Телефон партнера', ''))
             ).strip()
 
-            if code_in_row == partner_code_str and normalize_phone(phone_in_row) == phone_norm:
+            normalized_row_phone = normalize_phone(phone_in_row)
+            # Подробные логи сопоставления (первые 50 строк полностью, далее лаконично)
+            if i < 52:
+                logger.info(
+                    f"Row {i}: code='{code_in_row}' vs '{partner_code_str}', "
+                    f"phone_norm_row='{normalized_row_phone}' vs form='{phone_norm}'"
+                )
+            else:
+                if code_in_row == partner_code_str or normalized_row_phone == phone_norm:
+                    logger.info(
+                        f"Row {i} candidate: code_eq={code_in_row == partner_code_str}, "
+                        f"phone_eq={normalized_row_phone == phone_norm}"
+                    )
+
+            if code_in_row == partner_code_str and normalized_row_phone == phone_norm:
                 return i
 
         return None

@@ -139,4 +139,10 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
   }
+
+  // Bind explicit button for reply action
+  const authBtn = document.getElementById('auth-btn')
+  if (authBtn) {
+    authBtn.addEventListener('click', doAuth)
+  }
 })
