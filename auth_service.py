@@ -99,8 +99,8 @@ class AuthService:
                 logger.info(f"Сравнение Telegram ID: в таблице='{telegram_id_in_sheet}' vs запрашиваемый='{telegram_id}'")
                 
                 if str(telegram_id_in_sheet) == str(telegram_id):
-                    # Проверяем статус в колонке 'Статус'
-                    status = row.get('Статус')
+                # Проверяем статус в колонке 'Статус' или 'Статус авторизации'
+                    status = row.get('Статус') or row.get('Статус авторизации')
                     logger.info(f"Найден пользователь с Telegram ID {telegram_id}, статус: {status}")
                     result = status in ("Авторизован", "authorized")
                     logger.info(f"Результат проверки авторизации: {result}")
