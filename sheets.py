@@ -4,6 +4,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Optional
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -130,16 +131,15 @@ def find_row_by_partner_and_phone(partner_code: str, phone_norm: str) -> Optiona
 
 
 def update_row_with_auth(row: int, telegram_id: int, status: str = 'авторизован'):
-    """Обновление строки с данными авторизации"""
+    """Обновление строки с данными авторизации (батчем D:F)."""
     try:
         _, worksheet = _get_client_and_sheet()
-        
-        # Обновляем колонки D (статус) и E (telegram_id)
-        worksheet.update(f'D{row}', status)
-        worksheet.update(f'E{row}', str(telegram_id))
-        
-        logger.info(f"Updated row {row} with status={status}, telegram_id={telegram_id}")
-        
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Одним вызовом обновляем статус (D), telegram_id (E), дату (F)
+        worksheet.update(f'D{row}:F{row}', [[status, str(telegram_id), timestamp]])
+        logger.info(
+            f"Updated row {row} with status={status}, telegram_id={telegram_id}, ts={timestamp}"
+        )
     except SheetsNotConfiguredError:
         raise
     except Exception as e:
