@@ -313,8 +313,11 @@ class AppealsService:
             return False
 
         try:
-            # Очищаем колонку G (специалист_ответ)
-            self.worksheet.update(f'G{row}', '')
+            # Очищаем колонку G (специалист_ответ) - используем batch_update
+            self.worksheet.batch_update([{
+                'range': f'G{row}',
+                'values': [['']]
+            }])
             logger.info(f"Очищен ответ специалиста в строке {row}")
             return True
             

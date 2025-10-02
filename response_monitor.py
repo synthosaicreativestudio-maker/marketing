@@ -101,13 +101,8 @@ class ResponseMonitor:
             fio = response_data.get('fio', '')
             code = response_data.get('code', '')
             
-            # Формируем сообщение
+            # Формируем сообщение (без информации о пользователе)
             message = f"💬 Ответ от специалиста отдела маркетинга:\n\n{response_text}"
-            
-            if fio:
-                message += f"\n\n👤 {fio}"
-            if code:
-                message += f" (код: {code})"
             
             # Отправляем сообщение
             await self.bot.send_message(
