@@ -395,3 +395,53 @@ class AppealsService:
         except Exception as e:
             logger.error(f"Ошибка добавления ответа специалиста: {e}")
             return False
+
+    def set_status_in_work(self, telegram_id: int) -> bool:
+        """
+        Устанавливает статус обращения на 'в работе' с заливкой #f4cccc.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            
+        Returns:
+            bool: True если статус установлен успешно
+        """
+        if not self.is_available():
+            logger.error("Сервис обращений недоступен")
+            return False
+
+        try:
+            # Ищем существующую строку для этого telegram_id
+            records = self.worksheet.get_all_records()
+            existing_row = None
+            
+            for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    existing_row = i
+                    break
+            
+            if existing_row:
+                # Устанавливаем статус "в работе" в колонке F
+                self.worksheet.batch_update([{
+                    'range': f'F{existing_row}',
+                    'values': [['в работе']]
+                }])
+                
+                # Устанавливаем заливку #f4cccc для колонки F
+                self.worksheet.format(f'F{existing_row}', {
+                    "backgroundColor": {
+                        "red": 0.956,
+                        "green": 0.8,
+                        "blue": 0.8
+                    }
+                })
+                
+                logger.info(f"Статус установлен 'в работе' для пользователя {telegram_id} (строка {existing_row})")
+                return True
+            else:
+                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка установки статуса 'в работе': {e}")
+            return False

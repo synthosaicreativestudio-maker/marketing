@@ -2,8 +2,8 @@ import logging
 import os
 import json
 import asyncio
-from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
+from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
 from auth_service import AuthService
 from openai_service import OpenAIService
@@ -21,6 +21,7 @@ def setup_handlers(application, auth_service: AuthService, openai_service: OpenA
     application.add_handler(CommandHandler("appeals", appeals_command_handler(auth_service, appeals_service)))
     application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data_handler(auth_service)))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.StatusUpdate.WEB_APP_DATA, chat_handler(auth_service, openai_service, appeals_service)))
+    application.add_handler(CallbackQueryHandler(callback_query_handler(auth_service, appeals_service)))
 
 def start_command_handler(auth_service: AuthService):
     """Фабрика для создания обработчика /start с доступом к сервису авторизации."""
@@ -238,7 +239,14 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 None, openai_service.ask, user.id, text
             )
             if reply:
-                await update.message.reply_text(reply)
+                # Создаем инлайн кнопку "Обратиться к специалисту"
+                keyboard = [[InlineKeyboardButton("👨‍💼 Обратиться к специалисту", callback_data="contact_specialist")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(
+                    reply,
+                    reply_markup=reply_markup
+                )
             else:
                 await update.message.reply_text(
                     "Не удалось получить ответ ассистента. Попробуйте ещё раз."
@@ -250,3 +258,64 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             )
 
     return handle_chat
+
+
+def callback_query_handler(auth_service: AuthService, appeals_service: AppealsService):
+    """Фабрика обработчика для callback query (инлайн кнопки)."""
+    async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        user = update.effective_user
+        
+        # Подтверждаем получение callback
+        await query.answer()
+        
+        logger.info(f"Callback query от пользователя {user.id}: {query.data}")
+        
+        # Проверка авторизации
+        if not auth_service.get_user_auth_status(user.id):
+            await query.edit_message_text(
+                "Для использования этой функции требуется авторизация. Нажмите кнопку авторизации /start."
+            )
+            return
+        
+        if query.data == "contact_specialist":
+            # Обращение к специалисту
+            if appeals_service and appeals_service.is_available():
+                try:
+                    # Получаем данные пользователя из таблицы авторизации
+                    records = auth_service.worksheet.get_all_records()
+                    user_data = None
+                    for record in records:
+                        if str(record.get('Telegram ID', '')) == str(user.id):
+                            user_data = record
+                            break
+                    
+                    if user_data:
+                        # Меняем статус на "в работе" с заливкой
+                        success = appeals_service.set_status_in_work(user.id)
+                        if success:
+                            await query.edit_message_text(
+                                "✅ Ваше обращение передано специалисту отдела маркетинга. "
+                                "Статус изменен на 'в работе'. Специалист ответит в ближайшее время."
+                            )
+                        else:
+                            await query.edit_message_text(
+                                "❌ Не удалось изменить статус обращения. Попробуйте позже."
+                            )
+                    else:
+                        await query.edit_message_text(
+                            "❌ Не найдены данные пользователя. Обратитесь к администратору."
+                        )
+                except Exception as e:
+                    logger.error(f"Ошибка при обращении к специалисту: {e}")
+                    await query.edit_message_text(
+                        "❌ Произошла ошибка при передаче обращения специалисту. Попробуйте позже."
+                    )
+            else:
+                await query.edit_message_text(
+                    "❌ Сервис обращений временно недоступен. Попробуйте позже."
+                )
+        else:
+            await query.edit_message_text("Неизвестная команда.")
+    
+    return handle_callback_query
