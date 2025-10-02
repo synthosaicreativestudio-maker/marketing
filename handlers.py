@@ -247,7 +247,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
     async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         text = update.effective_message.text or ""
-        logger.info(f"Текстовое сообщение от {user.id}: {text}")
+        logger.info(f"CHAT_HANDLER: Текстовое сообщение от {user.id}: {text}")
 
         # Проверка авторизации
         if not auth_service.get_user_auth_status(user.id):
@@ -307,15 +307,6 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             )
             return
 
-        # Проверяем статус обращения пользователя
-        appeal_status = None
-        if appeals_service and appeals_service.is_available():
-            try:
-                appeal_status = appeals_service.get_appeal_status(user.id)
-                logger.info(f"Статус обращения пользователя {user.id}: {appeal_status}")
-            except Exception as e:
-                logger.error(f"Ошибка при получении статуса обращения: {e}")
-
         # Создаем обращение в таблице
         if appeals_service and appeals_service.is_available():
             try:
@@ -361,13 +352,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 None, openai_service.ask, user.id, text
             )
             if reply:
-                # Добавляем информацию о статусе обращения к ответу
-                if appeal_status == 'в работе':
-                    reply += "\n\n📋 *Ваше обращение передано специалисту и находится в работе. Специалист ответит в ближайшее время.*"
-                elif appeal_status == 'решено':
-                    reply += "\n\n✅ *Ваше обращение решено специалистом. Если у вас есть новые вопросы, можете задать их здесь.*"
-                
-                # Отправляем ответ с клавиатурным меню
+                # Отправляем ответ с клавиатурным меню (без уведомлений о статусе)
                 await update.message.reply_text(
                     reply,
                     reply_markup=create_main_menu_keyboard(),
