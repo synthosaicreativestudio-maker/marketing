@@ -84,11 +84,14 @@ class AppealsService:
                 # Очищаем старые обращения (>30 дней)
                 updated_appeals = self._cleanup_old_appeals(updated_appeals)
                 
-                # Обновляем ячейку с обращениями
-                self.worksheet.update(f'E{existing_row}', updated_appeals)
-                
-                # Обновляем время последнего обновления
-                self.worksheet.update(f'H{existing_row}', timestamp)
+                # Обновляем ячейку с обращениями и время обновления через batch_update
+                self.worksheet.batch_update([{
+                    'range': f'E{existing_row}',
+                    'values': [[updated_appeals]]
+                }, {
+                    'range': f'H{existing_row}',
+                    'values': [[timestamp]]
+                }])
                 
                 logger.info(f"Обновлено обращение для пользователя {telegram_id} (строка {existing_row})")
             else:
