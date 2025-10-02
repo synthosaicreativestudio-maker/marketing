@@ -148,7 +148,19 @@ def appeals_command_handler(auth_service: AuthService, appeals_service: AppealsS
                 }.get(appeal.get('статус', '').lower(), '❓')
                 
                 message += f"{i}. {status_emoji} {appeal.get('статус', 'неизвестно')}\n"
-                message += f"   📝 {appeal.get('текст_обращений', '')[:100]}{'...' if len(appeal.get('текст_обращений', '')) > 100 else ''}\n"
+                
+                # Показываем последние обращения (первые 2 строки)
+                appeals_text = appeal.get('текст_обращений', '')
+                if appeals_text:
+                    lines = appeals_text.split('\n')
+                    recent_appeals = lines[:2]  # Показываем только последние 2 обращения
+                    for appeal_line in recent_appeals:
+                        if appeal_line.strip():
+                            message += f"   📝 {appeal_line[:80]}{'...' if len(appeal_line) > 80 else ''}\n"
+                    
+                    if len(lines) > 2:
+                        message += f"   ... и ещё {len(lines) - 2} обращений\n"
+                
                 if appeal.get('специалист_ответ'):
                     message += f"   💬 Ответ: {appeal.get('специалист_ответ', '')[:100]}{'...' if len(appeal.get('специалист_ответ', '')) > 100 else ''}\n"
                 message += f"   🕒 {appeal.get('время_обновления', '')}\n\n"

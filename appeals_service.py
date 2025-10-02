@@ -42,7 +42,7 @@ class AppealsService:
 
     def create_appeal(self, code: str, phone: str, fio: str, telegram_id: int, text: str) -> bool:
         """
-        Создает новое обращение в листе.
+        Создает или обновляет обращение в листе (накопление в одной ячейке).
         
         Args:
             code: код партнера
@@ -52,39 +52,113 @@ class AppealsService:
             text: текст обращения
             
         Returns:
-            bool: True если обращение создано успешно
+            bool: True если обращение создано/обновлено успешно
         """
         if not self.is_available():
             logger.error("Сервис обращений недоступен")
             return False
 
         try:
-            # Находим первую пустую строку
-            all_values = self.worksheet.get_all_values()
-            next_row = len(all_values) + 1
+            # Ищем существующую строку для этого telegram_id
+            records = self.worksheet.get_all_records()
+            existing_row = None
             
-            # Подготавливаем данные для записи
+            for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    existing_row = i
+                    break
+            
             timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            row_data = [
-                code,
-                phone,
-                fio,
-                str(telegram_id),
-                text,
-                'новое',  # статус
-                '',  # специалист_ответ (пустой)
-                timestamp  # время_обновления
-            ]
+            new_appeal = f"{timestamp}: {text}"
             
-            # Записываем данные
-            self.worksheet.append_row(row_data)
+            if existing_row:
+                # Обновляем существующую строку
+                current_appeals = self.worksheet.cell(existing_row, 5).value or ""  # колонка E
+                
+                # Добавляем новое обращение сверху
+                if current_appeals.strip():
+                    updated_appeals = f"{new_appeal}\n{current_appeals}"
+                else:
+                    updated_appeals = new_appeal
+                
+                # Очищаем старые обращения (>30 дней)
+                updated_appeals = self._cleanup_old_appeals(updated_appeals)
+                
+                # Обновляем ячейку с обращениями
+                self.worksheet.update(f'E{existing_row}', updated_appeals)
+                
+                # Обновляем время последнего обновления
+                self.worksheet.update(f'H{existing_row}', timestamp)
+                
+                logger.info(f"Обновлено обращение для пользователя {telegram_id} (строка {existing_row})")
+            else:
+                # Создаем новую строку
+                next_row = len(records) + 2  # +2 потому что records не включает заголовок
+                
+                row_data = [
+                    code,
+                    phone,
+                    fio,
+                    str(telegram_id),
+                    new_appeal,  # текст_обращений
+                    'новое',  # статус
+                    '',  # специалист_ответ (пустой)
+                    timestamp  # время_обновления
+                ]
+                
+                self.worksheet.append_row(row_data)
+                logger.info(f"Создано новое обращение для пользователя {telegram_id} (строка {next_row})")
             
-            logger.info(f"Создано обращение для пользователя {telegram_id} (код: {code})")
             return True
             
         except Exception as e:
-            logger.error(f"Ошибка создания обращения: {e}")
+            logger.error(f"Ошибка создания/обновления обращения: {e}")
             return False
+
+    def _cleanup_old_appeals(self, appeals_text: str) -> str:
+        """
+        Очищает обращения старше 30 дней.
+        
+        Args:
+            appeals_text: текст с обращениями
+            
+        Returns:
+            str: очищенный текст
+        """
+        try:
+            if not appeals_text.strip():
+                return appeals_text
+                
+            cutoff_date = datetime.datetime.now() - datetime.timedelta(days=30)
+            lines = appeals_text.split('\n')
+            cleaned_lines = []
+            
+            for line in lines:
+                if not line.strip():
+                    continue
+                    
+                # Пытаемся извлечь дату из начала строки (формат: YYYY-MM-DD HH:MM:SS)
+                try:
+                    if len(line) >= 19 and line[4] == '-' and line[7] == '-':
+                        date_str = line[:19]
+                        appeal_date = datetime.datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+                        
+                        if appeal_date >= cutoff_date:
+                            cleaned_lines.append(line)
+                        else:
+                            logger.debug(f"Удалено старое обращение: {line[:50]}...")
+                    else:
+                        # Если не удается распарсить дату, оставляем строку
+                        cleaned_lines.append(line)
+                except ValueError:
+                    # Если ошибка парсинга даты, оставляем строку
+                    cleaned_lines.append(line)
+            
+            return '\n'.join(cleaned_lines)
+            
+        except Exception as e:
+            logger.error(f"Ошибка очистки старых обращений: {e}")
+            return appeals_text
 
     def get_user_appeals(self, telegram_id: int) -> List[Dict]:
         """
@@ -184,3 +258,81 @@ class AppealsService:
         except Exception as e:
             logger.error(f"Ошибка получения всех обращений: {e}")
             return []
+
+    def check_for_responses(self) -> List[Dict]:
+        """
+        Проверяет наличие новых ответов специалистов в колонке G.
+        
+        Returns:
+            List[Dict]: список записей с новыми ответами для отправки
+        """
+        if not self.is_available():
+            logger.error("Сервис обращений недоступен")
+            return []
+
+        try:
+            records = self.worksheet.get_all_records()
+            responses_to_send = []
+            
+            for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
+                specialist_answer = record.get('специалист_ответ', '').strip()
+                telegram_id = record.get('telegram_id', '')
+                
+                if specialist_answer and telegram_id:
+                    responses_to_send.append({
+                        'row': i,
+                        'telegram_id': int(telegram_id),
+                        'response': specialist_answer,
+                        'code': record.get('код', ''),
+                        'fio': record.get('ФИО', '')
+                    })
+            
+            if responses_to_send:
+                logger.info(f"Найдено {len(responses_to_send)} ответов для отправки")
+            
+            return responses_to_send
+            
+        except Exception as e:
+            logger.error(f"Ошибка проверки ответов: {e}")
+            return []
+
+    def clear_response(self, row: int) -> bool:
+        """
+        Очищает ответ специалиста в указанной строке.
+        
+        Args:
+            row: номер строки для очистки
+            
+        Returns:
+            bool: True если очистка прошла успешно
+        """
+        if not self.is_available():
+            logger.error("Сервис обращений недоступен")
+            return False
+
+        try:
+            # Очищаем колонку G (специалист_ответ)
+            self.worksheet.update(f'G{row}', '')
+            logger.info(f"Очищен ответ специалиста в строке {row}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка очистки ответа в строке {row}: {e}")
+            return False
+
+    def has_records(self) -> bool:
+        """
+        Проверяет, есть ли записи в таблице.
+        
+        Returns:
+            bool: True если есть записи
+        """
+        if not self.is_available():
+            return False
+
+        try:
+            records = self.worksheet.get_all_records()
+            return len(records) > 0
+        except Exception as e:
+            logger.error(f"Ошибка проверки наличия записей: {e}")
+            return False

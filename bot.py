@@ -10,6 +10,7 @@ from auth_service import AuthService
 from handlers import setup_handlers
 from openai_service import OpenAIService
 from appeals_service import AppealsService
+from response_monitor import ResponseMonitor
 
 # .env уже загружен выше
 
@@ -48,6 +49,14 @@ def main() -> None:
     if not appeals_service.is_available():
         logger.warning("AppealsService отключен: лист 'обращения' недоступен")
 
+    # Инициализация монитора ответов
+    logger.info("Инициализация ResponseMonitor...")
+    response_monitor = ResponseMonitor(appeals_service, token)
+    if appeals_service.is_available():
+        logger.info("ResponseMonitor готов к работе")
+    else:
+        logger.warning("ResponseMonitor отключен: AppealsService недоступен")
+
     # --- Создание и настройка приложения ---
     logger.info("Создание экземпляра бота...")
     application = Application.builder().token(token).build()
@@ -61,12 +70,32 @@ def main() -> None:
         logger.error(f"Ошибка регистрации обработчиков: {e}")
         return
 
+    # --- Запуск мониторинга ответов ---
+    if appeals_service.is_available():
+        logger.info("Запуск мониторинга ответов специалистов...")
+        try:
+            # Запускаем мониторинг в фоновом режиме
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.create_task(response_monitor.start_monitoring(interval_seconds=60))
+            logger.info("Мониторинг ответов запущен (проверка каждую минуту)")
+        except Exception as e:
+            logger.error(f"Ошибка запуска мониторинга ответов: {e}")
+
     # --- Запуск бота ---
     logger.info("Запуск бота...")
     try:
         application.run_polling()
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
+    finally:
+        # Останавливаем мониторинг при завершении работы бота
+        if appeals_service.is_available():
+            try:
+                loop.run_until_complete(response_monitor.stop_monitoring())
+            except Exception as e:
+                logger.error(f"Ошибка остановки мониторинга: {e}")
 
 if __name__ == "__main__":
     main()
