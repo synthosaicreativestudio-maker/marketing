@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import asyncio
 from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
@@ -136,7 +137,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService):
             pass
 
         try:
-            reply = await context.application.run_in_executor(
+            reply = await asyncio.get_event_loop().run_in_executor(
                 None, openai_service.ask, user.id, text
             )
             if reply:
