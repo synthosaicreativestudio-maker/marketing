@@ -8,6 +8,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 
 from auth_service import AuthService
 from handlers import setup_handlers
+from openai_service import OpenAIService
 
 # .env уже загружен выше
 
@@ -34,6 +35,12 @@ def main() -> None:
         logger.critical("Не удалось инициализировать доступ к Google Sheets. Проверьте SHEET_ID/GCP_SA_JSON.")
         return
 
+    # Инициализация OpenAI (опционально)
+    logger.info("Инициализация OpenAIService (Assistants Threads)...")
+    openai_service = OpenAIService()
+    if not openai_service.is_enabled():
+        logger.warning("OpenAIService отключен: отсутствуют OPENAI_API_KEY/OPENAI_ASSISTANT_ID")
+
     # --- Создание и настройка приложения ---
     logger.info("Создание экземпляра бота...")
     application = Application.builder().token(token).build()
@@ -41,7 +48,7 @@ def main() -> None:
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
     try:
-        setup_handlers(application, auth_service)
+        setup_handlers(application, auth_service, openai_service)
         logger.info("Обработчики успешно зарегистрированы")
     except Exception as e:
         logger.error(f"Ошибка регистрации обработчиков: {e}")

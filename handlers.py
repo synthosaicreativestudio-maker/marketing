@@ -5,6 +5,7 @@ from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, Re
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from auth_service import AuthService
+from openai_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +13,11 @@ def get_web_app_url() -> str:
     """Ленивое чтение URL WebApp из окружения (после загрузки .env)."""
     return os.getenv("WEB_APP_URL") or ""
 
-def setup_handlers(application, auth_service: AuthService):
+def setup_handlers(application, auth_service: AuthService, openai_service: OpenAIService):
     """Регистрирует все обработчики в приложении."""
     application.add_handler(CommandHandler("start", start_command_handler(auth_service)))
     application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data_handler(auth_service)))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler(auth_service, openai_service)))
 
 def start_command_handler(auth_service: AuthService):
     """Фабрика для создания обработчика /start с доступом к сервису авторизации."""
@@ -101,3 +103,52 @@ def web_app_data_handler(auth_service: AuthService):
             await update.message.reply_text("Произошла внутренняя ошибка. Мы уже работаем над этим.")
 
     return handle_data
+
+
+def chat_handler(auth_service: AuthService, openai_service: OpenAIService):
+    """Фабрика обработчика для свободного чата с ассистентом через Threads API.
+
+    Доступно только авторизованным пользователям. При отключенном OpenAIService — вежливое сообщение.
+    """
+    async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+        text = update.effective_message.text or ""
+        logger.info(f"Текстовое сообщение от {user.id}: {text}")
+
+        # Проверка авторизации
+        if not auth_service.get_user_auth_status(user.id):
+            await update.message.reply_text(
+                "Для использования ассистента требуется авторизация. Нажмите кнопку авторизации /start."
+            )
+            return
+
+        # Проверка доступности OpenAI
+        if not openai_service or not openai_service.is_enabled():
+            await update.message.reply_text(
+                "Ассистент временно недоступен. Повторите позже."
+            )
+            return
+
+        # Индикация набора
+        try:
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+        except Exception:
+            pass
+
+        try:
+            reply = await context.application.run_in_executor(
+                None, openai_service.ask, user.id, text
+            )
+            if reply:
+                await update.message.reply_text(reply)
+            else:
+                await update.message.reply_text(
+                    "Не удалось получить ответ ассистента. Попробуйте ещё раз."
+                )
+        except Exception as e:
+            logger.error(f"Ошибка при обращении к OpenAI: {e}")
+            await update.message.reply_text(
+                "Произошла ошибка при обращении к ассистенту. Попробуйте позже."
+            )
+
+    return handle_chat
