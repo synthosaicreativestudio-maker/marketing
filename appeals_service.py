@@ -344,3 +344,54 @@ class AppealsService:
         except Exception as e:
             logger.error(f"Ошибка проверки наличия записей: {e}")
             return False
+
+    def add_specialist_response(self, telegram_id: int, response_text: str) -> bool:
+        """
+        Добавляет ответ специалиста к существующим обращениям пользователя.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            response_text: текст ответа специалиста
+            
+        Returns:
+            bool: True если ответ добавлен успешно
+        """
+        if not self.is_available():
+            logger.error("Сервис обращений недоступен")
+            return False
+
+        try:
+            # Ищем существующую строку для этого telegram_id
+            records = self.worksheet.get_all_records()
+            existing_row = None
+            
+            for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    existing_row = i
+                    break
+            
+            if existing_row:
+                # Получаем текущие обращения
+                current_appeals = self.worksheet.cell(existing_row, 5).value or ""  # колонка E
+                
+                # Добавляем ответ специалиста сверху
+                if current_appeals.strip():
+                    updated_appeals = f"{response_text}\n{current_appeals}"
+                else:
+                    updated_appeals = response_text
+                
+                # Обновляем ячейку с обращениями
+                self.worksheet.batch_update([{
+                    'range': f'E{existing_row}',
+                    'values': [[updated_appeals]]
+                }])
+                
+                logger.info(f"Ответ специалиста добавлен для пользователя {telegram_id} (строка {existing_row})")
+                return True
+            else:
+                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка добавления ответа специалиста: {e}")
+            return False

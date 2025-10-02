@@ -20,7 +20,7 @@ def setup_handlers(application, auth_service: AuthService, openai_service: OpenA
     application.add_handler(CommandHandler("start", start_command_handler(auth_service)))
     application.add_handler(CommandHandler("appeals", appeals_command_handler(auth_service, appeals_service)))
     application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data_handler(auth_service)))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler(auth_service, openai_service, appeals_service)))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.StatusUpdate.WEB_APP_DATA, chat_handler(auth_service, openai_service, appeals_service)))
 
 def start_command_handler(auth_service: AuthService):
     """Фабрика для создания обработчика /start с доступом к сервису авторизации."""
