@@ -9,6 +9,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 from auth_service import AuthService
 from handlers import setup_handlers
 from openai_service import OpenAIService
+from appeals_service import AppealsService
 
 # .env уже загружен выше
 
@@ -41,6 +42,12 @@ def main() -> None:
     if not openai_service.is_enabled():
         logger.warning("OpenAIService отключен: отсутствуют OPENAI_API_KEY/OPENAI_ASSISTANT_ID")
 
+    # Инициализация сервиса обращений
+    logger.info("Инициализация AppealsService...")
+    appeals_service = AppealsService()
+    if not appeals_service.is_available():
+        logger.warning("AppealsService отключен: лист 'обращения' недоступен")
+
     # --- Создание и настройка приложения ---
     logger.info("Создание экземпляра бота...")
     application = Application.builder().token(token).build()
@@ -48,7 +55,7 @@ def main() -> None:
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
     try:
-        setup_handlers(application, auth_service, openai_service)
+        setup_handlers(application, auth_service, openai_service, appeals_service)
         logger.info("Обработчики успешно зарегистрированы")
     except Exception as e:
         logger.error(f"Ошибка регистрации обработчиков: {e}")

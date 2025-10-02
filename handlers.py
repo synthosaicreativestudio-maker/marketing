@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from auth_service import AuthService
 from openai_service import OpenAIService
+from appeals_service import AppealsService
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +15,12 @@ def get_web_app_url() -> str:
     """Ленивое чтение URL WebApp из окружения (после загрузки .env)."""
     return os.getenv("WEB_APP_URL") or ""
 
-def setup_handlers(application, auth_service: AuthService, openai_service: OpenAIService):
+def setup_handlers(application, auth_service: AuthService, openai_service: OpenAIService, appeals_service: AppealsService):
     """Регистрирует все обработчики в приложении."""
     application.add_handler(CommandHandler("start", start_command_handler(auth_service)))
+    application.add_handler(CommandHandler("appeals", appeals_command_handler(auth_service, appeals_service)))
     application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data_handler(auth_service)))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler(auth_service, openai_service)))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler(auth_service, openai_service, appeals_service)))
 
 def start_command_handler(auth_service: AuthService):
     """Фабрика для создания обработчика /start с доступом к сервису авторизации."""
@@ -106,7 +108,63 @@ def web_app_data_handler(auth_service: AuthService):
     return handle_data
 
 
-def chat_handler(auth_service: AuthService, openai_service: OpenAIService):
+def appeals_command_handler(auth_service: AuthService, appeals_service: AppealsService):
+    """Фабрика обработчика команды /appeals для просмотра обращений."""
+    async def handle_appeals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+        logger.info(f"Команда /appeals от пользователя {user.id}")
+
+        # Проверка авторизации
+        if not auth_service.get_user_auth_status(user.id):
+            await update.message.reply_text(
+                "Для просмотра обращений требуется авторизация. Нажмите кнопку авторизации /start."
+            )
+            return
+
+        # Проверка доступности сервиса обращений
+        if not appeals_service or not appeals_service.is_available():
+            await update.message.reply_text(
+                "Сервис обращений временно недоступен. Повторите позже."
+            )
+            return
+
+        try:
+            appeals = appeals_service.get_user_appeals(user.id)
+            
+            if not appeals:
+                await update.message.reply_text(
+                    "У вас пока нет обращений. Отправьте любое сообщение, чтобы создать обращение."
+                )
+                return
+
+            # Формируем список обращений
+            message = "📋 Ваши обращения:\n\n"
+            for i, appeal in enumerate(appeals, 1):
+                status_emoji = {
+                    'новое': '🆕',
+                    'в обработке': '⏳',
+                    'решено': '✅',
+                    'закрыто': '🔒'
+                }.get(appeal.get('статус', '').lower(), '❓')
+                
+                message += f"{i}. {status_emoji} {appeal.get('статус', 'неизвестно')}\n"
+                message += f"   📝 {appeal.get('текст_обращений', '')[:100]}{'...' if len(appeal.get('текст_обращений', '')) > 100 else ''}\n"
+                if appeal.get('специалист_ответ'):
+                    message += f"   💬 Ответ: {appeal.get('специалист_ответ', '')[:100]}{'...' if len(appeal.get('специалист_ответ', '')) > 100 else ''}\n"
+                message += f"   🕒 {appeal.get('время_обновления', '')}\n\n"
+
+            await update.message.reply_text(message)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении обращений: {e}")
+            await update.message.reply_text(
+                "Произошла ошибка при получении обращений. Попробуйте позже."
+            )
+
+    return handle_appeals
+
+
+def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appeals_service: AppealsService):
     """Фабрика обработчика для свободного чата с ассистентом через Threads API.
 
     Доступно только авторизованным пользователям. При отключенном OpenAIService — вежливое сообщение.
@@ -123,10 +181,32 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService):
             )
             return
 
+        # Создаем обращение в таблице
+        if appeals_service and appeals_service.is_available():
+            try:
+                # Получаем данные пользователя из таблицы авторизации
+                records = auth_service.worksheet.get_all_records()
+                user_data = None
+                for record in records:
+                    if str(record.get('Telegram ID', '')) == str(user.id):
+                        user_data = record
+                        break
+                
+                if user_data:
+                    appeals_service.create_appeal(
+                        code=user_data.get('Код партнера', ''),
+                        phone=user_data.get('Телефон партнера', ''),
+                        fio=user_data.get('ФИО партнера', ''),
+                        telegram_id=user.id,
+                        text=text
+                    )
+            except Exception as e:
+                logger.warning(f"Не удалось создать обращение: {e}")
+
         # Проверка доступности OpenAI
         if not openai_service or not openai_service.is_enabled():
             await update.message.reply_text(
-                "Ассистент временно недоступен. Повторите позже."
+                "Ассистент временно недоступен. Ваше обращение записано, специалист ответит позже."
             )
             return
 
