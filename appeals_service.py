@@ -6,7 +6,7 @@
 import logging
 import datetime
 from typing import Optional, List, Dict
-from sheets import _get_client_and_sheet, SheetsNotConfiguredError
+from sheets import _get_appeals_client_and_sheet, SheetsNotConfiguredError
 
 logger = logging.getLogger(__name__)
 
@@ -18,16 +18,11 @@ class AppealsService:
         """Инициализация сервиса обращений."""
         self.worksheet = None
         try:
-            client, worksheet = _get_client_and_sheet()
-            # Ищем лист 'обращения'
-            spreadsheet = worksheet.spreadsheet
-            for ws in spreadsheet.worksheets():
-                if 'обращения' in ws.title.lower():
-                    self.worksheet = ws
-                    break
+            client, worksheet = _get_appeals_client_and_sheet()
+            self.worksheet = worksheet
             
             if not self.worksheet:
-                logger.critical("Лист 'обращения' не найден в таблице")
+                logger.critical("Не удалось подключиться к таблице обращений")
             else:
                 logger.info(f"Лист 'обращения' найден: {self.worksheet.title}")
                 

@@ -83,6 +83,42 @@ def _get_client_and_sheet():
         raise SheetsNotConfiguredError(f'Google Sheets connection failed: {e}')
 
 
+def _get_appeals_client_and_sheet():
+    """Получение клиента и листа для таблицы обращений"""
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        
+        sa_info = _load_service_account()
+        scopes = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        
+        creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
+        client = gspread.authorize(creds)
+        
+        sheet_id = os.environ.get('APPEALS_SHEET_ID')
+        if not sheet_id:
+            raise SheetsNotConfiguredError('APPEALS_SHEET_ID not provided')
+        
+        spreadsheet = client.open_by_key(sheet_id)
+        sheet_name = os.environ.get('APPEALS_SHEET_NAME', 'обращения')
+        try:
+            worksheet = spreadsheet.worksheet(sheet_name)
+        except Exception as e:
+            logger.warning(f"Appeals worksheet '{sheet_name}' not found ({e}). Falling back to first sheet.")
+            worksheet = spreadsheet.sheet1
+
+        return client, worksheet
+    
+    except ImportError as e:
+        raise SheetsNotConfiguredError(f'Import error: {e}')
+    except Exception as e:
+        logger.error(f"Failed to connect to Appeals Google Sheets: {e}")
+        raise SheetsNotConfiguredError(f'Appeals Google Sheets connection failed: {e}')
+
+
 def find_row_by_partner_and_phone(partner_code: str, phone_norm: str) -> Optional[int]:
     """Поиск строки по коду партнера и телефону.
 
