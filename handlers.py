@@ -196,6 +196,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
         # Создаем обращение в таблице
         if appeals_service and appeals_service.is_available():
             try:
+                logger.info(f"Попытка создать обращение для пользователя {user.id}")
                 # Получаем данные пользователя из таблицы авторизации
                 records = auth_service.worksheet.get_all_records()
                 user_data = None
@@ -205,15 +206,19 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                         break
                 
                 if user_data:
-                    appeals_service.create_appeal(
+                    logger.info(f"Найдены данные пользователя: {user_data}")
+                    result = appeals_service.create_appeal(
                         code=user_data.get('Код партнера', ''),
                         phone=user_data.get('Телефон партнера', ''),
                         fio=user_data.get('ФИО партнера', ''),
                         telegram_id=user.id,
                         text=text
                     )
+                    logger.info(f"Результат создания обращения: {result}")
+                else:
+                    logger.warning(f"Данные пользователя {user.id} не найдены в таблице авторизации")
             except Exception as e:
-                logger.warning(f"Не удалось создать обращение: {e}")
+                logger.error(f"Ошибка при создании обращения: {e}", exc_info=True)
 
         # Проверка доступности OpenAI
         if not openai_service or not openai_service.is_enabled():

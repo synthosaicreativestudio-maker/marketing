@@ -54,13 +54,18 @@ class AppealsService:
             return False
 
         try:
+            logger.info(f"Создание обращения для telegram_id={telegram_id}, code={code}, phone={phone}, fio={fio}")
             # Ищем существующую строку для этого telegram_id
             records = self.worksheet.get_all_records()
+            logger.info(f"Получено {len(records)} записей из таблицы обращений")
             existing_row = None
             
             for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
-                if str(record.get('telegram_id', '')) == str(telegram_id):
+                record_telegram_id = str(record.get('telegram_id', ''))
+                logger.info(f"Проверка записи {i}: telegram_id='{record_telegram_id}' vs '{telegram_id}'")
+                if record_telegram_id == str(telegram_id):
                     existing_row = i
+                    logger.info(f"Найдена существующая строка {i} для telegram_id {telegram_id}")
                     break
             
             timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -89,6 +94,7 @@ class AppealsService:
             else:
                 # Создаем новую строку
                 next_row = len(records) + 2  # +2 потому что records не включает заголовок
+                logger.info(f"Создание новой строки {next_row} для telegram_id {telegram_id}")
                 
                 row_data = [
                     code,
@@ -101,6 +107,7 @@ class AppealsService:
                     timestamp  # время_обновления
                 ]
                 
+                logger.info(f"Данные для записи: {row_data}")
                 self.worksheet.append_row(row_data)
                 logger.info(f"Создано новое обращение для пользователя {telegram_id} (строка {next_row})")
             

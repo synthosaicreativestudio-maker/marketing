@@ -9,8 +9,10 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 from auth_service import AuthService
 from handlers import setup_handlers
 from openai_service import OpenAIService
-from appeals_service import AppealsService
 from response_monitor import ResponseMonitor
+
+# Импортируем AppealsService после загрузки переменных окружения
+from appeals_service import AppealsService
 
 # .env уже загружен выше
 
