@@ -445,3 +445,34 @@ class AppealsService:
         except Exception as e:
             logger.error(f"Ошибка установки статуса 'в работе': {e}")
             return False
+
+    def get_appeal_status(self, telegram_id: int) -> str:
+        """
+        Получает статус обращения пользователя.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            
+        Returns:
+            str: статус обращения или 'новое' если не найден
+        """
+        if not self.is_available():
+            logger.error("Сервис обращений недоступен")
+            return 'новое'
+
+        try:
+            # Ищем существующую строку для этого telegram_id
+            records = self.worksheet.get_all_records()
+            
+            for record in records:
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    status = record.get('статус', 'новое')
+                    logger.info(f"Найден статус для пользователя {telegram_id}: {status}")
+                    return status
+            
+            logger.info(f"Статус для пользователя {telegram_id} не найден, возвращаем 'новое'")
+            return 'новое'
+                
+        except Exception as e:
+            logger.error(f"Ошибка получения статуса обращения: {e}")
+            return 'новое'

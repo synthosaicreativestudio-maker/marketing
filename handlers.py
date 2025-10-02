@@ -237,6 +237,15 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             )
             return
 
+        # Проверяем статус обращения пользователя
+        appeal_status = None
+        if appeals_service and appeals_service.is_available():
+            try:
+                appeal_status = appeals_service.get_appeal_status(user.id)
+                logger.info(f"Статус обращения пользователя {user.id}: {appeal_status}")
+            except Exception as e:
+                logger.error(f"Ошибка при получении статуса обращения: {e}")
+
         # Создаем обращение в таблице
         if appeals_service and appeals_service.is_available():
             try:
@@ -282,6 +291,12 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 None, openai_service.ask, user.id, text
             )
             if reply:
+                # Добавляем информацию о статусе обращения к ответу
+                if appeal_status == 'в работе':
+                    reply += "\n\n📋 *Ваше обращение передано специалисту и находится в работе. Специалист ответит в ближайшее время.*"
+                elif appeal_status == 'решено':
+                    reply += "\n\n✅ *Ваше обращение решено специалистом. Если у вас есть новые вопросы, можете задать их здесь.*"
+                
                 # Проверяем, просит ли пользователь соединить со специалистом
                 if _should_show_specialist_button(text):
                     # Создаем инлайн кнопку "Обратиться к специалисту"
@@ -290,11 +305,12 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                     
                     await update.message.reply_text(
                         reply,
-                        reply_markup=reply_markup
+                        reply_markup=reply_markup,
+                        parse_mode='Markdown'
                     )
                 else:
                     # Отправляем обычный ответ без кнопки
-                    await update.message.reply_text(reply)
+                    await update.message.reply_text(reply, parse_mode='Markdown')
             else:
                 await update.message.reply_text(
                     "Не удалось получить ответ ассистента. Попробуйте ещё раз."
