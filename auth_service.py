@@ -1,6 +1,8 @@
 import logging
 import datetime
-from typing import Optional
+from typing import Optional, Dict
+import json
+import os
 
 from sheets import (
     _get_client_and_sheet,
@@ -22,6 +24,9 @@ class AuthService:
         - GCP_SA_JSON или GCP_SA_FILE (обязательно один из)
         """
         self.worksheet = None
+        self.auth_cache_file = "auth_cache.json"
+        self.auth_cache = self._load_auth_cache()
+        
         try:
             _, worksheet = _get_client_and_sheet()
             self.worksheet = worksheet
@@ -30,6 +35,50 @@ class AuthService:
             logger.critical(f"Sheets не сконфигурирован: {e}")
         except Exception as e:
             logger.critical(f"Не удалось инициализировать доступ к Google Sheets: {e}")
+
+    def _load_auth_cache(self) -> Dict:
+        """Загружает кэш авторизации из файла."""
+        try:
+            if os.path.exists(self.auth_cache_file):
+                with open(self.auth_cache_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"Ошибка загрузки кэша авторизации: {e}")
+        return {}
+
+    def _save_auth_cache(self):
+        """Сохраняет кэш авторизации в файл."""
+        try:
+            with open(self.auth_cache_file, 'w', encoding='utf-8') as f:
+                json.dump(self.auth_cache, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"Ошибка сохранения кэша авторизации: {e}")
+
+    def _is_auth_cache_valid(self, telegram_id: int) -> bool:
+        """Проверяет, действителен ли кэш авторизации для пользователя (24 часа)."""
+        if str(telegram_id) not in self.auth_cache:
+            return False
+        
+        cache_time = self.auth_cache[str(telegram_id)].get('timestamp')
+        if not cache_time:
+            return False
+        
+        try:
+            cache_datetime = datetime.datetime.fromisoformat(cache_time)
+            now = datetime.datetime.now()
+            # Проверяем, прошло ли менее 24 часов
+            return (now - cache_datetime).total_seconds() < 24 * 3600
+        except Exception as e:
+            logger.warning(f"Ошибка проверки времени кэша: {e}")
+            return False
+
+    def _update_auth_cache(self, telegram_id: int, is_authorized: bool):
+        """Обновляет кэш авторизации для пользователя."""
+        self.auth_cache[str(telegram_id)] = {
+            'is_authorized': is_authorized,
+            'timestamp': datetime.datetime.now().isoformat()
+        }
+        self._save_auth_cache()
 
     def find_and_update_user(self, partner_code: str, partner_phone: str, telegram_id: int) -> bool:
         """
@@ -71,6 +120,8 @@ class AuthService:
                     logger.warning(f"Не удалось записать дату авторизации: {e}")
 
                 logger.info(f"Пользователь с кодом {partner_code} успешно авторизован.")
+                # Обновляем кэш авторизации
+                self._update_auth_cache(telegram_id, True)
                 return True
 
             logger.warning(
@@ -84,9 +135,17 @@ class AuthService:
     def get_user_auth_status(self, telegram_id: int) -> bool:
         """
         Проверяет статус авторизации пользователя по Telegram ID.
+        Использует кэш для проверки раз в сутки.
         """
         logger.info(f"Проверка статуса авторизации для пользователя {telegram_id}")
         
+        # Сначала проверяем кэш
+        if self._is_auth_cache_valid(telegram_id):
+            cached_result = self.auth_cache[str(telegram_id)]['is_authorized']
+            logger.info(f"Используем кэшированный результат авторизации: {cached_result}")
+            return cached_result
+        
+        # Если кэш недействителен, проверяем в таблице
         if not self.worksheet:
             logger.error("Worksheet не инициализирован (Sheets конфигурация отсутствует).")
             return False
@@ -104,18 +163,63 @@ class AuthService:
                 logger.info(f"Сравнение Telegram ID: в таблице='{telegram_id_in_sheet}' vs запрашиваемый='{telegram_id}'")
                 
                 if str(telegram_id_in_sheet) == str(telegram_id):
-                # Проверяем статус в колонке 'Статус' или 'Статус авторизации'
+                    # Проверяем статус в колонке 'Статус' или 'Статус авторизации'
                     status = row.get('Статус') or row.get('Статус авторизации')
                     logger.info(f"Найден пользователь с Telegram ID {telegram_id}, статус: {status}")
                     status_norm = str(status or '').strip().lower()
                     result = status_norm in ("авторизован", "authorized")
                     logger.info(f"Результат проверки авторизации: {result}")
+                    
+                    # Обновляем кэш
+                    self._update_auth_cache(telegram_id, result)
                     return result
                 else:
                     logger.info(f"Запись {i+1} не соответствует запрашиваемому Telegram ID")
                     
             logger.info(f"Пользователь с Telegram ID {telegram_id} не найден в таблице")
+            # Обновляем кэш с результатом "не авторизован"
+            self._update_auth_cache(telegram_id, False)
             return False
         except Exception as e:
             logger.error(f"Ошибка при проверке статуса пользователя: {e}")
+            return False
+
+    def force_check_auth_status(self, telegram_id: int) -> bool:
+        """
+        Принудительно проверяет статус авторизации пользователя, игнорируя кэш.
+        Используется для обновления кэша при изменении статуса в таблице.
+        """
+        logger.info(f"Принудительная проверка статуса авторизации для пользователя {telegram_id}")
+        
+        if not self.worksheet:
+            logger.error("Worksheet не инициализирован (Sheets конфигурация отсутствует).")
+            return False
+
+        try:
+            logger.info("Получение всех записей из таблицы для принудительной проверки...")
+            records = self.worksheet.get_all_records()
+            logger.info(f"Получено {len(records)} записей из таблицы для принудительной проверки")
+            
+            for i, row in enumerate(records):
+                # Проверяем, есть ли 'Telegram ID' в строке и совпадает ли он
+                telegram_id_in_sheet = row.get('Telegram ID')
+                
+                if str(telegram_id_in_sheet) == str(telegram_id):
+                    # Проверяем статус в колонке 'Статус' или 'Статус авторизации'
+                    status = row.get('Статус') or row.get('Статус авторизации')
+                    logger.info(f"Найден пользователь с Telegram ID {telegram_id}, статус: {status}")
+                    status_norm = str(status or '').strip().lower()
+                    result = status_norm in ("авторизован", "authorized")
+                    logger.info(f"Результат принудительной проверки авторизации: {result}")
+                    
+                    # Обновляем кэш
+                    self._update_auth_cache(telegram_id, result)
+                    return result
+                    
+            logger.info(f"Пользователь с Telegram ID {telegram_id} не найден в таблице")
+            # Обновляем кэш с результатом "не авторизован"
+            self._update_auth_cache(telegram_id, False)
+            return False
+        except Exception as e:
+            logger.error(f"Ошибка при принудительной проверке статуса пользователя: {e}")
             return False
