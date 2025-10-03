@@ -312,9 +312,9 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
 
         # Проверка доступности OpenAI
         if not openai_service or not openai_service.is_enabled():
-                        await update.message.reply_text(
-                            "Ассистент временно недоступен. Ваше обращение записано, специалист ответит позже."
-                        )
+            await update.message.reply_text(
+                "Ассистент временно недоступен. Ваше обращение записано, специалист ответит позже."
+            )
             return
 
         # Индикация набора
@@ -327,12 +327,12 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             reply = await asyncio.get_event_loop().run_in_executor(
                 None, openai_service.ask, user.id, text
             )
-                        if reply:
-                            # Отправляем ответ
-                            await update.message.reply_text(
-                                reply,
-                                parse_mode='Markdown'
-                            )
+            if reply:
+                # Отправляем ответ
+                await update.message.reply_text(
+                    reply,
+                    parse_mode='Markdown'
+                )
             else:
                 await update.message.reply_text(
                     "Не удалось получить ответ ассистента. Попробуйте ещё раз."
