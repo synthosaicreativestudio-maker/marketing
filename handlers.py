@@ -27,7 +27,6 @@ def create_main_menu_keyboard() -> ReplyKeyboardMarkup:
         ReplyKeyboardMarkup: клавиатура с кнопками меню
     """
     keyboard = [
-        ["📱 Главное меню"],
         ["👨‍💼 Обратиться к специалисту"],
         ["🤖 Продолжить с ассистентом"]
     ]
@@ -95,14 +94,23 @@ def start_command_handler(auth_service: AuthService):
             # Показываем SPA меню для авторизованных пользователей
             SPA_MENU_URL = get_spa_menu_url()
             if SPA_MENU_URL:
+                # Создаем клавиатуру с кнопкой "Личный кабинет" внизу
+                keyboard = [
+                    ["👨‍💼 Обратиться к специалисту"],
+                    ["🤖 Продолжить с ассистентом"]
+                ]
+                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+                
+                # Добавляем кнопку "Личный кабинет" как WebApp
                 keyboard_button = KeyboardButton(
-                    text="📱 Главное меню",
+                    text="👤 Личный кабинет",
                     web_app=WebAppInfo(url=SPA_MENU_URL)
                 )
-                reply_markup = ReplyKeyboardMarkup.from_button(keyboard_button, resize_keyboard=True)
+                reply_markup.keyboard.append([keyboard_button])
+                
                 await update.message.reply_text(
                     f"Добрый день, {user.first_name}! Добро пожаловать в MarketingBot! 🎯\n\n"
-                    "Выберите раздел в главном меню или задайте любой вопрос ассистенту.",
+                    "Выберите действие или откройте личный кабинет для доступа к разделам.",
                     reply_markup=reply_markup
                 )
             else:
@@ -167,13 +175,22 @@ def web_app_data_handler(auth_service: AuthService):
                 # Показываем SPA меню
                 SPA_MENU_URL = get_spa_menu_url()
                 if SPA_MENU_URL:
+                    # Создаем клавиатуру с кнопкой "Личный кабинет" внизу
+                    keyboard = [
+                        ["👨‍💼 Обратиться к специалисту"],
+                        ["🤖 Продолжить с ассистентом"]
+                    ]
+                    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+                    
+                    # Добавляем кнопку "Личный кабинет" как WebApp
                     keyboard_button = KeyboardButton(
-                        text="📱 Главное меню",
+                        text="👤 Личный кабинет",
                         web_app=WebAppInfo(url=SPA_MENU_URL)
                     )
-                    reply_markup = ReplyKeyboardMarkup.from_button(keyboard_button, resize_keyboard=True)
+                    reply_markup.keyboard.append([keyboard_button])
+                    
                     await update.message.reply_text(
-                        "Выберите раздел в главном меню или задайте любой вопрос ассистенту.",
+                        "Выберите действие или откройте личный кабинет для доступа к разделам.",
                         reply_markup=reply_markup
                     )
                 else:
@@ -288,26 +305,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             return
 
         # Обработка кнопок меню
-        if text == "📱 Главное меню":
-            SPA_MENU_URL = get_spa_menu_url()
-            if SPA_MENU_URL:
-                keyboard_button = KeyboardButton(
-                    text="📱 Главное меню",
-                    web_app=WebAppInfo(url=SPA_MENU_URL)
-                )
-                reply_markup = ReplyKeyboardMarkup.from_button(keyboard_button, resize_keyboard=True)
-                await update.message.reply_text(
-                    "Выберите раздел в главном меню:",
-                    reply_markup=reply_markup
-                )
-            else:
-                await update.message.reply_text(
-                    "Главное меню временно недоступно. Можете задать любой вопрос ассистенту.",
-                    reply_markup=create_main_menu_keyboard()
-                )
-            return
-        
-        elif text == "👨‍💼 Обратиться к специалисту":
+        if text == "👨‍💼 Обратиться к специалисту":
             if appeals_service and appeals_service.is_available():
                 try:
                     # Получаем данные пользователя из таблицы авторизации
