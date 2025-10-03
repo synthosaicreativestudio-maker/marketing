@@ -477,7 +477,7 @@ class AppealsService:
             logger.error(f"Ошибка получения статуса обращения: {e}")
             return 'новое'
 
-    def set_status_escalated(self, telegram_id: int) -> bool:
+    def set_status_in_work(self, telegram_id: int) -> bool:
         """
         Устанавливает статус обращения на 'в работе' с заливкой #f4cccc.
         

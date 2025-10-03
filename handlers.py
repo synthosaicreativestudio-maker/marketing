@@ -13,11 +13,17 @@ logger = logging.getLogger(__name__)
 
 def get_web_app_url() -> str:
     """Ленивое чтение URL WebApp из окружения (после загрузки .env)."""
-    return os.getenv("WEB_APP_URL") or ""
+    base_url = os.getenv("WEB_APP_URL") or ""
+    if base_url and not base_url.endswith('/'):
+        base_url += '/'
+    return base_url
 
 def get_spa_menu_url() -> str:
     """Ленивое чтение URL SPA меню из окружения."""
-    return os.getenv("WEB_APP_MENU_URL") or ""
+    base_url = os.getenv("WEB_APP_URL") or ""
+    if base_url and not base_url.endswith('/'):
+        base_url += '/'
+    return base_url + "menu.html"
 
 # Функция create_main_menu_keyboard() удалена - теперь используется только кнопка "Личный кабинет"
 
@@ -64,6 +70,46 @@ def _should_show_specialist_button(text: str) -> bool:
     
     return False
 
+
+def _is_user_escalation_request(text: str) -> bool:
+    """
+    Проверяет, просит ли пользователь соединить его со специалистом.
+    
+    Args:
+        text: текст сообщения пользователя
+        
+    Returns:
+        bool: True если пользователь просит специалиста
+    """
+    text_lower = text.lower()
+    
+    # Фразы, которые указывают на желание поговорить со специалистом
+    escalation_requests = [
+        'помочь не можете', 'не можете помочь', 'не можете помочь?',
+        'помощь нужна', 'нужна помощь', 'помогите',
+        'специалист нужен', 'нужен специалист',
+        'человек нужен', 'нужен человек',
+        'живой человек', 'живому человеку',
+        'менеджер нужен', 'нужен менеджер',
+        'оператор нужен', 'нужен оператор',
+        'консультант нужен', 'нужен консультант',
+        'соедините', 'соедини', 'соединиться',
+        'поговорить с человеком', 'поговорить с специалистом',
+        'позвонить', 'звонок', 'звонить',
+        'связаться с человеком', 'связаться со специалистом',
+        'поддержка нужна', 'нужна поддержка',
+        'не получается', 'не работает', 'проблема',
+        'сложно', 'не понимаю', 'не понятно',
+        'объясните', 'объясни', 'подробнее',
+        'детали нужны', 'нужны детали'
+    ]
+    
+    # Проверяем наличие фраз запроса эскалации
+    for phrase in escalation_requests:
+        if phrase in text_lower:
+            return True
+    
+    return False
 
 def _is_escalation_response(text: str) -> bool:
     """
@@ -124,9 +170,12 @@ def start_command_handler(auth_service: AuthService):
         logger.info(f"Пользователь {user.id} ({user.first_name}) запустил команду /start.")
 
         # Проверка статуса авторизации
-        if auth_service.get_user_auth_status(user.id):
+        auth_status = auth_service.get_user_auth_status(user.id)
+        logger.info(f"Статус авторизации для пользователя {user.id}: {auth_status}")
+        if auth_status:
             # Показываем SPA меню для авторизованных пользователей
             SPA_MENU_URL = get_spa_menu_url()
+            logger.info(f"SPA_MENU_URL для авторизованного пользователя: {SPA_MENU_URL}")
             if SPA_MENU_URL:
                 # Создаем клавиатуру только с кнопкой "Личный кабинет"
                 keyboard = [
@@ -148,6 +197,7 @@ def start_command_handler(auth_service: AuthService):
                 )
         else:
             WEB_APP_URL = get_web_app_url()
+            logger.info(f"WEB_APP_URL для неавторизованного пользователя: {WEB_APP_URL}")
             if WEB_APP_URL:
                 keyboard_button = KeyboardButton(
                     text="Авторизоваться в приложении",
@@ -355,6 +405,36 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             except Exception as e:
                 logger.error(f"Ошибка при создании обращения: {e}", exc_info=True)
 
+        # Проверяем, просит ли пользователь специалиста
+        if _is_user_escalation_request(text):
+            logger.info(f"Пользователь {user.id} просит специалиста: {text}")
+            
+            # Устанавливаем статус "в работе" в таблице обращений
+            if appeals_service and appeals_service.is_available():
+                try:
+                    success = appeals_service.set_status_in_work(user.id)
+                    if success:
+                        logger.info(f"Статус 'в работе' установлен для пользователя {user.id}")
+                        await update.message.reply_text(
+                            "✅ Ваше обращение передано специалисту отдела маркетинга. "
+                            "Статус изменен на 'в работе'. Специалист ответит в ближайшее время."
+                        )
+                    else:
+                        logger.warning(f"Не удалось установить статус 'в работе' для пользователя {user.id}")
+                        await update.message.reply_text(
+                            "Ваше обращение записано. Специалист свяжется с вами в ближайшее время."
+                        )
+                except Exception as e:
+                    logger.error(f"Ошибка при установке статуса эскалации: {e}")
+                    await update.message.reply_text(
+                        "Ваше обращение записано. Специалист свяжется с вами в ближайшее время."
+                    )
+            else:
+                await update.message.reply_text(
+                    "Ваше обращение записано. Специалист свяжется с вами в ближайшее время."
+                )
+            return
+
         # Проверка доступности OpenAI
         if not openai_service or not openai_service.is_enabled():
             await update.message.reply_text(
@@ -380,7 +460,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                     # Устанавливаем статус "в работе" в таблице обращений
                     if appeals_service and appeals_service.is_available():
                         try:
-                            success = appeals_service.set_status_escalated(user.id)
+                            success = appeals_service.set_status_in_work(user.id)
                             if success:
                                 logger.info(f"Статус 'в работе' установлен для пользователя {user.id}")
                             else:

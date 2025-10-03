@@ -126,6 +126,27 @@ class ResponseMonitor:
             except Exception as e:
                 logger.error(f"Ошибка записи ответа специалиста в таблицу: {e}")
             
+            # Обновляем статус на "решено" и очищаем ответ
+            try:
+                # Устанавливаем статус "решено" 
+                self.appeals_service.worksheet.batch_update([{
+                    'range': f'F{response_data["row"]}',
+                    'values': [['решено']]
+                }])
+                
+                # Убираем заливку (устанавливаем белый цвет)
+                self.appeals_service.worksheet.format(f'F{response_data["row"]}', {
+                    "backgroundColor": {
+                        "red": 1.0,
+                        "green": 1.0,
+                        "blue": 1.0
+                    }
+                })
+                
+                logger.info(f"Статус обновлен на 'решено' для строки {response_data['row']}")
+            except Exception as e:
+                logger.error(f"Ошибка обновления статуса: {e}")
+            
             # Очищаем ответ в таблице
             self.appeals_service.clear_response(response_data['row'])
             
