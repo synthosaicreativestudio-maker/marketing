@@ -97,16 +97,13 @@ def start_command_handler(auth_service: AuthService):
                 # Создаем клавиатуру с кнопкой "Личный кабинет" внизу
                 keyboard = [
                     ["👨‍💼 Обратиться к специалисту"],
-                    ["🤖 Продолжить с ассистентом"]
+                    ["🤖 Продолжить с ассистентом"],
+                    [KeyboardButton(
+                        text="👤 Личный кабинет",
+                        web_app=WebAppInfo(url=SPA_MENU_URL)
+                    )]
                 ]
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
-                
-                # Добавляем кнопку "Личный кабинет" как WebApp
-                keyboard_button = KeyboardButton(
-                    text="👤 Личный кабинет",
-                    web_app=WebAppInfo(url=SPA_MENU_URL)
-                )
-                reply_markup.keyboard.append([keyboard_button])
                 
                 await update.message.reply_text(
                     f"Добрый день, {user.first_name}! Добро пожаловать в MarketingBot! 🎯\n\n"
@@ -178,16 +175,13 @@ def web_app_data_handler(auth_service: AuthService):
                     # Создаем клавиатуру с кнопкой "Личный кабинет" внизу
                     keyboard = [
                         ["👨‍💼 Обратиться к специалисту"],
-                        ["🤖 Продолжить с ассистентом"]
+                        ["🤖 Продолжить с ассистентом"],
+                        [KeyboardButton(
+                            text="👤 Личный кабинет",
+                            web_app=WebAppInfo(url=SPA_MENU_URL)
+                        )]
                     ]
                     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
-                    
-                    # Добавляем кнопку "Личный кабинет" как WebApp
-                    keyboard_button = KeyboardButton(
-                        text="👤 Личный кабинет",
-                        web_app=WebAppInfo(url=SPA_MENU_URL)
-                    )
-                    reply_markup.keyboard.append([keyboard_button])
                     
                     await update.message.reply_text(
                         "Выберите действие или откройте личный кабинет для доступа к разделам.",
