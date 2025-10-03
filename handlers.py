@@ -64,6 +64,51 @@ def _should_show_specialist_button(text: str) -> bool:
     
     return False
 
+
+def _is_escalation_response(text: str) -> bool:
+    """
+    Проверяет, является ли ответ ассистента эскалацией к специалисту.
+    
+    Args:
+        text: текст ответа ассистента
+        
+    Returns:
+        bool: True если это эскалация к специалисту
+    """
+    text_lower = text.lower()
+    
+    # Фразы эскалации, которые использует ассистент
+    escalation_phrases = [
+        'передаю ваш запрос специалисту',
+        'передаю запрос специалисту',
+        'свяжу вас с ответственным',
+        'свяжу с ответственным',
+        'переведу на специалиста',
+        'передам специалисту отдела',
+        'передам специалисту',
+        'соединю с специалистом',
+        'соединяю с специалистом',
+        'передаю специалисту',
+        'передаю ваш вопрос специалисту',
+        'передаю вопрос специалисту',
+        'специалист свяжется с вами',
+        'специалист ответит',
+        'ответственный специалист',
+        'специалист отдела маркетинга',
+        'специалист отдела',
+        'передаю обращение специалисту',
+        'передаю обращение',
+        'специалист обработает',
+        'специалист рассмотрит'
+    ]
+    
+    # Проверяем наличие фраз эскалации
+    for phrase in escalation_phrases:
+        if phrase in text_lower:
+            return True
+    
+    return False
+
 def setup_handlers(application, auth_service: AuthService, openai_service: OpenAIService, appeals_service: AppealsService):
     """Регистрирует все обработчики в приложении."""
     application.add_handler(CommandHandler("start", start_command_handler(auth_service)))
@@ -328,6 +373,21 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 None, openai_service.ask, user.id, text
             )
             if reply:
+                # Проверяем, является ли ответ эскалацией к специалисту
+                if _is_escalation_response(reply):
+                    logger.info(f"Обнаружена эскалация для пользователя {user.id}")
+                    
+                    # Устанавливаем статус "эскалировано" в таблице обращений
+                    if appeals_service and appeals_service.is_available():
+                        try:
+                            success = appeals_service.set_status_escalated(user.id)
+                            if success:
+                                logger.info(f"Статус 'эскалировано' установлен для пользователя {user.id}")
+                            else:
+                                logger.warning(f"Не удалось установить статус 'эскалировано' для пользователя {user.id}")
+                        except Exception as e:
+                            logger.error(f"Ошибка при установке статуса эскалации: {e}")
+                
                 # Отправляем ответ
                 await update.message.reply_text(
                     reply,
