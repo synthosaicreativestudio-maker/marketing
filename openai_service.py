@@ -56,7 +56,8 @@ class OpenAIService:
             )
             if run.status in ("completed", "failed", "cancelled", "expired"):
                 return run.status
-            time.sleep(0.8)
+            # Убираем задержку для более быстрого ответа
+            time.sleep(0.1)
         return None
 
     def ask(self, user_id: int, content: str) -> Optional[str]:

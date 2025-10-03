@@ -22,11 +22,8 @@ def create_main_menu_keyboard() -> ReplyKeyboardMarkup:
     Returns:
         ReplyKeyboardMarkup: клавиатура с кнопками меню
     """
-    keyboard = [
-        ["👨‍💼 Обратиться к специалисту"],
-        ["🤖 Продолжить с ассистентом"]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+    # Убираем меню - пользователь может просто писать сообщения
+    return ReplyKeyboardRemove()
 
 def _should_show_specialist_button(text: str) -> bool:
     """
@@ -88,8 +85,7 @@ def start_command_handler(auth_service: AuthService):
         # Проверка статуса авторизации
         if auth_service.get_user_auth_status(user.id):
             await update.message.reply_text(
-                f"Добрый день, {user.first_name}! Вы уже авторизованы.",
-                reply_markup=create_main_menu_keyboard()
+                f"Добрый день, {user.first_name}! Вы уже авторизованы. Можете задать любой вопрос ассистенту."
             )
         else:
             WEB_APP_URL = get_web_app_url()
@@ -145,10 +141,9 @@ def web_app_data_handler(auth_service: AuthService):
                     "Авторизация прошла успешно! Добро пожаловать.",
                     reply_markup=ReplyKeyboardRemove()
                 )
-                # Показываем основное меню
+                # Уведомляем о готовности к работе
                 await update.message.reply_text(
-                    "Выберите действие:",
-                    reply_markup=create_main_menu_keyboard()
+                    "Теперь вы можете задать любой вопрос ассистенту."
                 )
             else:
                 logger.warning("Авторизация не удалась - данные не найдены")
@@ -256,56 +251,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             )
             return
 
-        # Обработка кнопок меню
-        if text == "👨‍💼 Обратиться к специалисту":
-            if appeals_service and appeals_service.is_available():
-                try:
-                    # Получаем данные пользователя из таблицы авторизации
-                    records = auth_service.worksheet.get_all_records()
-                    user_data = None
-                    for record in records:
-                        if str(record.get('Telegram ID', '')) == str(user.id):
-                            user_data = record
-                            break
-                    
-                    if user_data:
-                        # Меняем статус на "в работе" с заливкой
-                        success = appeals_service.set_status_in_work(user.id)
-                        if success:
-                            await update.message.reply_text(
-                                "✅ Ваше обращение передано специалисту отдела маркетинга. "
-                                "Статус изменен на 'в работе'. Специалист ответит в ближайшее время.",
-                                reply_markup=create_main_menu_keyboard()
-                            )
-                        else:
-                            await update.message.reply_text(
-                                "❌ Не удалось изменить статус обращения. Попробуйте позже.",
-                                reply_markup=create_main_menu_keyboard()
-                            )
-                    else:
-                        await update.message.reply_text(
-                            "❌ Не найдены данные пользователя. Обратитесь к администратору.",
-                            reply_markup=create_main_menu_keyboard()
-                        )
-                except Exception as e:
-                    logger.error(f"Ошибка при обращении к специалисту: {e}")
-                    await update.message.reply_text(
-                        "❌ Произошла ошибка при передаче обращения специалисту. Попробуйте позже.",
-                        reply_markup=create_main_menu_keyboard()
-                    )
-            else:
-                await update.message.reply_text(
-                    "❌ Сервис обращений временно недоступен. Попробуйте позже.",
-                    reply_markup=create_main_menu_keyboard()
-                )
-            return
-        
-        elif text == "🤖 Продолжить с ассистентом":
-            await update.message.reply_text(
-                "🤖 Вы можете задать любой вопрос ассистенту. Я готов помочь!",
-                reply_markup=create_main_menu_keyboard()
-            )
-            return
+        # Убираем обработку кнопок меню - пользователь может просто писать сообщения
 
         # Создаем обращение в таблице
         if appeals_service and appeals_service.is_available():
@@ -352,10 +298,9 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 None, openai_service.ask, user.id, text
             )
             if reply:
-                # Отправляем ответ с клавиатурным меню (без уведомлений о статусе)
+                # Отправляем ответ без меню
                 await update.message.reply_text(
                     reply,
-                    reply_markup=create_main_menu_keyboard(),
                     parse_mode='Markdown'
                 )
             else:
