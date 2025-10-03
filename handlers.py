@@ -19,18 +19,7 @@ def get_spa_menu_url() -> str:
     """Ленивое чтение URL SPA меню из окружения."""
     return os.getenv("WEB_APP_MENU_URL") or ""
 
-def create_main_menu_keyboard() -> ReplyKeyboardMarkup:
-    """
-    Создает основное клавиатурное меню с опциями.
-    
-    Returns:
-        ReplyKeyboardMarkup: клавиатура с кнопками меню
-    """
-    keyboard = [
-        ["👨‍💼 Обратиться к специалисту"],
-        ["🤖 Продолжить с ассистентом"]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+# Функция create_main_menu_keyboard() удалена - теперь используется только кнопка "Личный кабинет"
 
 def _should_show_specialist_button(text: str) -> bool:
     """
@@ -94,10 +83,8 @@ def start_command_handler(auth_service: AuthService):
             # Показываем SPA меню для авторизованных пользователей
             SPA_MENU_URL = get_spa_menu_url()
             if SPA_MENU_URL:
-                # Создаем клавиатуру с кнопкой "Личный кабинет" внизу
+                # Создаем клавиатуру только с кнопкой "Личный кабинет"
                 keyboard = [
-                    ["👨‍💼 Обратиться к специалисту"],
-                    ["🤖 Продолжить с ассистентом"],
                     [KeyboardButton(
                         text="👤 Личный кабинет",
                         web_app=WebAppInfo(url=SPA_MENU_URL)
@@ -112,8 +99,7 @@ def start_command_handler(auth_service: AuthService):
                 )
             else:
                 await update.message.reply_text(
-                    f"Добрый день, {user.first_name}! Вы уже авторизованы. Можете задать любой вопрос ассистенту.",
-                    reply_markup=create_main_menu_keyboard()
+                    f"Добрый день, {user.first_name}! Вы уже авторизованы. Можете задать любой вопрос ассистенту."
                 )
         else:
             WEB_APP_URL = get_web_app_url()
@@ -172,10 +158,8 @@ def web_app_data_handler(auth_service: AuthService):
                 # Показываем SPA меню
                 SPA_MENU_URL = get_spa_menu_url()
                 if SPA_MENU_URL:
-                    # Создаем клавиатуру с кнопкой "Личный кабинет" внизу
+                    # Создаем клавиатуру только с кнопкой "Личный кабинет"
                     keyboard = [
-                        ["👨‍💼 Обратиться к специалисту"],
-                        ["🤖 Продолжить с ассистентом"],
                         [KeyboardButton(
                             text="👤 Личный кабинет",
                             web_app=WebAppInfo(url=SPA_MENU_URL)
@@ -189,8 +173,7 @@ def web_app_data_handler(auth_service: AuthService):
                     )
                 else:
                     await update.message.reply_text(
-                        "Теперь вы можете задать любой вопрос ассистенту.",
-                        reply_markup=create_main_menu_keyboard()
+                        "Теперь вы можете задать любой вопрос ассистенту."
                     )
             else:
                 logger.warning("Авторизация не удалась - данные не найдены")
@@ -298,56 +281,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             )
             return
 
-        # Обработка кнопок меню
-        if text == "👨‍💼 Обратиться к специалисту":
-            if appeals_service and appeals_service.is_available():
-                try:
-                    # Получаем данные пользователя из таблицы авторизации
-                    records = auth_service.worksheet.get_all_records()
-                    user_data = None
-                    for record in records:
-                        if str(record.get('Telegram ID', '')) == str(user.id):
-                            user_data = record
-                            break
-                    
-                    if user_data:
-                        # Меняем статус на "в работе" с заливкой
-                        success = appeals_service.set_status_in_work(user.id)
-                        if success:
-                            await update.message.reply_text(
-                                "✅ Ваше обращение передано специалисту отдела маркетинга. "
-                                "Статус изменен на 'в работе'. Специалист ответит в ближайшее время.",
-                                reply_markup=create_main_menu_keyboard()
-                            )
-                        else:
-                            await update.message.reply_text(
-                                "❌ Не удалось изменить статус обращения. Попробуйте позже.",
-                                reply_markup=create_main_menu_keyboard()
-                            )
-                    else:
-                        await update.message.reply_text(
-                            "❌ Не найдены данные пользователя. Обратитесь к администратору.",
-                            reply_markup=create_main_menu_keyboard()
-                        )
-                except Exception as e:
-                    logger.error(f"Ошибка при обращении к специалисту: {e}")
-                    await update.message.reply_text(
-                        "❌ Произошла ошибка при передаче обращения специалисту. Попробуйте позже.",
-                        reply_markup=create_main_menu_keyboard()
-                    )
-            else:
-                await update.message.reply_text(
-                    "❌ Сервис обращений временно недоступен. Попробуйте позже.",
-                    reply_markup=create_main_menu_keyboard()
-                )
-            return
-        
-        elif text == "🤖 Продолжить с ассистентом":
-            await update.message.reply_text(
-                "🤖 Вы можете задать любой вопрос ассистенту. Я готов помочь!",
-                reply_markup=create_main_menu_keyboard()
-            )
-            return
+        # Обработка кнопок меню (убраны кнопки "Обратиться к специалисту" и "Продолжить с ассистентом")
 
         # Создаем обращение в таблице
         if appeals_service and appeals_service.is_available():
@@ -378,10 +312,9 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
 
         # Проверка доступности OpenAI
         if not openai_service or not openai_service.is_enabled():
-            await update.message.reply_text(
-                "Ассистент временно недоступен. Ваше обращение записано, специалист ответит позже.",
-                reply_markup=create_main_menu_keyboard()
-            )
+                        await update.message.reply_text(
+                            "Ассистент временно недоступен. Ваше обращение записано, специалист ответит позже."
+                        )
             return
 
         # Индикация набора
@@ -394,23 +327,20 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             reply = await asyncio.get_event_loop().run_in_executor(
                 None, openai_service.ask, user.id, text
             )
-            if reply:
-                # Отправляем ответ с клавиатурным меню
-                await update.message.reply_text(
-                    reply,
-                    reply_markup=create_main_menu_keyboard(),
-                    parse_mode='Markdown'
-                )
+                        if reply:
+                            # Отправляем ответ
+                            await update.message.reply_text(
+                                reply,
+                                parse_mode='Markdown'
+                            )
             else:
                 await update.message.reply_text(
-                    "Не удалось получить ответ ассистента. Попробуйте ещё раз.",
-                    reply_markup=create_main_menu_keyboard()
+                    "Не удалось получить ответ ассистента. Попробуйте ещё раз."
                 )
         except Exception as e:
             logger.error(f"Ошибка при обращении к OpenAI: {e}")
             await update.message.reply_text(
-                "Произошла ошибка при обращении к ассистенту. Попробуйте позже.",
-                reply_markup=create_main_menu_keyboard()
+                "Произошла ошибка при обращении к ассистенту. Попробуйте позже."
             )
 
     return handle_chat
