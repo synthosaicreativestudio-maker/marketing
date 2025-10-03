@@ -221,6 +221,8 @@ async def _send_response(self, response_data: dict):
 - Обработка текстовых сообщений
 - Обработка callback queries
 - Управление клавиатурным меню
+- **Автоматическая эскалация** при запросе специалиста
+- **Корректная генерация URL** для WebApp (авторизация vs меню)
 
 **Ключевые обработчики**:
 ```python
@@ -229,6 +231,15 @@ def chat_handler(auth_service, openai_service, appeals_service):
     async def handle_chat(update, context):
         # Проверка авторизации
         if not auth_service.get_user_auth_status(user.id):
+            return
+        
+        # Проверка запроса эскалации
+        if _is_user_escalation_request(text):
+            appeals_service.set_status_in_work(user.id)
+            await update.message.reply_text(
+                "✅ Ваше обращение передано специалисту отдела маркетинга. "
+                "Статус изменен на 'в работе'. Специалист ответит в ближайшее время."
+            )
             return
         
         # Обработка кнопок меню
@@ -252,6 +263,15 @@ def chat_handler(auth_service, openai_service, appeals_service):
             reply,
             reply_markup=create_main_menu_keyboard()
         )
+
+def _is_user_escalation_request(text: str) -> bool:
+    """Определение запросов специалиста по ключевым фразам"""
+    escalation_requests = [
+        'помочь не можете', 'не можете помочь', 'специалист нужен',
+        'человек нужен', 'живой человек', 'соедините', 'позвонить'
+        # ... и другие фразы
+    ]
+    return any(phrase in text.lower() for phrase in escalation_requests)
 ```
 
 ## Потоки данных
@@ -273,7 +293,12 @@ def chat_handler(auth_service, openai_service, appeals_service):
 
 ### 4. Поток ответа специалиста
 ```
-Специалист → Google Sheets (колонка G) → ResponseMonitor → Telegram → AppealsService (логирование)
+Специалист → Google Sheets (колонка G) → ResponseMonitor → Telegram → AppealsService (логирование) → Статус "решено" + Удаление заливки
+```
+
+### 5. Поток автоматической эскалации
+```
+Пользователь → Ключевые фразы → _is_user_escalation_request() → Статус "в работе" → Уведомление пользователя
 ```
 
 ## Управление состоянием
@@ -293,8 +318,12 @@ def chat_handler(auth_service, openai_service, appeals_service):
 ### 3. Статусы обращений
 - **Хранение**: Google Sheets (колонка F)
 - **Значения**: `новое`, `в работе`, `решено`
-- **Цвета**: Без цвета, #f4cccc, #d9ead3
-- **Обновление**: Через `AppealsService`
+- **Цвета**: Без цвета, #f4cccc (красная), #d9ead3 (зеленая), белый (после обработки)
+- **Обновление**: Через `AppealsService` и `ResponseMonitor`
+- **Автоматическое обновление**: 
+  - На "в работе" при запросе специалиста
+  - На "решено" после отправки ответа специалиста
+  - Удаление заливки после обработки
 
 ## Обработка ошибок
 

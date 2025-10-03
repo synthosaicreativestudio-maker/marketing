@@ -75,6 +75,7 @@ ngrok http 8080
 **Симптомы:**
 - "Партнёр не найден в базе"
 - Ошибки при обработке данных
+- Показывается кнопка авторизации вместо меню
 
 **Решения:**
 
@@ -91,13 +92,97 @@ python3 -c "from sheets import _get_client_and_sheet; client, sheet = _get_clien
 - Если Google Sheets не настроены, используется простая проверка
 - Тестовые данные: код `111098`, телефон с `1055`
 
-### 4. Container notes (optional)
+#### Проблема с кнопками WebApp:
+```bash
+# Проверка переменных WebApp
+echo "WEB_APP_URL: $WEB_APP_URL"
+echo "WEB_APP_MENU_URL: $WEB_APP_MENU_URL"
+
+# Проверка генерации URL
+python3 -c "
+from handlers import get_web_app_url, get_spa_menu_url
+print('Auth URL:', get_web_app_url())
+print('Menu URL:', get_spa_menu_url())
+"
+```
+
+### 4. Проблемы с системой обращений
+
+**Симптомы:**
+- Статус не обновляется на "решено" после ответа специалиста
+- Красная заливка не удаляется
+- Статус не меняется на "в работе" при запросе специалиста
+
+**Решения:**
+
+#### Проверка автоматической эскалации:
+```bash
+# Тест функции определения запросов эскалации
+python3 -c "
+from handlers import _is_user_escalation_request
+test_phrases = [
+    'а вы мне помочь не можете?',
+    'нужен специалист',
+    'соедините с человеком'
+]
+for phrase in test_phrases:
+    result = _is_user_escalation_request(phrase)
+    print(f'{phrase}: {result}')
+"
+```
+
+#### Проверка обновления статусов:
+```bash
+# Проверка логов обновления статуса
+grep -i "статус.*установлен" bot.log
+grep -i "статус.*обновлен" bot.log
+grep -i "заливка" bot.log
+```
+
+#### Проблемы с ResponseMonitor:
+```bash
+# Проверка работы мониторинга
+grep -i "response_monitor" bot.log | tail -10
+
+# Проверка APScheduler
+grep -i "scheduler" bot.log | tail -5
+```
+
+### 5. Ошибки "Chat not found"
+
+**Симптомы:**
+- `response_monitor - ERROR - Ошибка отправки ответа пользователю 123456789: Chat not found`
+- Ошибки при отправке сообщений пользователям
+
+**Решения:**
+
+#### Проверка Telegram ID:
+```bash
+# Поиск недействительных ID в логах
+grep -i "chat not found" bot.log | tail -10
+
+# Проверка валидности ID в таблице
+python3 -c "
+from appeals_service import AppealsService
+appeals = AppealsService()
+if appeals.is_available():
+    responses = appeals.check_for_responses()
+    for resp in responses:
+        print(f'Telegram ID: {resp.get(\"telegram_id\", \"MISSING\")}')
+"
+```
+
+#### Очистка недействительных записей:
+- Удалите записи с недействительными Telegram ID из таблицы обращений
+- Проверьте правильность записи Telegram ID при авторизации
+
+### 6. Container notes (optional)
 
 Containerization (Docker) was supported previously but is optional in the simplified project layout. The recommended workflow is to run the bot without Docker; see `README.md` -> "Run without Docker" for step-by-step instructions.
 
 If you still rely on containers for your environment (legacy), keep your local Docker commands and troubleshooting steps. Container troubleshooting is considered out-of-scope for the simplified guide, but feel free to ask and I will assist with specific issues.
 
-### 5. Проблемы с зависимостями
+### 7. Проблемы с зависимостями
 
 **Симптомы:**
 - ImportError при запуске
