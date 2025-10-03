@@ -377,14 +377,14 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 if _is_escalation_response(reply):
                     logger.info(f"Обнаружена эскалация для пользователя {user.id}")
                     
-                    # Устанавливаем статус "эскалировано" в таблице обращений
+                    # Устанавливаем статус "в работе" в таблице обращений
                     if appeals_service and appeals_service.is_available():
                         try:
                             success = appeals_service.set_status_escalated(user.id)
                             if success:
-                                logger.info(f"Статус 'эскалировано' установлен для пользователя {user.id}")
+                                logger.info(f"Статус 'в работе' установлен для пользователя {user.id}")
                             else:
-                                logger.warning(f"Не удалось установить статус 'эскалировано' для пользователя {user.id}")
+                                logger.warning(f"Не удалось установить статус 'в работе' для пользователя {user.id}")
                         except Exception as e:
                             logger.error(f"Ошибка при установке статуса эскалации: {e}")
                 

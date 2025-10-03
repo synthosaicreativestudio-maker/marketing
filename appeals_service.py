@@ -479,7 +479,7 @@ class AppealsService:
 
     def set_status_escalated(self, telegram_id: int) -> bool:
         """
-        Устанавливает статус обращения на 'эскалировано' с заливкой #f4cccc.
+        Устанавливает статус обращения на 'в работе' с заливкой #f4cccc.
         
         Args:
             telegram_id: ID пользователя в Telegram
@@ -502,10 +502,10 @@ class AppealsService:
                     break
             
             if existing_row:
-                # Устанавливаем статус "эскалировано" в колонке F
+                # Устанавливаем статус "в работе" в колонке F
                 self.worksheet.batch_update([{
                     'range': f'F{existing_row}',
-                    'values': [['эскалировано']]
+                    'values': [['в работе']]
                 }])
                 
                 # Устанавливаем заливку #f4cccc для колонки F
@@ -517,12 +517,12 @@ class AppealsService:
                     }
                 })
                 
-                logger.info(f"Статус установлен 'эскалировано' для пользователя {telegram_id} (строка {existing_row})")
+                logger.info(f"Статус установлен 'в работе' для пользователя {telegram_id} (строка {existing_row})")
                 return True
             else:
                 logger.warning(f"Не найдена строка для пользователя {telegram_id}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Ошибка установки статуса 'эскалировано': {e}")
+            logger.error(f"Ошибка установки статуса 'в работе': {e}")
             return False
