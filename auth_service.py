@@ -54,8 +54,8 @@ class AuthService:
         except Exception as e:
             logger.warning(f"Ошибка сохранения кэша авторизации: {e}")
 
-    def _is_auth_cache_valid(self, telegram_id: int) -> bool:
-        """Проверяет, действителен ли кэш авторизации для пользователя (24 часа)."""
+    def _is_auth_cache_valid(self, telegram_id: int, max_age_minutes: int = 5) -> bool:
+        """Проверяет, действителен ли кэш авторизации для пользователя."""
         if str(telegram_id) not in self.auth_cache:
             return False
         
@@ -66,8 +66,8 @@ class AuthService:
         try:
             cache_datetime = datetime.datetime.fromisoformat(cache_time)
             now = datetime.datetime.now()
-            # Проверяем, прошло ли менее 24 часов
-            return (now - cache_datetime).total_seconds() < 24 * 3600
+            # Проверяем, прошло ли менее указанного количества минут
+            return (now - cache_datetime).total_seconds() < max_age_minutes * 60
         except Exception as e:
             logger.warning(f"Ошибка проверки времени кэша: {e}")
             return False
@@ -78,6 +78,17 @@ class AuthService:
             'is_authorized': is_authorized,
             'timestamp': datetime.datetime.now().isoformat()
         }
+        self._save_auth_cache()
+    
+    def clear_auth_cache(self, telegram_id: int = None):
+        """Очищает кэш авторизации для конкретного пользователя или всех пользователей."""
+        if telegram_id:
+            if str(telegram_id) in self.auth_cache:
+                del self.auth_cache[str(telegram_id)]
+                logger.info(f"Кэш авторизации очищен для пользователя {telegram_id}")
+        else:
+            self.auth_cache.clear()
+            logger.info("Кэш авторизации очищен для всех пользователей")
         self._save_auth_cache()
 
     def find_and_update_user(self, partner_code: str, partner_phone: str, telegram_id: int) -> bool:
@@ -135,17 +146,17 @@ class AuthService:
     def get_user_auth_status(self, telegram_id: int) -> bool:
         """
         Проверяет статус авторизации пользователя по Telegram ID.
-        Использует кэш для проверки раз в сутки.
+        Всегда проверяет актуальные данные в Google Sheets.
         """
         logger.info(f"Проверка статуса авторизации для пользователя {telegram_id}")
         
-        # Сначала проверяем кэш
-        if self._is_auth_cache_valid(telegram_id):
+        # Проверяем кэш только для оптимизации (не более 5 минут)
+        if self._is_auth_cache_valid(telegram_id, max_age_minutes=5):
             cached_result = self.auth_cache[str(telegram_id)]['is_authorized']
-            logger.info(f"Используем кэшированный результат авторизации: {cached_result}")
+            logger.info(f"Используем кэшированный результат авторизации (актуальный): {cached_result}")
             return cached_result
         
-        # Если кэш недействителен, проверяем в таблице
+        # Всегда проверяем актуальные данные в таблице
         if not self.worksheet:
             logger.error("Worksheet не инициализирован (Sheets конфигурация отсутствует).")
             return False
