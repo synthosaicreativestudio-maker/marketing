@@ -396,6 +396,58 @@ class AppealsService:
             logger.error(f"Ошибка добавления ответа специалиста: {e}")
             return False
 
+    def add_ai_response(self, telegram_id: int, response_text: str) -> bool:
+        """
+        Добавляет ответ ИИ к существующим обращениям пользователя.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            response_text: текст ответа ИИ
+            
+        Returns:
+            bool: True если ответ добавлен успешно
+        """
+        if not self.is_available():
+            logger.error("Сервис обращений недоступен")
+            return False
+
+        try:
+            # Ищем существующую строку для этого telegram_id
+            records = self.worksheet.get_all_records()
+            existing_row = None
+            
+            for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    existing_row = i
+                    break
+            
+            if existing_row:
+                # Получаем текущие обращения
+                current_appeals = self.worksheet.cell(existing_row, 5).value or ""  # колонка E
+                
+                # Добавляем ответ ИИ сверху с префиксом
+                ai_response = f"🤖 ИИ: {response_text}"
+                if current_appeals.strip():
+                    updated_appeals = f"{ai_response}\n{current_appeals}"
+                else:
+                    updated_appeals = ai_response
+                
+                # Обновляем ячейку с обращениями
+                self.worksheet.batch_update([{
+                    'range': f'E{existing_row}',
+                    'values': [[updated_appeals]]
+                }])
+                
+                logger.info(f"Ответ ИИ добавлен для пользователя {telegram_id} (строка {existing_row})")
+                return True
+            else:
+                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка добавления ответа ИИ: {e}")
+            return False
+
     def set_status_in_work(self, telegram_id: int) -> bool:
         """
         Устанавливает статус обращения на 'в работе' с заливкой #f4cccc.

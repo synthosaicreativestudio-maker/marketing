@@ -26,7 +26,15 @@ def get_spa_menu_url() -> str:
         base_url += '/'
     return base_url + "menu.html"
 
-# Функция create_main_menu_keyboard() удалена - теперь используется только кнопка "Личный кабинет"
+def create_main_menu_keyboard() -> ReplyKeyboardMarkup:
+    """
+    Создает клавиатуру с кнопками выбора режима работы.
+    """
+    keyboard = [
+        ["👨‍💼 Обратиться к специалисту"],
+        ["🤖 Продолжить с ассистентом"]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 def _should_show_specialist_button(text: str) -> bool:
     """
@@ -526,9 +534,9 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             except Exception as e:
                 logger.error(f"Ошибка при создании обращения: {e}", exc_info=True)
 
-        # Проверяем, просит ли пользователь специалиста
-        if _is_user_escalation_request(text):
-            logger.info(f"Пользователь {user.id} просит специалиста: {text}")
+        # Обработка кнопок меню
+        if text == "👨‍💼 Обратиться к специалисту":
+            logger.info(f"Пользователь {user.id} выбрал специалиста через кнопку")
             
             # Устанавливаем статус "в работе" в таблице обращений
             if appeals_service and appeals_service.is_available():
@@ -555,6 +563,9 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                     "Ваше обращение записано. Специалист свяжется с вами в ближайшее время."
                 )
             return
+        elif text == "🤖 Продолжить с ассистентом":
+            logger.info(f"Пользователь {user.id} выбрал продолжение с ассистентом")
+            # Продолжаем обработку сообщения с ассистентом
 
         # Проверка доступности OpenAI
         if not openai_service or not openai_service.is_enabled():
@@ -589,10 +600,22 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                         except Exception as e:
                             logger.error(f"Ошибка при установке статуса эскалации: {e}")
                 
-                # Отправляем ответ
+                # Записываем ответ ИИ в таблицу обращений
+                if appeals_service and appeals_service.is_available():
+                    try:
+                        success = appeals_service.add_ai_response(user.id, reply)
+                        if success:
+                            logger.info(f"Ответ ИИ записан для пользователя {user.id}")
+                        else:
+                            logger.warning(f"Не удалось записать ответ ИИ для пользователя {user.id}")
+                    except Exception as e:
+                        logger.error(f"Ошибка при записи ответа ИИ: {e}")
+                
+                # Отправляем ответ с клавиатурой
                 await update.message.reply_text(
                     reply,
-                    parse_mode='Markdown'
+                    parse_mode='Markdown',
+                    reply_markup=create_main_menu_keyboard()
                 )
             else:
                 await update.message.reply_text(
