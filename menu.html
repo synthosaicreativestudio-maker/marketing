@@ -412,12 +412,7 @@
             const section = document.getElementById(sectionId + '-section');
             section.classList.add('active');
             
-            // Отправляем данные в бот (опционально)
-            tg.sendData(JSON.stringify({
-                action: 'menu_section',
-                section: sectionId,
-                timestamp: new Date().toISOString()
-            }));
+            // НЕ отправляем данные в бот - навигация только внутри мини-приложения
         }
         
         // Функция возврата к главному меню

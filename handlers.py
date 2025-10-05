@@ -220,6 +220,16 @@ def web_app_data_handler(auth_service: AuthService):
     async def handle_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         logger.info(f"Получены данные Web App от пользователя {user.id} ({user.first_name})")
+        
+        # Проверяем авторизацию пользователя
+        auth_status = auth_service.get_user_auth_status(user.id)
+        logger.info(f"Статус авторизации для пользователя {user.id}: {auth_status}")
+        
+        if not auth_status:
+            logger.warning(f"Пользователь {user.id} не авторизован, но пытается отправить данные Web App")
+            await update.message.reply_text("Вы не авторизованы. Пожалуйста, сначала авторизуйтесь.")
+            return
+        
         await update.message.reply_text("Проверяю ваши данные...")
         
         try:
