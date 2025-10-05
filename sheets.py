@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 from typing import Optional
 import datetime
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения из .env файла
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
