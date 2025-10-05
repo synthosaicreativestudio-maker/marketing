@@ -247,6 +247,12 @@ def web_app_data_handler(auth_service: AuthService):
             data = json.loads(web_app_data)
             logger.info(f"Получены данные из Web App от пользователя {user.id}: {data}")
             
+            # Проверяем, это запрос акций или авторизация
+            if data.get('action') == 'get_promotions':
+                logger.info(f"Запрос акций от пользователя {user.id}")
+                await handle_promotions_request(update, context)
+                return
+            
             partner_code = data.get('partner_code')
             partner_phone = data.get('partner_phone')
             
@@ -427,6 +433,51 @@ def promotions_command_handler(auth_service: AuthService):
             )
 
     return handle_promotions
+
+async def handle_promotions_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик запроса акций от WebApp."""
+    user = update.effective_user
+    logger.info(f"Обработка запроса акций от пользователя {user.id}")
+    
+    try:
+        # Получаем JSON с акциями
+        from promotions_api import get_promotions_json, is_promotions_available
+        
+        # Проверка доступности системы акций
+        if not is_promotions_available():
+            await update.message.reply_text(
+                "Система акций временно недоступна. Повторите позже."
+            )
+            return
+        
+        promotions_json = get_promotions_json()
+        promotions_data = json.loads(promotions_json)
+        
+        if not promotions_data:
+            await update.message.reply_text(
+                "🎉 Акции и события\n\n"
+                "В данный момент активных акций нет. "
+                "Следите за обновлениями!"
+            )
+            return
+        
+        # Формируем сообщение с акциями
+        message = "🎉 Активные акции и события:\n\n"
+        for i, promotion in enumerate(promotions_data, 1):
+            message += f"{i}. **{promotion.get('title', 'Без названия')}**\n"
+            message += f"   📅 {promotion.get('start_date', '')} - {promotion.get('end_date', '')}\n"
+            message += f"   📝 {promotion.get('description', '')[:100]}{'...' if len(promotion.get('description', '')) > 100 else ''}\n\n"
+        
+        await update.message.reply_text(
+            message,
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обработке запроса акций: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при получении акций. Попробуйте позже."
+        )
 
 
 def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appeals_service: AppealsService):

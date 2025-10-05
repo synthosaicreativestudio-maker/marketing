@@ -86,16 +86,23 @@ def get_active_promotions() -> List[Dict]:
             # Проверяем статус акции
             status = str(record.get('Статус', '')).strip()
             if status.lower() == 'активна':
+                # Используем описание как название, если название пустое
+                title = str(record.get('Название', '')).strip()
+                description = str(record.get('Описание', '')).strip()
+                
+                if not title or title == 'None' or title == '':
+                    title = f"Акция {description}" if description and description != 'None' else "Акция без названия"
+                
                 promotion = {
                     'id': str(record.get('ID акции', '')),
-                    'title': str(record.get('Название акции', '')),
-                    'description': str(record.get('Описание акции', '')),
+                    'title': title,
+                    'description': description if description and description != 'None' else "Описание отсутствует",
                     'status': status,
                     'start_date': str(record.get('Дата начала', '')),
                     'end_date': str(record.get('Дата окончания', ''))
                 }
                 
-                # Проверяем, что у акции есть название
+                # Добавляем акцию, если есть хотя бы название или описание
                 if promotion['title'] and promotion['title'] != 'None':
                     active_promotions.append(promotion)
                     logger.info(f"Найдена активная акция: {promotion['title']}")
@@ -151,15 +158,15 @@ def check_new_promotions() -> List[Dict]:
                         today = date.today()
                         
                         if release_dt == today:
-                            promotion = {
-                                'id': str(record.get('ID акции', '')),
-                                'title': str(record.get('Название акции', '')),
-                                'description': str(record.get('Описание акции', '')),
-                                'status': status,
-                                'start_date': str(record.get('Дата начала', '')),
-                                'end_date': str(record.get('Дата окончания', '')),
-                                'release_date': release_date
-                            }
+                                   promotion = {
+                                       'id': str(record.get('ID акции', '')),
+                                       'title': str(record.get('Название', '')),
+                                       'description': str(record.get('Описание', '')),
+                                       'status': status,
+                                       'start_date': str(record.get('Дата начала', '')),
+                                       'end_date': str(record.get('Дата окончания', '')),
+                                       'release_date': release_date
+                                   }
                             
                             if promotion['title'] and promotion['title'] != 'None':
                                 new_promotions.append(promotion)
