@@ -403,29 +403,7 @@
         // Отслеживаем изменения темы
         tg.onEvent('themeChanged', updateTheme);
         
-        // Функция показа секции
-        function showSection(sectionId) {
-            // Скрываем главное меню
-            document.getElementById('main-menu').style.display = 'none';
-            
-            // Показываем выбранную секцию
-            const section = document.getElementById(sectionId + '-section');
-            section.classList.add('active');
-            
-            // НЕ отправляем данные в бот - навигация только внутри мини-приложения
-        }
-        
-        // Функция возврата к главному меню
-        function showMainMenu() {
-            // Скрываем все секции
-            const sections = document.querySelectorAll('.content-section');
-            sections.forEach(section => {
-                section.classList.remove('active');
-            });
-            
-            // Показываем главное меню
-            document.getElementById('main-menu').style.display = 'grid';
-        }
+        // Функции навигации (удалены дублированные - используются ниже)
         
         // Обработка кнопки "Назад" в Telegram
         tg.onEvent('backButtonClicked', showMainMenu);
@@ -440,19 +418,14 @@
             tg.BackButton.hide();
         }
         
-        // Обновляем функции показа секций
+        // Обновленные функции показа секций (БЕЗ отправки данных в бот)
         function showSection(sectionId) {
             document.getElementById('main-menu').style.display = 'none';
             const section = document.getElementById(sectionId + '-section');
             section.classList.add('active');
             showBackButton();
             
-            // Отправляем данные в бот
-            tg.sendData(JSON.stringify({
-                action: 'menu_section',
-                section: sectionId,
-                timestamp: new Date().toISOString()
-            }));
+            // НЕ отправляем данные в бот - только навигация внутри мини-приложения
         }
         
         function showMainMenu() {
@@ -484,23 +457,7 @@
             tg.showAlert('Произошла ошибка. Попробуйте перезагрузить приложение.');
         });
         
-        // Отправка аналитики (опционально)
-        function trackEvent(eventName, data = {}) {
-            tg.sendData(JSON.stringify({
-                action: 'analytics',
-                event: eventName,
-                data: data,
-                timestamp: new Date().toISOString()
-            }));
-        }
-        
-        // Отслеживание кликов по меню
-        document.querySelectorAll('.menu-item').forEach(item => {
-            item.addEventListener('click', function() {
-                const section = this.onclick.toString().match(/showSection\('(\w+)'\)/)[1];
-                trackEvent('menu_click', { section: section });
-            });
-        });
+        // Аналитика отключена - мини-приложение работает автономно
     </script>
 </body>
 </html>
