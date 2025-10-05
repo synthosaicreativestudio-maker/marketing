@@ -21,7 +21,7 @@ def update_env_file():
                     env_vars[key] = value
     
     # Обновляем переменные
-    env_vars['WEB_APP_MENU_URL'] = 'https://synthosaicreativestudio-maker.github.io/marketing/spa_menu.html'
+    env_vars['WEB_APP_MENU_URL'] = 'https://synthosaicreativestudio-maker.github.io/marketing/personal.html'
     
     # Записываем обновленный .env файл
     with open(env_file, 'w', encoding='utf-8') as f:

@@ -289,7 +289,7 @@ if _is_user_escalation_request("а вы мне помочь не можете?")
 
 #### WebApp
 - `WEB_APP_URL`: Базовый URL WebApp (для авторизации и меню)
-- `WEB_APP_MENU_URL`: URL WebApp меню (автоматически генерируется как WEB_APP_URL + "menu.html")
+- `WEB_APP_MENU_URL`: URL WebApp меню (автоматически генерируется как WEB_APP_URL + "personal.html")
 
 ### Структура таблиц
 

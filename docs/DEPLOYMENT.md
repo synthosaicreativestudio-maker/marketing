@@ -88,7 +88,7 @@ WEB_APP_URL=https://your-domain.com/
 **Создание файлов WebApp:**
 ```bash
 # Проверьте наличие файлов
-ls -la index.html menu.html app.js
+ls -la index.html personal.html app.js
 
 # Настройте URL в .env
 WEB_APP_URL=https://your-domain.com/
@@ -158,7 +158,7 @@ gcloud run deploy marketingbot \
 
 ### Ошибки WebApp:
 1.  Проверьте, что `WEB_APP_URL` в `.env` указан корректно и доступен.
-2.  Убедитесь, что файлы `index.html` и `menu.html` доступны по URL.
+2.  Убедитесь, что файлы `index.html` и `personal.html` доступны по URL.
 
 ### Проблемы с системой обращений:
 1. **Статус не обновляется**: Проверьте права доступа Service Account к таблице обращений
