@@ -158,15 +158,15 @@ def check_new_promotions() -> List[Dict]:
                         today = date.today()
                         
                         if release_dt == today:
-                                   promotion = {
-                                       'id': str(record.get('ID акции', '')),
-                                       'title': str(record.get('Название', '')),
-                                       'description': str(record.get('Описание', '')),
-                                       'status': status,
-                                       'start_date': str(record.get('Дата начала', '')),
-                                       'end_date': str(record.get('Дата окончания', '')),
-                                       'release_date': release_date
-                                   }
+                            promotion = {
+                                'id': str(record.get('ID акции', '')),
+                                'title': str(record.get('Название', '')),
+                                'description': str(record.get('Описание', '')),
+                                'status': status,
+                                'start_date': str(record.get('Дата начала', '')),
+                                'end_date': str(record.get('Дата окончания', '')),
+                                'release_date': release_date
+                            }
                             
                             if promotion['title'] and promotion['title'] != 'None':
                                 new_promotions.append(promotion)
