@@ -128,7 +128,7 @@ def test_webapp_url_generation():
         menu_url = get_spa_menu_url()
         
         assert auth_url == 'https://example.com/'
-        assert menu_url == 'https://example.com/personal.html'
+        assert menu_url == 'https://example.com/menu.html'
 
 def test_webapp_url_without_trailing_slash():
     """Тест URL без завершающего слеша"""
@@ -138,7 +138,7 @@ def test_webapp_url_without_trailing_slash():
         menu_url = get_spa_menu_url()
         
         assert auth_url == 'https://example.com/'
-        assert menu_url == 'https://example.com/personal.html'
+        assert menu_url == 'https://example.com/menu.html'
 
 def test_webapp_url_with_trailing_slash():
     """Тест URL с завершающим слешем"""
@@ -148,7 +148,7 @@ def test_webapp_url_with_trailing_slash():
         menu_url = get_spa_menu_url()
         
         assert auth_url == 'https://example.com/'
-        assert menu_url == 'https://example.com/personal.html'
+        assert menu_url == 'https://example.com/menu.html'
 ```
 
 ### 4. Тестирование ResponseMonitor
@@ -239,7 +239,7 @@ python3 bot.py
 # 1. Авторизуйтесь через WebApp
 # 2. Проверьте, что показывается кнопка "Меню" (не "Авторизоваться")
 # 3. Нажмите на кнопку меню
-# 4. Проверьте, что открывается personal.html
+# 4. Проверьте, что открывается menu.html
 ```
 
 ## Запуск тестов
