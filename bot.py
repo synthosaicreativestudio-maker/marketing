@@ -60,14 +60,14 @@ def main() -> None:
     else:
         logger.warning("ResponseMonitor отключен: AppealsService недоступен")
 
+    # --- Создание и настройка приложения ---
+    logger.info("Создание экземпляра бота...")
+    application = Application.builder().token(token).build()
+
     # Инициализация уведомлений о акциях
     logger.info("Инициализация PromotionsNotifier...")
     promotions_notifier = PromotionsNotifier(application.bot, auth_service)
     logger.info("PromotionsNotifier готов к работе")
-
-    # --- Создание и настройка приложения ---
-    logger.info("Создание экземпляра бота...")
-    application = Application.builder().token(token).build()
 
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
