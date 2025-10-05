@@ -16,7 +16,7 @@ def get_web_app_url() -> str:
     base_url = os.getenv("WEB_APP_URL") or ""
     if base_url and not base_url.endswith('/'):
         base_url += '/'
-    return base_url
+    return base_url + "index.html"
 
 def get_spa_menu_url() -> str:
     """Ленивое чтение URL SPA меню из окружения."""
