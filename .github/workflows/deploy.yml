@@ -34,6 +34,7 @@ jobs:
           
           # Copy only the necessary files
           cp index.html /tmp/deploy/
+          cp menu.html /tmp/deploy/
           cp app.js /tmp/deploy/
           
           # If you have other static assets, copy them too
