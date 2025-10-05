@@ -223,14 +223,8 @@ def web_app_data_handler(auth_service: AuthService):
         user = update.effective_user
         logger.info(f"Получены данные Web App от пользователя {user.id} ({user.first_name})")
         
-        # Проверяем авторизацию пользователя
-        auth_status = auth_service.get_user_auth_status(user.id)
-        logger.info(f"Статус авторизации для пользователя {user.id}: {auth_status}")
-        
-        if not auth_status:
-            logger.warning(f"Пользователь {user.id} не авторизован, но пытается отправить данные Web App")
-            await update.message.reply_text("Вы не авторизованы. Пожалуйста, сначала авторизуйтесь.")
-            return
+        # Проверяем авторизацию пользователя только для запросов акций
+        # Для процесса авторизации эта проверка не нужна
         
         await update.message.reply_text("Проверяю ваши данные...")
         
@@ -250,6 +244,12 @@ def web_app_data_handler(auth_service: AuthService):
             # Проверяем, это запрос акций или авторизация
             if data.get('action') == 'get_promotions':
                 logger.info(f"Запрос акций от пользователя {user.id}")
+                # Для запросов акций проверяем авторизацию
+                auth_status = auth_service.get_user_auth_status(user.id)
+                if not auth_status:
+                    logger.warning(f"Пользователь {user.id} не авторизован, но пытается получить акции")
+                    await update.message.reply_text("Вы не авторизованы. Пожалуйста, сначала авторизуйтесь.")
+                    return
                 await handle_promotions_request(update, context)
                 return
             
