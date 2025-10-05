@@ -118,7 +118,7 @@ class PromotionsNotifier:
         except Exception as e:
             logger.error(f"Ошибка при отправке уведомления о акции: {e}")
     
-    async def start_monitoring(self, interval_minutes: int = 30):
+    async def start_monitoring(self, interval_minutes: int = 15):
         """Запускает мониторинг новых акций"""
         logger.info(f"Запуск мониторинга акций (проверка каждые {interval_minutes} минут)")
         

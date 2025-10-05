@@ -99,8 +99,8 @@ def main() -> None:
         if 'loop' not in locals():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        loop.create_task(promotions_notifier.start_monitoring(interval_minutes=30))
-        logger.info("Мониторинг акций запущен (проверка каждые 30 минут)")
+        loop.create_task(promotions_notifier.start_monitoring(interval_minutes=15))
+        logger.info("Мониторинг акций запущен (проверка каждые 15 минут)")
     except Exception as e:
         logger.error(f"Ошибка запуска мониторинга акций: {e}")
 

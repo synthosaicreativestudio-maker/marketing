@@ -193,6 +193,8 @@ class AuthService:
             return False
         except Exception as e:
             logger.error(f"Ошибка при проверке статуса пользователя: {e}")
+            # Инвалидируем кэш при ошибке
+            self.clear_auth_cache(telegram_id)
             return False
 
     def force_check_auth_status(self, telegram_id: int) -> bool:
