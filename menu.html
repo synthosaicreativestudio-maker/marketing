@@ -196,6 +196,127 @@
             font-size: 14px;
         }
 
+        /* Стили для акций */
+        .loading-state, .error-state, .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--tg-theme-hint-color, #999999);
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--tg-theme-hint-color, #e0e0e0);
+            border-top: 4px solid var(--tg-theme-button-color, #007aff);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .promotions-accordion {
+            margin-top: 20px;
+        }
+        
+        .promotion-item {
+            background: var(--tg-theme-bg-color, #ffffff);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            border: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .promotion-item:hover {
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .promotion-header {
+            padding: 16px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+            border: none;
+            width: 100%;
+            text-align: left;
+            transition: background-color 0.3s ease;
+        }
+        
+        .promotion-header:hover {
+            background: var(--tg-theme-hint-color, #e0e0e0);
+        }
+        
+        .promotion-header.active {
+            background: var(--tg-theme-button-color, #007aff);
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+        
+        .promotion-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--tg-theme-text-color, #000000);
+            margin: 0;
+            flex: 1;
+        }
+        
+        .promotion-header.active .promotion-title {
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+        
+        .promotion-arrow {
+            font-size: 18px;
+            transition: transform 0.3s ease;
+            color: var(--tg-theme-hint-color, #999999);
+        }
+        
+        .promotion-header.active .promotion-arrow {
+            transform: rotate(180deg);
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+        
+        .promotion-content {
+            padding: 0 20px;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+        }
+        
+        .promotion-content.active {
+            padding: 20px;
+            max-height: 500px;
+        }
+        
+        .promotion-description {
+            font-size: 14px;
+            color: var(--tg-theme-text-color, #000000);
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        
+        .promotion-dates {
+            display: flex;
+            gap: 16px;
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, #999999);
+        }
+        
+        .promotion-date {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .promotion-date-icon {
+            font-size: 16px;
+        }
+
         @media (max-width: 480px) {
             .menu-grid {
                 grid-template-columns: 1fr;
@@ -208,6 +329,19 @@
             
             .menu-item {
                 padding: 20px 16px;
+            }
+            
+            .promotion-header {
+                padding: 12px 16px;
+            }
+            
+            .promotion-content.active {
+                padding: 16px;
+            }
+            
+            .promotion-dates {
+                flex-direction: column;
+                gap: 8px;
             }
         }
     </style>
@@ -256,24 +390,26 @@
             </button>
             <h2 class="section-title">🎉 Акции и события</h2>
             <div class="section-content">
-                <ul class="feature-list">
-                    <li>
-                        <div class="feature-title">🔥 Текущие акции</div>
-                        <div class="feature-description">Актуальные предложения и скидки для клиентов</div>
-                    </li>
-                    <li>
-                        <div class="feature-title">📅 Календарь событий</div>
-                        <div class="feature-description">Предстоящие мероприятия и важные даты</div>
-                    </li>
-                    <li>
-                        <div class="feature-title">🎁 Специальные предложения</div>
-                        <div class="feature-description">Эксклюзивные предложения для партнеров</div>
-                    </li>
-                    <li>
-                        <div class="feature-title">📢 Новости и анонсы</div>
-                        <div class="feature-description">Последние новости компании и отрасли</div>
-                    </li>
-                </ul>
+                <!-- Состояние загрузки -->
+                <div id="promotions-loading" class="loading-state">
+                    <div class="loading-spinner"></div>
+                    <p>Загружаем акции...</p>
+                </div>
+                
+                <!-- Состояние ошибки -->
+                <div id="promotions-error" class="error-state" style="display: none;">
+                    <p>❌ Не удалось загрузить акции. Попробуйте позже.</p>
+                </div>
+                
+                <!-- Состояние "нет акций" -->
+                <div id="promotions-empty" class="empty-state" style="display: none;">
+                    <p>🎉 В данный момент активных акций нет. Следите за обновлениями!</p>
+                </div>
+                
+                <!-- Аккордеон с акциями -->
+                <div id="promotions-accordion" class="promotions-accordion" style="display: none;">
+                    <!-- Акции будут загружены динамически -->
+                </div>
             </div>
         </div>
 
@@ -425,6 +561,11 @@
             section.classList.add('active');
             showBackButton();
             
+            // Загружаем акции при открытии секции акций
+            if (sectionId === 'promotions') {
+                loadPromotions();
+            }
+            
             // НЕ отправляем данные в бот - только навигация внутри мини-приложения
         }
         
@@ -458,6 +599,165 @@
         });
         
         // Аналитика отключена - мини-приложение работает автономно
+        
+        // Функции для работы с акциями
+        let promotionsCache = null;
+        let promotionsCacheTime = null;
+        const CACHE_DURATION = 5 * 60 * 1000; // 5 минут
+        
+        async function getPromotionsFromBot() {
+            // В мини-приложении Telegram мы не можем напрямую вызывать команды бота
+            // Поэтому используем заглушку с тестовыми данными
+            // В реальной реализации данные будут загружаться через WebApp API или кэшироваться
+            
+            return new Promise((resolve) => {
+                // Имитируем задержку загрузки
+                setTimeout(() => {
+                    // Тестовые данные акций (в реальности будут загружаться из Google Sheets)
+                    const testPromotions = [
+                        {
+                            id: "1",
+                            title: "🔥 Скидка 20% на все услуги",
+                            description: "Специальное предложение для новых клиентов. Действует до конца месяца. Не упустите возможность сэкономить!",
+                            status: "Активна",
+                            start_date: "05.10.2025",
+                            end_date: "31.10.2025"
+                        },
+                        {
+                            id: "2", 
+                            title: "🎁 Бесплатная консультация",
+                            description: "Получите бесплатную консультацию от наших специалистов по маркетингу. Ограниченное предложение!",
+                            status: "Активна",
+                            start_date: "01.10.2025",
+                            end_date: "15.10.2025"
+                        }
+                    ];
+                    resolve(testPromotions);
+                }, 1000);
+            });
+        }
+        
+        async function loadPromotions() {
+            // Показываем состояние загрузки
+            showPromotionsState('loading');
+            
+            try {
+                // Проверяем кэш
+                if (promotionsCache && promotionsCacheTime && 
+                    (Date.now() - promotionsCacheTime) < CACHE_DURATION) {
+                    displayPromotions(promotionsCache);
+                    return;
+                }
+                
+                // Загружаем данные через Telegram WebApp API
+                // Отправляем команду /promotions боту и получаем ответ
+                const promotions = await getPromotionsFromBot();
+                
+                // Кэшируем данные
+                promotionsCache = promotions;
+                promotionsCacheTime = Date.now();
+                
+                displayPromotions(promotions);
+                
+            } catch (error) {
+                console.error('Ошибка загрузки акций:', error);
+                showPromotionsState('error');
+            }
+        }
+        
+        function showPromotionsState(state) {
+            // Скрываем все состояния
+            document.getElementById('promotions-loading').style.display = 'none';
+            document.getElementById('promotions-error').style.display = 'none';
+            document.getElementById('promotions-empty').style.display = 'none';
+            document.getElementById('promotions-accordion').style.display = 'none';
+            
+            // Показываем нужное состояние
+            switch (state) {
+                case 'loading':
+                    document.getElementById('promotions-loading').style.display = 'block';
+                    break;
+                case 'error':
+                    document.getElementById('promotions-error').style.display = 'block';
+                    break;
+                case 'empty':
+                    document.getElementById('promotions-empty').style.display = 'block';
+                    break;
+                case 'content':
+                    document.getElementById('promotions-accordion').style.display = 'block';
+                    break;
+            }
+        }
+        
+        function displayPromotions(promotions) {
+            if (!promotions || promotions.length === 0) {
+                showPromotionsState('empty');
+                return;
+            }
+            
+            const accordion = document.getElementById('promotions-accordion');
+            accordion.innerHTML = '';
+            
+            promotions.forEach((promotion, index) => {
+                const promotionElement = createPromotionElement(promotion, index);
+                accordion.appendChild(promotionElement);
+            });
+            
+            showPromotionsState('content');
+        }
+        
+        function createPromotionElement(promotion, index) {
+            const promotionDiv = document.createElement('div');
+            promotionDiv.className = 'promotion-item';
+            promotionDiv.innerHTML = `
+                <button class="promotion-header" onclick="togglePromotion(${index})">
+                    <h3 class="promotion-title">${promotion.title || 'Без названия'}</h3>
+                    <span class="promotion-arrow">▼</span>
+                </button>
+                <div class="promotion-content" id="promotion-content-${index}">
+                    <div class="promotion-description">
+                        ${promotion.description || 'Описание не указано'}
+                    </div>
+                    <div class="promotion-dates">
+                        <div class="promotion-date">
+                            <span class="promotion-date-icon">📅</span>
+                            <span>Начало: ${promotion.start_date || 'Не указано'}</span>
+                        </div>
+                        <div class="promotion-date">
+                            <span class="promotion-date-icon">📅</span>
+                            <span>Окончание: ${promotion.end_date || 'Не указано'}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            return promotionDiv;
+        }
+        
+        function togglePromotion(index) {
+            const content = document.getElementById(`promotion-content-${index}`);
+            const header = content.previousElementSibling;
+            const arrow = header.querySelector('.promotion-arrow');
+            
+            if (content.classList.contains('active')) {
+                // Закрываем
+                content.classList.remove('active');
+                header.classList.remove('active');
+                arrow.textContent = '▼';
+            } else {
+                // Закрываем все остальные
+                document.querySelectorAll('.promotion-content.active').forEach(el => {
+                    el.classList.remove('active');
+                    el.previousElementSibling.classList.remove('active');
+                    el.previousElementSibling.querySelector('.promotion-arrow').textContent = '▼';
+                });
+                
+                // Открываем текущий
+                content.classList.add('active');
+                header.classList.add('active');
+                arrow.textContent = '▲';
+            }
+        }
     </script>
 </body>
 </html>

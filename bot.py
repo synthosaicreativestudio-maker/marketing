@@ -10,6 +10,7 @@ from auth_service import AuthService
 from handlers import setup_handlers
 from openai_service import OpenAIService
 from response_monitor import ResponseMonitor
+from promotions_notifier import PromotionsNotifier
 
 # Импортируем AppealsService после загрузки переменных окружения
 from appeals_service import AppealsService
@@ -59,6 +60,11 @@ def main() -> None:
     else:
         logger.warning("ResponseMonitor отключен: AppealsService недоступен")
 
+    # Инициализация уведомлений о акциях
+    logger.info("Инициализация PromotionsNotifier...")
+    promotions_notifier = PromotionsNotifier(application.bot, auth_service)
+    logger.info("PromotionsNotifier готов к работе")
+
     # --- Создание и настройка приложения ---
     logger.info("Создание экземпляра бота...")
     application = Application.builder().token(token).build()
@@ -84,6 +90,19 @@ def main() -> None:
             logger.info("Мониторинг ответов запущен (проверка каждую минуту)")
         except Exception as e:
             logger.error(f"Ошибка запуска мониторинга ответов: {e}")
+
+    # --- Запуск мониторинга акций ---
+    logger.info("Запуск мониторинга новых акций...")
+    try:
+        # Запускаем мониторинг акций в фоновом режиме
+        import asyncio
+        if 'loop' not in locals():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        loop.create_task(promotions_notifier.start_monitoring(interval_minutes=30))
+        logger.info("Мониторинг акций запущен (проверка каждые 30 минут)")
+    except Exception as e:
+        logger.error(f"Ошибка запуска мониторинга акций: {e}")
 
     # --- Запуск бота ---
     logger.info("Запуск бота...")

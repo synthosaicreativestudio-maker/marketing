@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQ
 from auth_service import AuthService
 from openai_service import OpenAIService
 from appeals_service import AppealsService
+from promotions_api import get_promotions_json, is_promotions_available
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,7 @@ def setup_handlers(application, auth_service: AuthService, openai_service: OpenA
     """Регистрирует все обработчики в приложении."""
     application.add_handler(CommandHandler("start", start_command_handler(auth_service)))
     application.add_handler(CommandHandler("appeals", appeals_command_handler(auth_service, appeals_service)))
+    application.add_handler(CommandHandler("promotions", promotions_command_handler(auth_service)))
     application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data_handler(auth_service)))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.StatusUpdate.WEB_APP_DATA, chat_handler(auth_service, openai_service, appeals_service)))
     application.add_handler(CallbackQueryHandler(callback_query_handler(auth_service, appeals_service)))
@@ -367,6 +369,64 @@ def appeals_command_handler(auth_service: AuthService, appeals_service: AppealsS
             )
 
     return handle_appeals
+
+
+def promotions_command_handler(auth_service: AuthService):
+    """Фабрика обработчика команды /promotions для получения данных акций."""
+    async def handle_promotions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+        logger.info(f"Команда /promotions от пользователя {user.id}")
+
+        # Проверка авторизации
+        if not auth_service.get_user_auth_status(user.id):
+            await update.message.reply_text(
+                "Для просмотра акций требуется авторизация. Нажмите кнопку авторизации /start."
+            )
+            return
+
+        # Проверка доступности системы акций
+        if not is_promotions_available():
+            await update.message.reply_text(
+                "Система акций временно недоступна. Повторите позже."
+            )
+            return
+
+        try:
+            # Получаем JSON с акциями
+            promotions_json = get_promotions_json()
+            promotions_data = json.loads(promotions_json)
+            
+            if not promotions_data:
+                await update.message.reply_text(
+                    "🎉 Акции и события\n\n"
+                    "В данный момент активных акций нет. "
+                    "Следите за обновлениями!"
+                )
+                return
+
+            # Формируем сообщение с акциями
+            message = "🎉 Активные акции и события:\n\n"
+            for i, promotion in enumerate(promotions_data, 1):
+                message += f"{i}. **{promotion.get('title', 'Без названия')}**\n"
+                message += f"   📅 {promotion.get('start_date', '')} - {promotion.get('end_date', '')}\n"
+                message += f"   📝 {promotion.get('description', '')[:100]}{'...' if len(promotion.get('description', '')) > 100 else ''}\n\n"
+
+            # Добавляем JSON для отладки (только для админов)
+            if user.id == int(os.getenv('ADMIN_TELEGRAM_ID', '0')):
+                message += f"\n📊 JSON данные:\n```json\n{promotions_json}\n```"
+
+            await update.message.reply_text(
+                message,
+                parse_mode='Markdown'
+            )
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении акций: {e}")
+            await update.message.reply_text(
+                "Произошла ошибка при получении акций. Попробуйте позже."
+            )
+
+    return handle_promotions
 
 
 def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appeals_service: AppealsService):
