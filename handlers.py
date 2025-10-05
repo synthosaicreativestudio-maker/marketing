@@ -23,7 +23,7 @@ def get_spa_menu_url() -> str:
     base_url = os.getenv("WEB_APP_URL") or ""
     if base_url and not base_url.endswith('/'):
         base_url += '/'
-    return base_url + "cabinet.html"
+    return base_url + "personal.html"
 
 # Функция create_main_menu_keyboard() удалена - теперь используется только кнопка "Личный кабинет"
 
