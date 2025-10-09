@@ -614,35 +614,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             except Exception as e:
                 logger.error(f"Ошибка при создании обращения: {e}", exc_info=True)
 
-        # Проверяем триггерные слова для эскалации
-        if _is_user_escalation_request(text):
-            logger.info(f"Пользователь {user.id} запросил специалиста через триггерные слова")
-            
-            # Устанавливаем статус "в работе" в таблице обращений
-            if appeals_service and appeals_service.is_available():
-                try:
-                    success = appeals_service.set_status_in_work(user.id)
-                    if success:
-                        logger.info(f"Статус 'в работе' установлен для пользователя {user.id}")
-                        await update.message.reply_text(
-                            "✅ Ваше обращение передано специалисту отдела маркетинга. "
-                            "Статус изменен на 'в работе'. Специалист ответит в ближайшее время."
-                        )
-                    else:
-                        logger.warning(f"Не удалось установить статус 'в работе' для пользователя {user.id}")
-                        await update.message.reply_text(
-                            "Ваше обращение записано. Специалист свяжется с вами в ближайшее время."
-                        )
-                except Exception as e:
-                    logger.error(f"Ошибка при установке статуса эскалации: {e}")
-                    await update.message.reply_text(
-                        "Ваше обращение записано. Специалист свяжется с вами в ближайшее время."
-                    )
-            else:
-                await update.message.reply_text(
-                    "Ваше обращение записано. Специалист свяжется с вами в ближайшее время."
-                )
-            return
+        # НЕ проверяем триггерные слова здесь - это делается после ответа ИИ
 
         # Проверка доступности OpenAI
         if not openai_service or not openai_service.is_enabled():
