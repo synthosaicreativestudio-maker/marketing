@@ -149,26 +149,8 @@ class ResponseMonitor:
             
             logger.info(f"Отправлено уведомление о решении пользователю {telegram_id}")
             
-            # Обновляем статус на "решено" с правильной заливкой
-            try:
-                # Устанавливаем статус "решено" в колонке F
-                self.appeals_service.worksheet.batch_update([{
-                    'range': f'F{response_data["row"]}',
-                    'values': [['Решено']]
-                }])
-                
-                # Устанавливаем заливку #d9ead3 (светло-зеленый) в колонке F
-                self.appeals_service.worksheet.format(f'F{response_data["row"]}', {
-                    "backgroundColor": {
-                        "red": 0.85,  # #d9ead3
-                        "green": 0.92,
-                        "blue": 0.83
-                    }
-                })
-                
-                logger.info(f"Статус обновлен на 'Решено' для строки {response_data['row']}")
-            except Exception as e:
-                logger.error(f"Ошибка обновления статуса: {e}")
+            # Статус меняется на "решено" только при явном указании триггерных фраз
+            logger.info(f"Обращение помечено как решенное по триггерным фразам для строки {response_data['row']}")
             
             # Очищаем ответ в таблице
             self.appeals_service.clear_response(response_data['row'])
@@ -224,26 +206,8 @@ class ResponseMonitor:
             except Exception as e:
                 logger.error(f"Ошибка записи ответа специалиста в таблицу: {e}")
             
-            # Обновляем статус на "решено" и очищаем ответ
-            try:
-                # Устанавливаем статус "решено" 
-                self.appeals_service.worksheet.batch_update([{
-                    'range': f'F{response_data["row"]}',
-                    'values': [['решено']]
-                }])
-                
-                # Убираем заливку (устанавливаем белый цвет)
-                self.appeals_service.worksheet.format(f'F{response_data["row"]}', {
-                    "backgroundColor": {
-                        "red": 1.0,
-                        "green": 1.0,
-                        "blue": 1.0
-                    }
-                })
-                
-                logger.info(f"Статус обновлен на 'решено' для строки {response_data['row']}")
-            except Exception as e:
-                logger.error(f"Ошибка обновления статуса: {e}")
+            # НЕ меняем статус автоматически - только при явном указании специалиста
+            logger.info(f"Ответ специалиста записан для строки {response_data['row']}, статус остается без изменений")
             
             # Очищаем ответ в таблице
             self.appeals_service.clear_response(response_data['row'])
