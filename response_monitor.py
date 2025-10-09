@@ -83,10 +83,104 @@ class ResponseMonitor:
             responses = self.appeals_service.check_for_responses()
             
             for response_data in responses:
-                await self._send_response(response_data)
+                # Проверяем, содержит ли ответ триггерные слова "решено"
+                if self._is_resolved_response(response_data.get('response', '')):
+                    await self._mark_as_resolved(response_data)
+                else:
+                    await self._send_response(response_data)
                 
         except Exception as e:
             logger.error(f"Ошибка при проверке ответов: {e}")
+
+    def _is_resolved_response(self, response_text: str) -> bool:
+        """
+        Проверяет, содержит ли ответ специалиста триггерные слова "решено".
+        
+        Args:
+            response_text: текст ответа специалиста
+            
+        Returns:
+            bool: True если найдены триггерные слова
+        """
+        if not response_text:
+            return False
+            
+        text_lower = response_text.lower()
+        
+        # Триггерные фразы для определения "решено"
+        resolved_phrases = [
+            'решено', 'решен', 'решена', 'решены',
+            'готово', 'готов', 'готова', 'готовы',
+            'спасибо', 'спасибо за обращение', 'спасибо за вопрос',
+            'все понятно', 'все ясно', 'все готово',
+            'вопрос решен', 'проблема решена', 'задача выполнена',
+            'обращение закрыто', 'можно закрывать', 'закрывайте обращение',
+            'статус решено', 'отмечено как решенное', 'обработка завершена',
+            'получили помощь', 'все работает', 'проблема устранена',
+            'вопрос снят', 'больше вопросов нет', 'все устраивает',
+            'исправлено', 'настроено', 'запущено', 'работает корректно',
+            'ошибка устранена', 'разобрались', 'получил ответ',
+            'вопрос закрыт', 'больше не нужно', 'все ясно'
+        ]
+        
+        # Проверяем наличие триггерных фраз
+        for phrase in resolved_phrases:
+            if phrase in text_lower:
+                logger.info(f"Найдена фраза 'решено': '{phrase}' в ответе: {response_text[:100]}...")
+                return True
+        
+        return False
+
+    async def _mark_as_resolved(self, response_data: dict):
+        """
+        Отмечает обращение как решенное и уведомляет пользователя.
+        
+        Args:
+            response_data: данные ответа
+        """
+        try:
+            telegram_id = response_data['telegram_id']
+            response_text = response_data['response']
+            fio = response_data.get('fio', '')
+            code = response_data.get('code', '')
+            
+            # Формируем сообщение о решении
+            message = f"✅ Ваше обращение решено специалистом отдела маркетинга!\n\n{response_text}"
+            
+            # Отправляем сообщение
+            await self.bot.send_message(
+                chat_id=telegram_id,
+                text=message
+            )
+            
+            logger.info(f"Отправлено уведомление о решении пользователю {telegram_id}")
+            
+            # Обновляем статус на "решено" с правильной заливкой
+            try:
+                # Устанавливаем статус "решено" 
+                self.appeals_service.worksheet.batch_update([{
+                    'range': f'D{response_data["row"]}',
+                    'values': [['Решено']]
+                }])
+                
+                # Устанавливаем заливку #d9ead3 (светло-зеленый)
+                self.appeals_service.worksheet.format(f'D{response_data["row"]}', {
+                    "backgroundColor": {
+                        "red": 0.85,  # #d9ead3
+                        "green": 0.92,
+                        "blue": 0.83
+                    }
+                })
+                
+                logger.info(f"Статус обновлен на 'Решено' для строки {response_data['row']}")
+            except Exception as e:
+                logger.error(f"Ошибка обновления статуса: {e}")
+            
+            # Очищаем ответ в таблице
+            self.appeals_service.clear_response(response_data['row'])
+            
+        except Exception as e:
+            logger.error(f"Ошибка обработки решения для пользователя {response_data.get('telegram_id', 'unknown')}: {e}")
 
     async def _send_response(self, response_data: dict):
         """

@@ -103,15 +103,24 @@ class AppealsService:
                     code,
                     phone,
                     fio,
-                    str(telegram_id),
-                    new_appeal,  # текст_обращений
-                    'новое',  # статус
-                    '',  # специалист_ответ (пустой)
-                    timestamp  # время_обновления
+                    'Новое',  # статус (колонка D)
+                    new_appeal,  # текст_обращений (колонка E)
+                    '',  # специалист_ответ (колонка F)
+                    timestamp  # время_обновления (колонка H)
                 ]
                 
                 logger.info(f"Данные для записи: {row_data}")
                 self.worksheet.append_row(row_data)
+                
+                # Устанавливаем заливку #f3cccc (светло-красный) для статуса "Новое"
+                self.worksheet.format(f'D{next_row}', {
+                    "backgroundColor": {
+                        "red": 0.95,    # #f3cccc
+                        "green": 0.8,
+                        "blue": 0.8
+                    }
+                })
+                
                 logger.info(f"Создано новое обращение для пользователя {telegram_id} (строка {next_row})")
             
             return True
@@ -398,7 +407,7 @@ class AppealsService:
 
     def add_ai_response(self, telegram_id: int, response_text: str) -> bool:
         """
-        Добавляет ответ ИИ к существующим обращениям пользователя.
+        Добавляет ответ ИИ к существующим обращениям пользователя и устанавливает статус "Ответ ИИ".
         
         Args:
             telegram_id: ID пользователя в Telegram
@@ -432,11 +441,23 @@ class AppealsService:
                 else:
                     updated_appeals = ai_response
                 
-                # Обновляем ячейку с обращениями
+                # Обновляем ячейку с обращениями и статус
                 self.worksheet.batch_update([{
                     'range': f'E{existing_row}',
                     'values': [[updated_appeals]]
+                }, {
+                    'range': f'D{existing_row}',
+                    'values': [['Ответ ИИ']]
                 }])
+                
+                # Устанавливаем заливку #ffffff (белый) для статуса "Ответ ИИ"
+                self.worksheet.format(f'D{existing_row}', {
+                    "backgroundColor": {
+                        "red": 1.0,    # #ffffff
+                        "green": 1.0,
+                        "blue": 1.0
+                    }
+                })
                 
                 logger.info(f"Ответ ИИ добавлен для пользователя {telegram_id} (строка {existing_row})")
                 return True
@@ -450,7 +471,7 @@ class AppealsService:
 
     def set_status_in_work(self, telegram_id: int) -> bool:
         """
-        Устанавливает статус обращения на 'в работе' с заливкой #f4cccc.
+        Устанавливает статус обращения на 'В работе' с заливкой #fff2cc.
         
         Args:
             telegram_id: ID пользователя в Telegram
@@ -473,29 +494,29 @@ class AppealsService:
                     break
             
             if existing_row:
-                # Устанавливаем статус "в работе" в колонке F
+                # Устанавливаем статус "В работе" в колонке D (статус)
                 self.worksheet.batch_update([{
-                    'range': f'F{existing_row}',
-                    'values': [['в работе']]
+                    'range': f'D{existing_row}',
+                    'values': [['В работе']]
                 }])
                 
-                # Устанавливаем заливку #f4cccc для колонки F
-                self.worksheet.format(f'F{existing_row}', {
+                # Устанавливаем заливку #fff2cc (светло-желтый) для колонки D
+                self.worksheet.format(f'D{existing_row}', {
                     "backgroundColor": {
-                        "red": 0.956,
-                        "green": 0.8,
+                        "red": 1.0,    # #fff2cc
+                        "green": 0.95,
                         "blue": 0.8
                     }
                 })
                 
-                logger.info(f"Статус установлен 'в работе' для пользователя {telegram_id} (строка {existing_row})")
+                logger.info(f"Статус установлен 'В работе' для пользователя {telegram_id} (строка {existing_row})")
                 return True
             else:
                 logger.warning(f"Не найдена строка для пользователя {telegram_id}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Ошибка установки статуса 'в работе': {e}")
+            logger.error(f"Ошибка установки статуса 'В работе': {e}")
             return False
 
     def get_appeal_status(self, telegram_id: int) -> str:
