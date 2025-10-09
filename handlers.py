@@ -585,6 +585,9 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 None, openai_service.ask, user.id, text
             )
             if reply:
+                # Логируем ответ ИИ для отладки
+                logger.info(f"Ответ ИИ для пользователя {user.id}: {reply[:200]}...")
+                
                 # Записываем ответ ИИ в таблицу обращений
                 if appeals_service and appeals_service.is_available():
                     try:
@@ -597,11 +600,20 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                         logger.error(f"Ошибка при записи ответа ИИ: {e}")
                 
                 # Отправляем ответ ИИ пользователю с клавиатурой
-                await update.message.reply_text(
-                    reply,
-                    parse_mode='Markdown',
-                    reply_markup=create_main_menu_keyboard()
-                )
+                try:
+                    await update.message.reply_text(
+                        reply,
+                        parse_mode='Markdown',
+                        reply_markup=create_main_menu_keyboard()
+                    )
+                    logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
+                except Exception as e:
+                    logger.error(f"Ошибка отправки ответа ИИ: {e}")
+                    # Если Markdown не работает, отправляем без форматирования
+                    await update.message.reply_text(
+                        reply,
+                        reply_markup=create_main_menu_keyboard()
+                    )
                 
                 # Проверяем, является ли ответ эскалацией к специалисту ПОСЛЕ отправки
                 if _is_escalation_response(reply):
