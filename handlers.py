@@ -579,9 +579,13 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
         logger.info(f"CHAT_HANDLER: Текстовое сообщение от {user.id}: {text}")
 
         # Проверка авторизации
-        if not auth_service.get_user_auth_status(user.id):
+        auth_status = auth_service.get_user_auth_status(user.id)
+        logger.info(f"Статус авторизации для пользователя {user.id}: {auth_status}")
+        
+        if not auth_status:
             await update.message.reply_text(
-                "Для использования ассистента требуется авторизация. Нажмите кнопку авторизации /start."
+                "❌ Для использования ассистента требуется авторизация.\n\n"
+                "Нажмите /start для авторизации."
             )
             return
 
@@ -606,7 +610,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                         phone=user_data.get('Телефон партнера', ''),
                         fio=user_data.get('ФИО партнера', ''),
                         telegram_id=user.id,
-                        text=text
+                        text=f"Пользователь: {text}"  # Добавляем префикс для ясности
                     )
                     logger.info(f"Результат создания обращения: {result}")
                 else:
