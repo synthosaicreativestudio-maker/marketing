@@ -1,6 +1,6 @@
-# 🔧 Устранение неполадок MarketingBot
+# 🔧 Устранение неполадок MarketingBot v3.2
 
-## 🚨 Частые проблемы и решения
+## 🚨 Частые проблемы и решения (PythonAnywhere)
 
 ### 1. Бот не отвечает на команды
 
@@ -19,13 +19,39 @@ python3 -c "from dotenv import load_dotenv; import os; load_dotenv(); print('Tok
 curl "https://api.telegram.org/bot<YOUR_TOKEN>/getMe"
 ```
 
+#### Проблема с webhook (PythonAnywhere):
+```bash
+# Проверка webhook
+curl -X GET "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+
+# Установка webhook
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://yourusername.pythonanywhere.com/webhook"}'
+```
+
 #### Проблема с сетью:
 ```bash
 # Проверка подключения к Telegram API
 curl -I https://api.telegram.org
 
+# Проверка webhook на PythonAnywhere
+curl -I https://yourusername.pythonanywhere.com/webhook
+
 # Проверка DNS
 nslookup api.telegram.org
+```
+
+#### Проблема с PythonAnywhere:
+```bash
+# Проверка версии Python
+python3 --version
+
+# Установка зависимостей
+pip3 install --user -r requirements.txt
+
+# Проверка путей
+python3 -c "import sys; print('Python path:', sys.path)"
 ```
 
 #### Проблема с процессом:
@@ -33,20 +59,51 @@ nslookup api.telegram.org
 # Проверка запущенных процессов
 pgrep -f "python.*bot.py"
 
+# Запуск бота на PythonAnywhere
+python3 bot.py
+
+# Запуск в фоне
+nohup python3 bot.py > bot.log 2>&1 &
+
 # Перезапуск бота
 pkill -f "python.*bot.py"
 python3 bot.py
+```
+
+#### Проблема с webhook на PythonAnywhere:
+```bash
+# Проверка webhook
+curl -X GET "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+
+# Удаление webhook
+curl -X POST "https://api.telegram.org/bot<TOKEN>/deleteWebhook"
+
+# Установка нового webhook
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://yourusername.pythonanywhere.com/webhook"}'
 ```
 
 ### 2. WebApp не открывается
 
 **Симптомы:**
 - Кнопка "Авторизоваться" не работает
+- WebApp показывает ошибку или не загружается
 - Ошибка при открытии веб-приложения
 
 **Решения:**
 
 #### Проверка WEBAPP_URL:
+```bash
+# Проверка URL WebApp
+python3 -c "from handlers import get_web_app_url; print('WebApp URL:', get_web_app_url())"
+
+# Проверка доступности файлов
+curl -I https://synthosaicreativestudio-maker.github.io/marketing/index.html
+curl -I https://synthosaicreativestudio-maker.github.io/marketing/menu.html
+```
+
+#### Проверка переменной:
 ```bash
 # Проверка переменной
 echo $WEBAPP_URL
@@ -58,278 +115,404 @@ curl -I $WEBAPP_URL
 #### Проверка файлов WebApp:
 ```bash
 # Проверка наличия файлов
-ls -la
-cat index.html | head -10
+ls -la index.html menu.html app.js
+
+# Проверка содержимого
+head -5 index.html
+head -5 menu.html
+head -5 app.js
 ```
 
 #### Проблемы с HTTPS:
 - WebApp требует HTTPS для работы в Telegram
-- Используйте ngrok для локального тестирования:
+- PythonAnywhere предоставляет HTTPS из коробки
+- Проверьте настройки в .env:
 ```bash
-ngrok http 8080
-# Используйте HTTPS URL в WEBAPP_URL
+# Проверка HTTPS
+curl -I https://synthosaicreativestudio-maker.github.io/marketing/index.html
+
+# Проверка настроек
+grep WEBAPP_URL .env
 ```
 
 ### 3. Ошибки авторизации
 
 **Симптомы:**
 - "Партнёр не найден в базе"
+- Пользователи не могут авторизоваться
+- Ошибки при проверке статуса авторизации
 - Ошибки при обработке данных
 - Показывается кнопка авторизации вместо меню
 
 **Решения:**
+
+#### Проверка Google Sheets:
+```bash
+# Проверка подключения к Google Sheets
+python3 -c "from sheets import _load_service_account; print('Google Sheets connection OK')"
+
+# Проверка данных в таблице
+python3 -c "from sheets import get_sheet_data; print('Sheet data:', get_sheet_data()[:3])"
+
+# Проверка Service Account
+python3 -c "from sheets import _load_service_account; sa = _load_service_account(); print('Service Account:', sa.service_account_email)"
+```
 
 #### Проблемы с Google Sheets:
 ```bash
 # Проверка service account
 python3 -c "import json; print(json.loads(open('.env').read().split('GCP_SA_JSON=')[1].split('\n')[0])['client_email'])"
 
+# Проверка прав доступа
+python3 -c "from sheets import _load_service_account; sa = _load_service_account(); print('Service Account email:', sa.service_account_email)"
+
+# Проверка таблицы авторизации
+python3 -c "from sheets import get_sheet_data; data = get_sheet_data(); print('Authorization data:', data[:3] if data else 'No data')"
+```
+
 # Проверка доступа к таблице
 python3 -c "from sheets import _get_client_and_sheet; client, sheet = _get_client_and_sheet(); print('Sheets OK')"
+```
+
+#### Проблемы с кешированием:
+```bash
+# Сброс кеша авторизации
+rm -f auth_cache.json
+
+# Перезапуск бота
+python3 bot.py
 ```
 
 #### Fallback авторизация:
 - Если Google Sheets не настроены, используется простая проверка
 - Тестовые данные: код `111098`, телефон с `1055`
 
+### 4. Проблемы с системой обращений
+
+**Симптомы:**
+- Обращения не создаются
+- Статусы не обновляются
+- Ответы специалистов не отправляются
+
+**Решения:**
+
+#### Проверка AppealsService:
+```bash
+# Проверка сервиса обращений
+python3 -c "from appeals_service import AppealsService; as = AppealsService(); print('Appeals service OK')"
+
+# Проверка создания обращения
+python3 -c "from appeals_service import AppealsService; as = AppealsService(); print('Test appeal:', as.create_appeal('TEST', '123', 'Test User', 123456789, 'Test message'))"
+```
+
+#### Проверка ResponseMonitor:
+```bash
+# Проверка мониторинга ответов
+python3 -c "from response_monitor import ResponseMonitor; rm = ResponseMonitor(); print('Response monitor OK')"
+
+# Проверка логов
+grep -i "appeal\|status\|response" bot.log | tail -10
+```
+
 #### Проблема с кнопками WebApp:
 ```bash
 # Проверка переменных WebApp
 echo "WEB_APP_URL: $WEB_APP_URL"
-echo "WEB_APP_MENU_URL: $WEB_APP_MENU_URL"
 
 # Проверка генерации URL
-python3 -c "
-from handlers import get_web_app_url, get_spa_menu_url
-print('Auth URL:', get_web_app_url())
-print('Menu URL:', get_spa_menu_url())
-"
+python3 -c "from handlers import get_web_app_url, get_spa_menu_url; print('Auth URL:', get_web_app_url()); print('Menu URL:', get_spa_menu_url())"
 ```
 
-### 4. Проблемы с системой обращений
+### 5. Проблемы с OpenAI
 
 **Симптомы:**
-- Статус не обновляется на "решено" после ответа специалиста
-- Красная заливка не удаляется
-- Статус не меняется на "в работе" при запросе специалиста
+- ИИ не отвечает на сообщения
+- Ошибки API OpenAI
+- Медленные ответы
 
 **Решения:**
 
-#### Проверка автоматической эскалации:
+#### Проверка API ключа:
 ```bash
-# Тест функции определения запросов эскалации
-python3 -c "
-from handlers import _is_user_escalation_request
-test_phrases = [
-    'а вы мне помочь не можете?',
-    'нужен специалист',
-    'соедините с человеком'
-]
-for phrase in test_phrases:
-    result = _is_user_escalation_request(phrase)
-    print(f'{phrase}: {result}')
-"
+# Проверка API ключа
+python3 -c "import os; from dotenv import load_dotenv; load_dotenv(); print('OpenAI Key:', 'OK' if os.getenv('OPENAI_API_KEY') else 'MISSING')"
+
+# Проверка Assistant ID
+python3 -c "import os; from dotenv import load_dotenv; load_dotenv(); print('Assistant ID:', os.getenv('OPENAI_ASSISTANT_ID'))"
 ```
 
-#### Проверка обновления статусов:
+#### Проверка подключения:
 ```bash
-# Проверка логов обновления статуса
-grep -i "статус.*установлен" bot.log
-grep -i "статус.*обновлен" bot.log
-grep -i "заливка" bot.log
+# Проверка сервиса OpenAI
+python3 -c "from openai_service import OpenAIService; oai = OpenAIService(); print('OpenAI service OK')"
+
+# Тест запроса
+python3 -c "from openai_service import OpenAIService; oai = OpenAIService(); print('Test response:', oai.get_response('Test message', 123456789))"
 ```
 
-#### Проблемы с ResponseMonitor:
-```bash
-# Проверка работы мониторинга
-grep -i "response_monitor" bot.log | tail -10
-
-# Проверка APScheduler
-grep -i "scheduler" bot.log | tail -5
-```
-
-### 5. Ошибки "Chat not found"
+### 6. Проблемы с PythonAnywhere
 
 **Симптомы:**
-- `response_monitor - ERROR - Ошибка отправки ответа пользователю 123456789: Chat not found`
-- Ошибки при отправке сообщений пользователям
+- Бот не запускается
+- Ошибки импорта модулей
+- Проблемы с webhook
 
 **Решения:**
 
-#### Проверка Telegram ID:
-```bash
-# Поиск недействительных ID в логах
-grep -i "chat not found" bot.log | tail -10
-
-# Проверка валидности ID в таблице
-python3 -c "
-from appeals_service import AppealsService
-appeals = AppealsService()
-if appeals.is_available():
-    responses = appeals.check_for_responses()
-    for resp in responses:
-        print(f'Telegram ID: {resp.get(\"telegram_id\", \"MISSING\")}')
-"
-```
-
-#### Очистка недействительных записей:
-- Удалите записи с недействительными Telegram ID из таблицы обращений
-- Проверьте правильность записи Telegram ID при авторизации
-
-### 6. Container notes (optional)
-
-Containerization (Docker) was supported previously but is optional in the simplified project layout. The recommended workflow is to run the bot without Docker; see `README.md` -> "Run without Docker" for step-by-step instructions.
-
-If you still rely on containers for your environment (legacy), keep your local Docker commands and troubleshooting steps. Container troubleshooting is considered out-of-scope for the simplified guide, but feel free to ask and I will assist with specific issues.
-
-### 7. Проблемы с зависимостями
-
-**Симптомы:**
-- ImportError при запуске
-- Ошибки установки пакетов
-
-**Решения:**
-
-#### Переустановка зависимостей:
-```bash
-# Очистка виртуального окружения
-rm -rf .venv
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Установка зависимостей
-pip install requests python-dotenv gspread google-auth
-```
-
-#### Проблемы с Python версией:
+#### Проверка версии Python:
 ```bash
 # Проверка версии Python
 python3 --version
 
-# Использование правильной версии
-python3.12 -m venv .venv
+# Установка зависимостей
+pip3 install --user -r requirements.txt
+
+# Проверка путей
+python3 -c "import sys; print('Python path:', sys.path)"
 ```
 
-## 🔍 Диагностические команды
-
-### Проверка системы:
+#### Проверка webhook:
 ```bash
-# Общая проверка
+# Проверка webhook
+curl -X GET "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+
+# Удаление webhook
+curl -X POST "https://api.telegram.org/bot<TOKEN>/deleteWebhook"
+
+# Установка нового webhook
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://yourusername.pythonanywhere.com/webhook"}'
+```
+
+## 🔍 Диагностика
+
+### Полная проверка системы:
+```bash
+# Диагностика всех сервисов
 python3 -c "
-import sys, os
+import os
 from dotenv import load_dotenv
 load_dotenv()
 
-print(f'Python: {sys.version}')
-print(f'Token: {\"OK\" if os.getenv(\"TELEGRAM_TOKEN\") else \"MISSING\"}')
-print(f'WebApp URL: {os.getenv(\"WEBAPP_URL\", \"NOT SET\")}')
-
-try:
-    import requests, gspread
-    print('Dependencies: OK')
-except ImportError as e:
-    print(f'Dependencies: ERROR - {e}')
+print('=== Диагностика MarketingBot v3.2 ===')
+print(f'Telegram Token: {\"✓\" if os.getenv(\"TELEGRAM_TOKEN\") else \"✗\"}')
+print(f'OpenAI API Key: {\"✓\" if os.getenv(\"OPENAI_API_KEY\") else \"✗\"}')
+print(f'OpenAI Assistant ID: {\"✓\" if os.getenv(\"OPENAI_ASSISTANT_ID\") else \"✗\"}')
+print(f'Sheets ID: {\"✓\" if os.getenv(\"SHEET_ID\") else \"✗\"}')
+print(f'Appeals Sheets ID: {\"✓\" if os.getenv(\"APPEALS_SHEET_ID\") else \"✗\"}')
+print(f'Promotions Sheets ID: {\"✓\" if os.getenv(\"PROMOTIONS_SHEET_ID\") else \"✗\"}')
+print(f'WebApp URL: {os.getenv(\"WEB_APP_URL\", \"✗\")}')
+print(f'Webhook URL: {os.getenv(\"WEBHOOK_URL\", \"✗\")}')
+print(f'GCP SA JSON: {\"✓\" if os.getenv(\"GCP_SA_JSON\") else \"✗\"}')
 "
 ```
 
-### Проверка бота:
+### Тест функций:
 ```bash
-# Тест импортов
-python3 -c "import bot, sheets; print('Imports: OK')"
+# Тест авторизации
+python3 -c "from auth_service import AuthService; auth = AuthService(); print('Auth service test:', auth.get_user_auth_status(123456789))"
 
-# Тест запуска (5 секунд)
-timeout 5 python3 bot.py || echo "Bot startup: OK"
+# Тест обращений
+python3 -c "from appeals_service import AppealsService; appeals = AppealsService(); print('Appeals service test:', appeals.create_appeal('TEST', '123', 'Test User', 123456789, 'Test message'))"
+
+# Тест OpenAI
+python3 -c "from openai_service import OpenAIService; openai = OpenAIService(); print('OpenAI service test:', openai.get_response('Test message', 123456789))"
+
+# Тест акций
+python3 -c "from promotions_api import get_active_promotions; promotions = get_active_promotions(); print('Promotions test:', len(promotions), 'active promotions')"
 ```
 
-### Проверка Docker:
-```bash
-# Проверка образа
-docker run --rm --env-file .env marketingbot python3 -c "print('Docker: OK')"
-
-# Проверка логов
-docker-compose logs --tail=50 marketingbot
-```
-
-## 📊 Мониторинг и логи
+## 📊 Мониторинг
 
 ### Просмотр логов:
 ```bash
-# Локальные логи
-python3 bot.py 2>&1 | tee bot.log
+# Все логи
+tail -f bot.log
 
-# Docker логи
-docker-compose logs -f marketingbot
+# Только ошибки
+tail -f bot.log | grep -i "error\|exception\|traceback"
 
-# Системные логи
-journalctl -u marketingbot -f
+# Только обращения
+tail -f bot.log | grep -i "appeal\|status\|response"
+
+# Только авторизацию
+tail -f bot.log | grep -i "auth\|authorization\|login"
+
+# Только акции
+tail -f bot.log | grep -i "promotion\|акция\|уведомление"
 ```
 
-### Мониторинг ресурсов:
+### Проверка производительности:
 ```bash
-# Использование CPU/памяти
-top -p $(pgrep -f "python.*bot.py")
+# Время ответа
+grep "Response time" bot.log | tail -10
 
-# Docker статистика
-docker stats marketingbot
+# Количество обращений
+grep "Appeal created" bot.log | wc -l
 
-# Дисковое пространство
-df -h
+# Ошибки API
+grep "API error" bot.log | wc -l
+
+# Статистика авторизации
+grep "Authorization" bot.log | wc -l
 ```
 
-## 🆘 Получение помощи
+## 🆘 Экстренные меры
 
-### Сбор информации для отчета об ошибке:
+### Перезапуск бота:
 ```bash
-# Создание отчета
-echo "=== MarketingBot Debug Report ===" > debug_report.txt
-echo "Date: $(date)" >> debug_report.txt
-echo "Python: $(python3 --version)" >> debug_report.txt
-echo "OS: $(uname -a)" >> debug_report.txt
-echo "" >> debug_report.txt
+# Остановка
+pkill -f "python3 bot.py"
 
-echo "=== Environment ===" >> debug_report.txt
-python3 -c "import os; print('Token:', 'SET' if os.getenv('TELEGRAM_TOKEN') else 'NOT SET')" >> debug_report.txt
-echo "WebApp URL: $WEBAPP_URL" >> debug_report.txt
-echo "" >> debug_report.txt
+# Запуск
+python3 bot.py
 
-echo "=== Last 20 log lines ===" >> debug_report.txt
-tail -20 bot.log >> debug_report.txt 2>/dev/null || echo "No log file found" >> debug_report.txt
-
-echo "=== Dependencies ===" >> debug_report.txt
-pip list | grep -E "(requests|gspread|dotenv)" >> debug_report.txt
-
-cat debug_report.txt
+# Запуск в фоне
+nohup python3 bot.py > bot.log 2>&1 &
 ```
 
-### Контакты для поддержки:
-- 📖 Документация: `docs/`
-- 🐛 Баг-репорты: создайте issue с debug_report.txt
-- 💬 Вопросы: проверьте FAQ в документации
+### Сброс кэша:
+```bash
+# Удаление кэша авторизации
+rm -f auth_cache.json
 
-## 🔄 Процедура восстановления
+# Перезапуск бота
+python3 bot.py
+```
 
-### При критических ошибках:
-1. **Остановите бота**: `pkill -f "python.*bot.py"`
-2. **Создайте бэкап**: `cp .env .env.backup`
-3. **Проверьте логи**: `tail -50 bot.log`
-4. **Восстановите из бэкапа**: `git checkout HEAD -- .`
-5. **Перезапустите**: `python3 bot.py`
+### Восстановление из бэкапа:
+```bash
+# Восстановление .env
+cp .env.backup .env
 
-### При проблемах с данными:
-1. **Проверьте Google Sheets**: убедитесь в доступности
-2. **Проверьте service account**: права доступа
-3. **Используйте fallback**: временно отключите Sheets
-4. **Восстановите подключение**: обновите credentials
+# Восстановление кода
+git checkout HEAD~1
 
-## 📱 Проблемы с мобильной версией Telegram
+# Перезапуск
+python3 bot.py
+```
 
-### Проблема с авторизацией через мобильную версию:
-- **Симптомы**: Авторизация не проходит через мобильную версию Telegram, но работает через веб-версию
-- **Причина**: Вероятно, связано с особенностями обработки WebApp в мобильной версии Telegram
-- **Решение**: Используйте веб-версию Telegram для авторизации
-- **Дальнейшие действия**:
-  - Используйте Context7 MCP для изучения специфики работы с мобильной версией
-  - Проверьте документацию по Telegram WebApp API для мобильных клиентов
-  - Исследуйте особенности обработки `sendData()` в мобильных браузерах
+### Сброс webhook:
+```bash
+# Удаление webhook
+curl -X POST "https://api.telegram.org/bot<TOKEN>/deleteWebhook"
 
-Помните: большинство проблем решается перезапуском бота и проверкой переменных окружения! 🚀
+# Установка нового webhook
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://yourusername.pythonanywhere.com/webhook"}'
+```
+
+## 📞 Поддержка
+
+Если проблема не решается с помощью этого руководства:
+
+1. **Проверьте логи** - найдите конкретную ошибку
+2. **Создайте issue** - опишите проблему и приложите логи
+3. **Обратитесь к разработчику** - предоставьте полную информацию
+
+### Информация для поддержки:
+```bash
+# Сбор информации о системе
+echo "=== System Info ==="
+python3 --version
+pip list | grep -E "(telegram|openai|gspread|flask)"
+echo "=== Bot Status ==="
+ps aux | grep "python3 bot.py"
+echo "=== Recent Logs ==="
+tail -20 bot.log
+echo "=== Webhook Status ==="
+curl -X GET "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+```
+
+## 🎯 Частые проблемы v3.2
+
+### Проблема с автоматическим изменением статуса на "решено"
+**Симптомы:**
+- Статус автоматически меняется на "решено" после ответа специалиста
+- Пропускается статус "в работе"
+
+**Решение:**
+```bash
+# Проверка response_monitor.py
+grep -n "автоматически.*решено" response_monitor.py
+
+# Исправление: убрать автоматическое изменение статуса
+# Статус должен оставаться "в работе" после ответа специалиста
+```
+
+### Проблема с дублированием сообщений
+**Симптомы:**
+- Бот отправляет два ответа на одно сообщение
+- Дублирование в логах
+
+**Решение:**
+```bash
+# Проверка handlers.py
+grep -n "reply_text" handlers.py
+
+# Исправление: убрать дублирующие вызовы
+```
+
+### Проблема с кешированием авторизации
+**Симптомы:**
+- Пользователи не могут авторизоваться
+- Ошибки "Партнер не найден"
+
+**Решение:**
+```bash
+# Сброс кеша
+rm -f auth_cache.json
+
+# Перезапуск бота
+python3 bot.py
+```
+
+## 📋 Чек-лист для диагностики
+
+### ✅ Проверка основных компонентов
+- [ ] Telegram Bot API работает
+- [ ] Google Sheets подключение работает
+- [ ] OpenAI API работает
+- [ ] WebApp доступен по HTTPS
+- [ ] Webhook настроен правильно
+
+### ✅ Проверка функций
+- [ ] Авторизация работает
+- [ ] Обращения создаются
+- [ ] Статусы обновляются
+- [ ] Ответы специалистов отправляются
+- [ ] Акции отображаются
+
+### ✅ Проверка производительности
+- [ ] Время ответа < 2 секунд
+- [ ] Нет ошибок в логах
+- [ ] Кеширование работает
+- [ ] Мониторинг активен
+
+## 🚀 Рекомендации по оптимизации
+
+### Для PythonAnywhere:
+1. **Используйте Python 3.10** - более стабильная версия
+2. **Настройте автозапуск** - через Tasks в панели
+3. **Мониторьте логи** - регулярно проверяйте bot.log
+4. **Обновляйте зависимости** - pip install --user -r requirements.txt
+
+### Для масштабирования:
+1. **Увеличьте TTL кеша** - до 10-15 минут
+2. **Оптимизируйте запросы** - к Google Sheets
+3. **Добавьте мониторинг** - метрики производительности
+4. **Настройте алерты** - при критических ошибках
+
+## 📞 Контакты для поддержки
+
+- **GitHub Issues**: [Создать issue](https://github.com/synthosaicreativestudio-maker/marketing/issues)
+- **Telegram**: @synthosaicreativestudio
+- **Email**: support@synthosaicreativestudio.com
+
+---
+
+**Версия документации:** v3.2  
+**Последнее обновление:** 9 октября 2025  
+**Статус:** ✅ Актуально

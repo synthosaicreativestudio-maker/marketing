@@ -1,6 +1,6 @@
-# 🚀 Установка и развертывание MarketingBot
+# 🚀 Установка и развертывание MarketingBot v3.2
 
-В этом документе описаны все шаги — от локальной установки для разработки до развертывания на сервере.
+В этом документе описаны все шаги — от локальной установки для разработки до развертывания на PythonAnywhere с автоматическим деплоем WebApp на GitHub Pages.
 
 ## 🖥️ Локальная установка
 
@@ -40,7 +40,7 @@ cp .env.example .env
 nano .env
 ```
 
-**Обязательные переменные для v3.1:**
+**Обязательные переменные для v3.2:**
 ```bash
 # Telegram
 TELEGRAM_TOKEN=your_bot_token
@@ -50,15 +50,17 @@ ADMIN_TELEGRAM_ID=your_admin_id
 OPENAI_API_KEY=your_openai_key
 OPENAI_ASSISTANT_ID=your_assistant_id
 
-# Google Sheets (для авторизации и обращений)
+# Google Sheets (для авторизации, обращений и акций)
 SHEET_ID=authorization_sheet_id
 APPEALS_SHEET_ID=appeals_sheet_id
+PROMOTIONS_SHEET_ID=promotions_sheet_id
 SHEET_NAME=authorization_sheet_name
 APPEALS_SHEET_NAME=обращения
 GCP_SA_FILE=path_to_credentials.json
 
 # WebApp (для авторизации и меню)
-WEB_APP_URL=https://your-domain.com/
+WEB_APP_URL=https://your-domain.github.io/marketing/
+WEBHOOK_URL=https://your-domain.pythonanywhere.com/webhook
 ```
 
 ### 5. Настройка Google Sheets
@@ -70,6 +72,10 @@ WEB_APP_URL=https://your-domain.com/
 **Создание таблицы обращений:**
 1. Создайте Google Sheet с колонками: A (Код партнера), B (Телефон), C (ФИО), D (Telegram ID), E (Текст обращений), F (Статус), G (Ответ специалиста), H (Время обновления)
 2. Скопируйте ID таблицы в `APPEALS_SHEET_ID`
+
+**Создание таблицы акций:**
+1. Создайте Google Sheet с колонками: A (Дата релиза), B (Название), C (Описание), D (Статус), E (Дата начала), F (Дата окончания)
+2. Скопируйте ID таблицы в `PROMOTIONS_SHEET_ID`
 
 **Настройка Service Account:**
 1. Создайте Service Account в Google Cloud Console
@@ -106,6 +112,73 @@ python3 bot.py 2>&1 | tee bot.log
 nohup python3 bot.py > bot.log 2>&1 &
 ```
 
+## 🌐 Развертывание WebApp на GitHub Pages
+
+### Автоматический деплой WebApp
+
+WebApp (Mini App) автоматически развертывается на GitHub Pages при каждом push в ветку `main`.
+
+#### Настройка GitHub Pages:
+
+1. **Включите GitHub Pages в настройках репозитория:**
+   - Settings → Pages
+   - Source: GitHub Actions
+   - Сохраните настройки
+
+2. **Файл `.github/workflows/deploy.yml` уже настроен:**
+   ```yaml
+   name: Deploy to GitHub Pages
+   
+   on:
+     push:
+       branches: ["main"]
+     workflow_dispatch:
+   
+   jobs:
+     deploy:
+       runs-on: ubuntu-latest
+       steps:
+         - name: Checkout
+           uses: actions/checkout@v4
+         - name: Setup Pages
+           uses: actions/configure-pages@v4
+         - name: Prepare files for deployment
+           run: |
+             mkdir -p /tmp/deploy
+             cp index.html /tmp/deploy/
+             cp menu.html /tmp/deploy/
+             cp app.js /tmp/deploy/
+         - name: Upload artifact
+           uses: actions/upload-pages-artifact@v3
+           with:
+             path: /tmp/deploy
+         - name: Deploy to GitHub Pages
+           uses: actions/deploy-pages@v4
+   ```
+
+3. **URL WebApp будет:**
+   ```
+   https://your-username.github.io/marketing/
+   ```
+
+4. **Обновите переменную `WEB_APP_URL` в `.env`:**
+   ```env
+   WEB_APP_URL=https://your-username.github.io/marketing/
+   ```
+
+#### Структура WebApp файлов:
+- **`index.html`** - страница авторизации партнеров
+- **`menu.html`** - личный кабинет с акциями и событиями
+- **`app.js`** - JavaScript для взаимодействия с Telegram WebApp API
+
+#### Тестирование WebApp:
+1. Запустите бота локально или на сервере
+2. Отправьте `/start` боту
+3. Нажмите кнопку "Открыть личный кабинет"
+4. Проверьте работу авторизации и отображение акций
+
+---
+
 ## 🐳 Docker развертывание (для Production)
 
 Docker — рекомендуемый способ для стабильной работы на сервере.
@@ -129,15 +202,86 @@ docker-compose logs -f
 docker-compose down
 ```
 
-## ☁️ Развертывание в облаке (Пример для Google Cloud Run)
+## ☁️ Развертывание на PythonAnywhere (РЕКОМЕНДУЕМОЕ)
 
-### 1. Сборка и отправка образа
+PythonAnywhere - оптимальная платформа для Python Telegram ботов с встроенным HTTPS и простой настройкой.
+
+### 1. Создание аккаунта
+1. Зарегистрируйтесь на [pythonanywhere.com](https://www.pythonanywhere.com)
+2. Выберите бесплатный тариф (достаточно для MVP)
+
+### 2. Клонирование проекта
 ```bash
-gcloud builds submit --tag gcr.io/PROJECT_ID/marketingbot
+# В консоли PythonAnywhere
+git clone https://github.com/synthosaicreativestudio-maker/marketing.git
+cd marketing
 ```
 
-### 2. Развертывание сервиса
+### 3. Установка зависимостей
 ```bash
+# Установка для Python 3.13 (по умолчанию)
+pip3 install --user -r requirements.txt
+
+# Или для Python 3.10
+pip3.10 install --user -r requirements.txt
+```
+
+### 4. Настройка переменных окружения
+```bash
+# Создание .env файла
+cp .env.example .env
+nano .env
+```
+
+**Обязательные переменные для PythonAnywhere:**
+```bash
+# Telegram
+TELEGRAM_TOKEN=your_bot_token
+ADMIN_TELEGRAM_ID=your_admin_id
+
+# OpenAI
+OPENAI_API_KEY=your_openai_key
+OPENAI_ASSISTANT_ID=your_assistant_id
+
+# Google Sheets
+SHEET_ID=authorization_sheet_id
+APPEALS_SHEET_ID=appeals_sheet_id
+PROMOTIONS_SHEET_ID=promotions_sheet_id
+GCP_SA_JSON={"type": "service_account", ...}
+
+# WebApp
+WEB_APP_URL=https://synthosaicreativestudio-maker.github.io/marketing/
+WEBHOOK_URL=https://yourusername.pythonanywhere.com/webhook
+```
+
+### 5. Настройка Web App
+1. В панели PythonAnywhere перейдите в "Web"
+2. Нажмите "Add a new web app"
+3. Выберите "Flask" и Python 3.10
+4. Укажите путь: `/home/yourusername/marketing/webhook_handler.py`
+5. Нажмите "Reload"
+
+### 6. Запуск бота
+```bash
+# В консоли PythonAnywhere
+python3 bot.py
+```
+
+### 7. Настройка автозапуска (опционально)
+```bash
+# Создание задачи в разделе "Tasks"
+# Команда: python3 /home/yourusername/marketing/bot.py
+# Интервал: каждые 5 минут (для перезапуска при сбоях)
+```
+
+## ☁️ Развертывание в облаке (Альтернативные варианты)
+
+### Google Cloud Run
+```bash
+# Сборка и отправка образа
+gcloud builds submit --tag gcr.io/PROJECT_ID/marketingbot
+
+# Развертывание сервиса
 gcloud run deploy marketingbot \
   --image gcr.io/PROJECT_ID/marketingbot \
   --platform managed \
