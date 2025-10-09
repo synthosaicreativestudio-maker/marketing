@@ -61,6 +61,7 @@ class AppealsService:
             existing_row = None
             
             for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
+                # Ищем telegram_id в колонке D (индекс 3 в массиве)
                 record_telegram_id = str(record.get('telegram_id', ''))
                 logger.info(f"Проверка записи {i}: telegram_id='{record_telegram_id}' vs '{telegram_id}'")
                 if record_telegram_id == str(telegram_id):
@@ -72,7 +73,7 @@ class AppealsService:
             new_appeal = f"{timestamp}: {text}"
             
             if existing_row:
-                # Обновляем существующую строку
+                # Обновляем существующую строку - накапливаем обращения в одной ячейке
                 current_appeals = self.worksheet.cell(existing_row, 5).value or ""  # колонка E
                 
                 # Добавляем новое обращение сверху
@@ -103,9 +104,10 @@ class AppealsService:
                     code,
                     phone,
                     fio,
-                    'Новое',  # статус (колонка D)
+                    telegram_id,  # telegram_id (колонка D)
                     new_appeal,  # текст_обращений (колонка E)
-                    '',  # специалист_ответ (колонка F)
+                    'Новое',  # статус (колонка F)
+                    '',  # специалист_ответ (колонка G)
                     timestamp  # время_обновления (колонка H)
                 ]
                 
@@ -113,7 +115,7 @@ class AppealsService:
                 self.worksheet.append_row(row_data)
                 
                 # Устанавливаем заливку #f3cccc (светло-красный) для статуса "Новое"
-                self.worksheet.format(f'D{next_row}', {
+                self.worksheet.format(f'F{next_row}', {
                     "backgroundColor": {
                         "red": 0.95,    # #f3cccc
                         "green": 0.8,
@@ -446,12 +448,12 @@ class AppealsService:
                     'range': f'E{existing_row}',
                     'values': [[updated_appeals]]
                 }, {
-                    'range': f'D{existing_row}',
+                    'range': f'F{existing_row}',
                     'values': [['Ответ ИИ']]
                 }])
                 
                 # Устанавливаем заливку #ffffff (белый) для статуса "Ответ ИИ"
-                self.worksheet.format(f'D{existing_row}', {
+                self.worksheet.format(f'F{existing_row}', {
                     "backgroundColor": {
                         "red": 1.0,    # #ffffff
                         "green": 1.0,
@@ -494,14 +496,14 @@ class AppealsService:
                     break
             
             if existing_row:
-                # Устанавливаем статус "В работе" в колонке D (статус)
+                # Устанавливаем статус "В работе" в колонке F (статус)
                 self.worksheet.batch_update([{
-                    'range': f'D{existing_row}',
+                    'range': f'F{existing_row}',
                     'values': [['В работе']]
                 }])
                 
-                # Устанавливаем заливку #fff2cc (светло-желтый) для колонки D
-                self.worksheet.format(f'D{existing_row}', {
+                # Устанавливаем заливку #fff2cc (светло-желтый) для колонки F
+                self.worksheet.format(f'F{existing_row}', {
                     "backgroundColor": {
                         "red": 1.0,    # #fff2cc
                         "green": 0.95,

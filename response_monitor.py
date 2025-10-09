@@ -157,14 +157,14 @@ class ResponseMonitor:
             
             # Обновляем статус на "решено" с правильной заливкой
             try:
-                # Устанавливаем статус "решено" 
+                # Устанавливаем статус "решено" в колонке F
                 self.appeals_service.worksheet.batch_update([{
-                    'range': f'D{response_data["row"]}',
+                    'range': f'F{response_data["row"]}',
                     'values': [['Решено']]
                 }])
                 
-                # Устанавливаем заливку #d9ead3 (светло-зеленый)
-                self.appeals_service.worksheet.format(f'D{response_data["row"]}', {
+                # Устанавливаем заливку #d9ead3 (светло-зеленый) в колонке F
+                self.appeals_service.worksheet.format(f'F{response_data["row"]}', {
                     "backgroundColor": {
                         "red": 0.85,  # #d9ead3
                         "green": 0.92,
