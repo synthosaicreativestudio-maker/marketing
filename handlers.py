@@ -599,19 +599,21 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                     except Exception as e:
                         logger.error(f"Ошибка при записи ответа ИИ: {e}")
                 
+                # Очищаем ответ от неправильного Markdown
+                clean_reply = reply.replace('*', '').replace('_', '').replace('[', '').replace(']', '').replace('`', '')
+                
                 # Отправляем ответ ИИ пользователю с клавиатурой
                 try:
                     await update.message.reply_text(
-                        reply,
-                        parse_mode='Markdown',
+                        clean_reply,
                         reply_markup=create_main_menu_keyboard()
                     )
                     logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
                 except Exception as e:
                     logger.error(f"Ошибка отправки ответа ИИ: {e}")
-                    # Если Markdown не работает, отправляем без форматирования
+                    # Если все еще не работает, отправляем простой текст
                     await update.message.reply_text(
-                        reply,
+                        "Получен ответ от ассистента, но произошла ошибка форматирования.",
                         reply_markup=create_main_menu_keyboard()
                     )
                 
