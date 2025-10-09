@@ -43,7 +43,10 @@ def _is_user_escalation_request(text: str) -> bool:
     Returns:
         bool: True если найдены триггерные слова
     """
-    text_lower = text.lower()
+    import re
+    
+    # Нормализуем текст: убираем знаки препинания и приводим к нижнему регистру
+    text_normalized = re.sub(r'[^\w\s]', '', text.lower())
     
     # Прямые триггерные фразы для эскалации (30 фраз)
     escalation_phrases = [
@@ -103,9 +106,9 @@ def _is_user_escalation_request(text: str) -> bool:
         'подтверждаю'
     ]
     
-    # Проверяем наличие триггерных фраз
+    # Проверяем наличие триггерных фраз в нормализованном тексте
     for phrase in escalation_phrases:
-        if phrase in text_lower:
+        if phrase in text_normalized:
             return True
     
     return False
