@@ -636,14 +636,14 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             if reply:
                 # Логируем ответ ИИ для отладки
                 logger.info(f"Ответ ИИ для пользователя {user.id}: {reply[:200]}...")
-                
+                    
                 # Записываем ответ ИИ в таблицу обращений
-                if appeals_service and appeals_service.is_available():
-                    try:
+                    if appeals_service and appeals_service.is_available():
+                        try:
                         success = appeals_service.add_ai_response(user.id, reply)
-                        if success:
+                            if success:
                             logger.info(f"Ответ ИИ записан для пользователя {user.id}")
-                        else:
+                            else:
                             logger.warning(f"Не удалось записать ответ ИИ для пользователя {user.id}")
                     except Exception as e:
                         logger.error(f"Ошибка при записи ответа ИИ: {e}")
@@ -657,7 +657,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                         clean_reply
                     )
                     logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
-                except Exception as e:
+                        except Exception as e:
                     logger.error(f"Ошибка отправки ответа ИИ: {e}")
                     # Если все еще не работает, отправляем простой текст
                     await update.message.reply_text(
@@ -669,21 +669,35 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 # 2. ИИ спрашивает об эскалации И пользователь подтверждает
                 should_show_button = False
                 
-                if _is_user_escalation_request(text):
+                # Отладочная информация
+                is_escalation_request = _is_user_escalation_request(text)
+                is_ai_asking = _is_ai_asking_for_escalation(reply)
+                is_confirmation = _is_escalation_confirmation(text)
+                
+                logger.info(f"Отладка кнопки для пользователя {user.id}:")
+                logger.info(f"  - is_escalation_request: {is_escalation_request}")
+                logger.info(f"  - is_ai_asking: {is_ai_asking}")
+                logger.info(f"  - is_confirmation: {is_confirmation}")
+                logger.info(f"  - text: '{text}'")
+                logger.info(f"  - reply: '{reply[:100] if reply else 'None'}...'")
+                
+                if is_escalation_request:
                     # Путь 1: Прямые триггерные фразы
                     should_show_button = True
                     logger.info(f"Прямой запрос специалиста от пользователя {user.id}")
-                elif _is_ai_asking_for_escalation(reply) and _is_escalation_confirmation(text):
+                elif is_ai_asking and is_confirmation:
                     # Путь 2: ИИ спрашивает + пользователь подтверждает
                     should_show_button = True
                     logger.info(f"Подтверждение эскалации от пользователя {user.id}")
                 
+                logger.info(f"should_show_button: {should_show_button}")
+                
                 if should_show_button:
                     try:
-                        await update.message.reply_text(
+                await update.message.reply_text(
                             "Если вам нужна помощь специалиста, нажмите кнопку ниже:",
                             reply_markup=create_specialist_button()
-                        )
+                )
                         logger.info(f"Показана кнопка специалиста для пользователя {user.id}")
                     except Exception as e:
                         logger.error(f"Ошибка отправки кнопки специалиста: {e}")
@@ -732,12 +746,12 @@ def callback_query_handler(auth_service: AuthService, appeals_service: AppealsSe
                             break
                     
                     if user_data:
-                        # Меняем статус на "в работе" с заливкой
-                        success = appeals_service.set_status_in_work(user.id)
+                        # Меняем статус на "передано специалисту" с красной заливкой
+                        success = appeals_service.set_status_escalated(user.id)
                         if success:
                             await query.edit_message_text(
                                 "✅ Ваше обращение передано специалисту отдела маркетинга. "
-                                "Статус изменен на 'в работе'. Специалист ответит в ближайшее время."
+                                "Статус изменен на 'передано специалисту'. Специалист ответит в ближайшее время."
                             )
                         else:
                             await query.edit_message_text(

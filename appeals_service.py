@@ -471,6 +471,56 @@ class AppealsService:
             logger.error(f"Ошибка добавления ответа ИИ: {e}")
             return False
 
+    def set_status_escalated(self, telegram_id: int) -> bool:
+        """
+        Устанавливает статус обращения на 'Передано специалисту' с красной заливкой #f3cccc.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            
+        Returns:
+            bool: True если статус установлен успешно
+        """
+        if not self.is_available():
+            logger.error("Сервис обращений недоступен")
+            return False
+
+        try:
+            # Ищем существующую строку для этого telegram_id
+            records = self.worksheet.get_all_records()
+            existing_row = None
+            
+            for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    existing_row = i
+                    break
+            
+            if existing_row:
+                # Устанавливаем статус "Передано специалисту" в колонке F (статус)
+                self.worksheet.batch_update([{
+                    'range': f'F{existing_row}',
+                    'values': [['Передано специалисту']]
+                }])
+                
+                # Устанавливаем заливку #f3cccc (светло-красный) для колонки F
+                self.worksheet.format(f'F{existing_row}', {
+                    "backgroundColor": {
+                        "red": 0.95,    # #f3cccc
+                        "green": 0.8,
+                        "blue": 0.8
+                    }
+                })
+                
+                logger.info(f"Статус установлен 'Передано специалисту' для пользователя {telegram_id} (строка {existing_row})")
+                return True
+            else:
+                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка установки статуса 'Передано специалисту': {e}")
+            return False
+
     def set_status_in_work(self, telegram_id: int) -> bool:
         """
         Устанавливает статус обращения на 'В работе' с заливкой #fff2cc.
@@ -518,7 +568,7 @@ class AppealsService:
                 return False
                 
         except Exception as e:
-            logger.error(f"Ошибка установки статуса 'В работе': {e}")
+            logger.error(f"Ошибка при установке статуса 'В работе': {e}")
             return False
 
     def get_appeal_status(self, telegram_id: int) -> str:

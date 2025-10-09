@@ -89,17 +89,22 @@ def get_active_promotions() -> List[Dict]:
                 # Используем описание как название, если название пустое
                 title = str(record.get('Название', '')).strip()
                 description = str(record.get('Описание', '')).strip()
+                start_date = str(record.get('Дата начала', ''))
+                end_date = str(record.get('Дата окончания', ''))
                 
                 if not title or title == 'None' or title == '':
                     title = f"Акция {description}" if description and description != 'None' else "Акция без названия"
                 
+                # Создаем уникальный ID на основе содержимого акции
+                unique_id = f"{title}_{description}_{start_date}_{end_date}".replace(' ', '_').replace(':', '').replace('-', '')
+                
                 promotion = {
-                    'id': str(record.get('ID акции', '')),
+                    'id': unique_id,
                     'title': title,
                     'description': description if description and description != 'None' else "Описание отсутствует",
                     'status': status,
-                    'start_date': str(record.get('Дата начала', '')),
-                    'end_date': str(record.get('Дата окончания', ''))
+                    'start_date': start_date,
+                    'end_date': end_date
                 }
                 
                 # Добавляем акцию, если есть хотя бы название или описание
@@ -158,13 +163,24 @@ def check_new_promotions() -> List[Dict]:
                         today = date.today()
                         
                         if release_dt == today:
+                            # Используем ту же логику формирования ID, что и в get_active_promotions
+                            title = str(record.get('Название', '')).strip()
+                            description = str(record.get('Описание', '')).strip()
+                            start_date = str(record.get('Дата начала', ''))
+                            end_date = str(record.get('Дата окончания', ''))
+                            
+                            if not title or title == 'None' or title == '':
+                                title = f"Акция {description}" if description and description != 'None' else "Акция без названия"
+                            
+                            unique_id = f"{title}_{description}_{start_date}_{end_date}".replace(' ', '_').replace(':', '').replace('-', '')
+                            
                             promotion = {
-                                'id': str(record.get('ID акции', '')),
-                                'title': str(record.get('Название', '')),
-                                'description': str(record.get('Описание', '')),
+                                'id': unique_id,
+                                'title': title,
+                                'description': description if description and description != 'None' else "Описание отсутствует",
                                 'status': status,
-                                'start_date': str(record.get('Дата начала', '')),
-                                'end_date': str(record.get('Дата окончания', '')),
+                                'start_date': start_date,
+                                'end_date': end_date,
                                 'release_date': release_date
                             }
                             
