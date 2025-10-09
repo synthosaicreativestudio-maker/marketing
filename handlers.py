@@ -585,21 +585,6 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 None, openai_service.ask, user.id, text
             )
             if reply:
-                # Проверяем, является ли ответ эскалацией к специалисту
-                if _is_escalation_response(reply):
-                    logger.info(f"Обнаружена эскалация для пользователя {user.id}")
-                    
-                    # Устанавливаем статус "в работе" в таблице обращений
-                    if appeals_service and appeals_service.is_available():
-                        try:
-                            success = appeals_service.set_status_in_work(user.id)
-                            if success:
-                                logger.info(f"Статус 'в работе' установлен для пользователя {user.id}")
-                            else:
-                                logger.warning(f"Не удалось установить статус 'в работе' для пользователя {user.id}")
-                        except Exception as e:
-                            logger.error(f"Ошибка при установке статуса эскалации: {e}")
-                
                 # Записываем ответ ИИ в таблицу обращений
                 if appeals_service and appeals_service.is_available():
                     try:
@@ -611,12 +596,33 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                     except Exception as e:
                         logger.error(f"Ошибка при записи ответа ИИ: {e}")
                 
-                # Отправляем ответ с клавиатурой
+                # Отправляем ответ ИИ пользователю с клавиатурой
                 await update.message.reply_text(
                     reply,
                     parse_mode='Markdown',
                     reply_markup=create_main_menu_keyboard()
                 )
+                
+                # Проверяем, является ли ответ эскалацией к специалисту ПОСЛЕ отправки
+                if _is_escalation_response(reply):
+                    logger.info(f"Обнаружена эскалация для пользователя {user.id}")
+                    
+                    # Устанавливаем статус "в работе" в таблице обращений
+                    if appeals_service and appeals_service.is_available():
+                        try:
+                            success = appeals_service.set_status_in_work(user.id)
+                            if success:
+                                logger.info(f"Статус 'в работе' установлен для пользователя {user.id}")
+                                # Отправляем дополнительное сообщение об эскалации
+                                await update.message.reply_text(
+                                    "✅ Ваше обращение передано специалисту отдела маркетинга. "
+                                    "Статус изменен на 'в работе'. Специалист ответит в ближайшее время.",
+                                    reply_markup=create_main_menu_keyboard()
+                                )
+                            else:
+                                logger.warning(f"Не удалось установить статус 'в работе' для пользователя {user.id}")
+                        except Exception as e:
+                            logger.error(f"Ошибка при установке статуса эскалации: {e}")
             else:
                 await update.message.reply_text(
                     "Не удалось получить ответ ассистента. Попробуйте ещё раз."
