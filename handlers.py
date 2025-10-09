@@ -638,12 +638,12 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 logger.info(f"Ответ ИИ для пользователя {user.id}: {reply[:200]}...")
                     
                 # Записываем ответ ИИ в таблицу обращений
-                    if appeals_service and appeals_service.is_available():
-                        try:
+                if appeals_service and appeals_service.is_available():
+                    try:
                         success = appeals_service.add_ai_response(user.id, reply)
-                            if success:
+                        if success:
                             logger.info(f"Ответ ИИ записан для пользователя {user.id}")
-                            else:
+                        else:
                             logger.warning(f"Не удалось записать ответ ИИ для пользователя {user.id}")
                     except Exception as e:
                         logger.error(f"Ошибка при записи ответа ИИ: {e}")
@@ -657,7 +657,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                         clean_reply
                     )
                     logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
-                        except Exception as e:
+                except Exception as e:
                     logger.error(f"Ошибка отправки ответа ИИ: {e}")
                     # Если все еще не работает, отправляем простой текст
                     await update.message.reply_text(
@@ -694,10 +694,10 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 
                 if should_show_button:
                     try:
-                await update.message.reply_text(
+                        await update.message.reply_text(
                             "Если вам нужна помощь специалиста, нажмите кнопку ниже:",
                             reply_markup=create_specialist_button()
-                )
+                        )
                         logger.info(f"Показана кнопка специалиста для пользователя {user.id}")
                     except Exception as e:
                         logger.error(f"Ошибка отправки кнопки специалиста: {e}")
