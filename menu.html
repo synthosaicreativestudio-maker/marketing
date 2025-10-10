@@ -47,7 +47,7 @@
 
         .menu-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 16px;
             margin-bottom: 30px;
         }
@@ -317,6 +317,112 @@
             font-size: 16px;
         }
 
+        /* Стили для услуг */
+        .services-accordion {
+            margin-top: 20px;
+        }
+        
+        .service-category {
+            background: var(--tg-theme-bg-color, #ffffff);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            border: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .service-category:hover {
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .service-category-header {
+            padding: 16px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+            border: none;
+            width: 100%;
+            text-align: left;
+            transition: background-color 0.3s ease;
+        }
+        
+        .service-category-header:hover {
+            background: var(--tg-theme-hint-color, #e0e0e0);
+        }
+        
+        .service-category-header.active {
+            background: var(--tg-theme-button-color, #007aff);
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+        
+        .service-category-icon {
+            font-size: 20px;
+            margin-right: 12px;
+        }
+        
+        .service-category-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--tg-theme-text-color, #000000);
+            flex: 1;
+        }
+        
+        .service-category-header.active .service-category-title {
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+        
+        .service-category-arrow {
+            font-size: 18px;
+            transition: transform 0.3s ease;
+            color: var(--tg-theme-hint-color, #999999);
+        }
+        
+        .service-category-header.active .service-category-arrow {
+            transform: rotate(180deg);
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+        
+        .service-category-content {
+            padding: 0 20px;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+        }
+        
+        .service-category-content.active {
+            padding: 20px;
+            max-height: 500px;
+        }
+        
+        .service-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .service-list li {
+            background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-left: 3px solid var(--tg-theme-button-color, #007aff);
+            transition: all 0.3s ease;
+            font-size: 14px;
+            color: var(--tg-theme-text-color, #000000);
+        }
+        
+        .service-list li:hover {
+            transform: translateX(4px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .service-list li:last-child {
+            margin-bottom: 0;
+        }
+
         @media (max-width: 480px) {
             .menu-grid {
                 grid-template-columns: 1fr;
@@ -342,6 +448,14 @@
             .promotion-dates {
                 flex-direction: column;
                 gap: 8px;
+            }
+            
+            .service-category-header {
+                padding: 12px 16px;
+            }
+            
+            .service-category-content.active {
+                padding: 16px;
             }
         }
     </style>
@@ -379,6 +493,13 @@
                 <span class="menu-icon">📚</span>
                 <div class="menu-title">База знаний</div>
                 <div class="menu-description">Справочная информация и обучающие материалы</div>
+                <div class="status-indicator"></div>
+            </div>
+
+            <div class="menu-item" onclick="showSection('services')">
+                <span class="menu-icon">🎯</span>
+                <div class="menu-title">Дополнительные услуги</div>
+                <div class="menu-description">Расширенные возможности и дополнительные сервисы</div>
                 <div class="status-indicator"></div>
             </div>
         </div>
@@ -506,6 +627,107 @@
                         <div class="feature-description">Контакты и инструкции для получения помощи</div>
                     </li>
                 </ul>
+            </div>
+        </div>
+
+        <!-- Секция "Дополнительные услуги и сервисы" -->
+        <div id="services-section" class="content-section">
+            <button class="back-button" onclick="showMainMenu()">
+                ← Назад к меню
+            </button>
+            <h2 class="section-title">🎯 Дополнительные услуги и сервисы</h2>
+            <div class="section-content">
+                <div class="services-accordion">
+                    <!-- Контент для социальных сетей -->
+                    <div class="service-category">
+                        <button class="service-category-header" onclick="toggleServiceCategory('social-content')">
+                            <span class="service-category-icon">📱</span>
+                            <span class="service-category-title">Контент для социальных сетей</span>
+                            <span class="service-category-arrow">▼</span>
+                        </button>
+                        <div class="service-category-content" id="social-content">
+                            <ul class="service-list">
+                                <li>Создание контента для социальных сетей</li>
+                                <li>Пакетные предложения по созданию контента</li>
+                                <li>Ведение и оформление аккаунтов (ВК, Instagram, Дзен, YouTube)</li>
+                                <li>Разработка и согласование контент-плана</li>
+                                <li>Фото- и видеосъемка людей и объектов недвижимости</li>
+                                <li>Съемка и монтаж рилс</li>
+                                <li>Полное оформление и монтаж сторис</li>
+                                <li>Услуги фотографа (портреты, лавстори, семейные съемки)</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Тексты -->
+                    <div class="service-category">
+                        <button class="service-category-header" onclick="toggleServiceCategory('texts')">
+                            <span class="service-category-icon">✍️</span>
+                            <span class="service-category-title">Тексты и копирайтинг</span>
+                            <span class="service-category-arrow">▼</span>
+                        </button>
+                        <div class="service-category-content" id="texts">
+                            <ul class="service-list">
+                                <li>Написание текстов для соцсетей, заметки, анонсы</li>
+                                <li>Интервью и сценарии для видео</li>
+                                <li>Ведение Telegram-канала и написание текстов для блога</li>
+                                <li>Редактирование текстов</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Дизайн -->
+                    <div class="service-category">
+                        <button class="service-category-header" onclick="toggleServiceCategory('design')">
+                            <span class="service-category-icon">🎨</span>
+                            <span class="service-category-title">Дизайн и брендинг</span>
+                            <span class="service-category-arrow">▼</span>
+                        </button>
+                        <div class="service-category-content" id="design">
+                            <ul class="service-list">
+                                <li>Графический дизайн (буклеты, каталоги, плакаты, лифлеты)</li>
+                                <li>Веб-баннеры и рекламные материалы</li>
+                                <li>Коммерческий дизайн: логотипы, брендинг</li>
+                                <li>Инженерная графика: чертежи, технические иллюстрации</li>
+                                <li>3D-визуализации</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Реклама и продвижение -->
+                    <div class="service-category">
+                        <button class="service-category-header" onclick="toggleServiceCategory('advertising')">
+                            <span class="service-category-icon">📈</span>
+                            <span class="service-category-title">Реклама и продвижение</span>
+                            <span class="service-category-arrow">▼</span>
+                        </button>
+                        <div class="service-category-content" id="advertising">
+                            <ul class="service-list">
+                                <li>Настройка таргетированной и контекстной рекламы (Яндекс Директ, ВК)</li>
+                                <li>Услуги SMM-специалиста и маркетолога</li>
+                                <li>Продюсирование запусков курсов</li>
+                                <li>SEO-продвижение</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Автоматизация и технологии -->
+                    <div class="service-category">
+                        <button class="service-category-header" onclick="toggleServiceCategory('automation')">
+                            <span class="service-category-icon">🤖</span>
+                            <span class="service-category-title">Автоматизация и технологии</span>
+                            <span class="service-category-arrow">▼</span>
+                        </button>
+                        <div class="service-category-content" id="automation">
+                            <ul class="service-list">
+                                <li>Автоматизация контента</li>
+                                <li>Чат-боты и чат-боты с ИИ</li>
+                                <li>Разработка лендингов и сайтов</li>
+                                <li>Интеграции с CRM и аналитикой</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -770,6 +992,32 @@
                 });
                 
                 // Открываем текущий
+                content.classList.add('active');
+                header.classList.add('active');
+                arrow.textContent = '▲';
+            }
+        }
+        
+        // Функция для переключения категорий услуг
+        function toggleServiceCategory(categoryId) {
+            const content = document.getElementById(categoryId);
+            const header = content.previousElementSibling;
+            const arrow = header.querySelector('.service-category-arrow');
+            
+            if (content.classList.contains('active')) {
+                // Закрываем
+                content.classList.remove('active');
+                header.classList.remove('active');
+                arrow.textContent = '▼';
+            } else {
+                // Закрываем все остальные категории услуг
+                document.querySelectorAll('.service-category-content.active').forEach(el => {
+                    el.classList.remove('active');
+                    el.previousElementSibling.classList.remove('active');
+                    el.previousElementSibling.querySelector('.service-category-arrow').textContent = '▼';
+                });
+                
+                // Открываем текущую категорию
                 content.classList.add('active');
                 header.classList.add('active');
                 arrow.textContent = '▲';
