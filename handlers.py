@@ -346,6 +346,10 @@ def web_app_data_handler(auth_service: AuthService):
             
             logger.info(f"Код партнера: {partner_code}, Телефон: {partner_phone}")
 
+            # Проверяем, не авторизован ли пользователь уже
+            current_auth_status = auth_service.get_user_auth_status(user.id)
+            logger.info(f"Текущий статус авторизации пользователя {user.id}: {current_auth_status}")
+            
             # Логика авторизации
             logger.info("Запуск процесса авторизации...")
             auth_result = auth_service.find_and_update_user(partner_code, partner_phone, user.id)
@@ -377,14 +381,32 @@ def web_app_data_handler(auth_service: AuthService):
                         "Теперь вы можете задать любой вопрос ассистенту."
                     )
             else:
-                logger.warning("Авторизация не удалась - данные не найдены")
+                logger.warning(f"Авторизация не удалась для пользователя {user.id} - данные не найдены")
+                logger.warning(f"Искали: код={partner_code}, телефон={partner_phone}")
+                
+                # Дополнительная диагностика
+                try:
+                    from sheets import find_row_by_partner_and_phone, normalize_phone
+                    phone_norm = normalize_phone(partner_phone)
+                    logger.info(f"Нормализованный телефон: {phone_norm}")
+                    
+                    # Проверяем, есть ли пользователь с таким кодом
+                    row = find_row_by_partner_and_phone(partner_code, phone_norm)
+                    if row:
+                        logger.error(f"ОШИБКА: Пользователь найден в строке {row}, но авторизация не удалась!")
+                    else:
+                        logger.info("Пользователь действительно не найден в таблице")
+                except Exception as e:
+                    logger.error(f"Ошибка диагностики: {e}")
+                
                 keyboard_button = KeyboardButton(
                     text="Повторить авторизацию",
                     web_app=WebAppInfo(url=get_web_app_url())
                 )
                 reply_markup = ReplyKeyboardMarkup.from_button(keyboard_button, resize_keyboard=True)
                 await update.message.reply_text(
-                    "Данные не найдены. Пожалуйста, проверьте код партнера и телефон и попробуйте снова.",
+                    "Данные не найдены. Пожалуйста, проверьте код партнера и телефон и попробуйте снова.\n\n"
+                    "Если проблема повторяется, обратитесь к администратору.",
                     reply_markup=reply_markup
                 )
         except json.JSONDecodeError as e:
