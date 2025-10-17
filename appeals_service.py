@@ -84,6 +84,8 @@ class AppealsService:
                 
                 # Очищаем старые обращения (>30 дней)
                 updated_appeals = self._cleanup_old_appeals(updated_appeals)
+                # Усечение под лимит Google Sheets
+                updated_appeals = self._truncate_to_gs_limit(updated_appeals)
                 
                 # Обновляем ячейку с обращениями и время обновления через batch_update
                 self.worksheet.batch_update([{
@@ -105,7 +107,7 @@ class AppealsService:
                     phone,
                     fio,
                     telegram_id,  # telegram_id (колонка D)
-                    new_appeal,  # текст_обращений (колонка E)
+                    self._truncate_to_gs_limit(new_appeal),  # текст_обращений (колонка E)
                     'Новое',  # статус (колонка F)
                     '',  # специалист_ответ (колонка G)
                     timestamp  # время_обновления (колонка H)
@@ -175,6 +177,22 @@ class AppealsService:
         except Exception as e:
             logger.error(f"Ошибка очистки старых обращений: {e}")
             return appeals_text
+
+    def _truncate_to_gs_limit(self, text: str, limit: int = 49000) -> str:
+        """
+        Ограничивает длину текста для одной ячейки Google Sheets (лимит ~50k символов).
+        Сохраняем последние сообщения, добавляя пометку об усечении.
+        """
+        try:
+            if text is None:
+                return ""
+            if len(text) <= limit:
+                return text
+            suffix = "\n[...] (усечено до лимита Google Sheets)"
+            keep = max(0, limit - len(suffix))
+            return text[-keep:] + suffix
+        except Exception:
+            return text[:limit]
 
     def get_user_appeals(self, telegram_id: int) -> List[Dict]:
         """
@@ -390,6 +408,8 @@ class AppealsService:
                     updated_appeals = f"{response_text}\n{current_appeals}"
                 else:
                     updated_appeals = response_text
+                # Усечение под лимит Google Sheets
+                updated_appeals = self._truncate_to_gs_limit(updated_appeals)
                 
                 # Обновляем ячейку с обращениями
                 self.worksheet.batch_update([{
@@ -442,6 +462,8 @@ class AppealsService:
                     updated_appeals = f"{ai_response}\n{current_appeals}"
                 else:
                     updated_appeals = ai_response
+                # Усечение под лимит Google Sheets
+                updated_appeals = self._truncate_to_gs_limit(updated_appeals)
                 
                 # Обновляем ячейку с обращениями и статус
                 self.worksheet.batch_update([{
@@ -493,6 +515,8 @@ class AppealsService:
                 timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 user_line = f"{timestamp}: Пользователь: {message_text}"
                 updated_appeals = f"{user_line}\n{current_appeals}" if current_appeals.strip() else user_line
+                # Усечение под лимит Google Sheets
+                updated_appeals = self._truncate_to_gs_limit(updated_appeals)
                 self.worksheet.batch_update([
                     {'range': f'E{existing_row}', 'values': [[updated_appeals]]},
                     {'range': f'H{existing_row}', 'values': [[timestamp]]}
