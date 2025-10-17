@@ -646,7 +646,14 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 current_status = appeals_service.get_appeal_status(user.id)
                 current_status = str(current_status or '').strip().lower()
                 logger.info(f"Текущий статус обращения пользователя {user.id}: {current_status}")
-                if current_status in ("в работе", "передано специалисту"):
+                # Режим специалиста: любые варианты "в работе" или "передано ..." (без учета регистра)
+                is_specialist_mode = (
+                    current_status == "в работе" or
+                    current_status == "передано специалисту" or
+                    ("в работ" in current_status) or
+                    ("передано" in current_status)
+                )
+                if is_specialist_mode:
                     # Режим специалиста: не вызываем ИИ и не отправляем сервисные сообщения
                     # Страховочно логируем сообщение пользователя в таблицу обращений
                     try:
