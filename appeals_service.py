@@ -471,6 +471,41 @@ class AppealsService:
             logger.error(f"Ошибка добавления ответа ИИ: {e}")
             return False
 
+    def add_user_message(self, telegram_id: int, message_text: str) -> bool:
+        """
+        Гарантированно добавляет пользовательское сообщение в колонку E без изменения статуса.
+        Используется как дополнительная страховка при режиме специалиста.
+        """
+        if not self.is_available():
+            logger.error("Сервис обращений недоступен")
+            return False
+
+        try:
+            records = self.worksheet.get_all_records()
+            existing_row = None
+            for i, record in enumerate(records, start=2):
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    existing_row = i
+                    break
+
+            if existing_row:
+                current_appeals = self.worksheet.cell(existing_row, 5).value or ""
+                timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                user_line = f"{timestamp}: Пользователь: {message_text}"
+                updated_appeals = f"{user_line}\n{current_appeals}" if current_appeals.strip() else user_line
+                self.worksheet.batch_update([
+                    {'range': f'E{existing_row}', 'values': [[updated_appeals]]},
+                    {'range': f'H{existing_row}', 'values': [[timestamp]]}
+                ])
+                logger.info(f"Сообщение пользователя добавлено (страховка) для {telegram_id} (строка {existing_row})")
+                return True
+            else:
+                logger.warning(f"Строка пользователя не найдена для добавления сообщения (telegram_id={telegram_id})")
+                return False
+        except Exception as e:
+            logger.error(f"Ошибка добавления пользовательского сообщения: {e}")
+            return False
+
     def set_status_escalated(self, telegram_id: int) -> bool:
         """
         Устанавливает статус обращения на 'Передано специалисту' с красной заливкой #f3cccc.

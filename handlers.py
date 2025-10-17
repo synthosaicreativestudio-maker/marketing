@@ -647,6 +647,11 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 logger.info(f"Текущий статус обращения пользователя {user.id}: {current_status}")
                 if current_status in ("в работе", "передано специалисту"):
                     # Режим специалиста: не вызываем ИИ и не отправляем сервисные сообщения
+                    # Страховочно логируем сообщение пользователя в таблицу обращений
+                    try:
+                        appeals_service.add_user_message(user.id, text)
+                    except Exception:
+                        pass
                     # Зафиксируем статус 'В работе' для наглядности
                     try:
                         appeals_service.set_status_in_work(user.id)
