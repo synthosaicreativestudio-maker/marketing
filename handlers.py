@@ -643,7 +643,8 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
         # Если обращение находится у специалиста, переключаем в режим общения со специалистом
         if appeals_service and appeals_service.is_available():
             try:
-                current_status = appeals_service.get_appeal_status(user.id).strip().lower()
+                current_status = appeals_service.get_appeal_status(user.id)
+                current_status = str(current_status or '').strip().lower()
                 logger.info(f"Текущий статус обращения пользователя {user.id}: {current_status}")
                 if current_status in ("в работе", "передано специалисту"):
                     # Режим специалиста: не вызываем ИИ и не отправляем сервисные сообщения

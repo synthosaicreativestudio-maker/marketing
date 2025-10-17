@@ -674,10 +674,22 @@ class AppealsService:
             # Ищем существующую строку для этого telegram_id
             records = self.worksheet.get_all_records()
             
-            for record in records:
+            for i, record in enumerate(records, start=2):
                 if str(record.get('telegram_id', '')) == str(telegram_id):
                     status = record.get('статус', 'новое')
                     logger.info(f"Найден статус для пользователя {telegram_id}: {status}")
+                    # Авто-форматирование: если статус 'решено' (любой регистр) — зелёная заливка
+                    try:
+                        if str(status).strip().lower() == 'решено':
+                            self.worksheet.format(f'F{i}', {
+                                "backgroundColor": {
+                                    "red": 0.85,
+                                    "green": 0.92,
+                                    "blue": 0.83
+                                }
+                            })
+                    except Exception as e:
+                        logger.debug(f"Не удалось применить форматирование для строки {i}: {e}")
                     return status
             
             logger.info(f"Статус для пользователя {telegram_id} не найден, возвращаем 'новое'")
