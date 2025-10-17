@@ -646,11 +646,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 current_status = appeals_service.get_appeal_status(user.id).strip().lower()
                 logger.info(f"Текущий статус обращения пользователя {user.id}: {current_status}")
                 if current_status in ("в работе", "передано специалисту"):
-                    # Режим специалиста: не вызываем ИИ, только подтверждаем получение и просим дождаться ответа
-                    await update.message.reply_text(
-                        "Ваше обращение сейчас обрабатывает специалист. Напишите детали, они попадут в карточку.\n"
-                        "Как только статус станет 'Решено' или пустым — чат снова переключится на ИИ."
-                    )
+                    # Режим специалиста: не вызываем ИИ и не отправляем сервисные сообщения
                     # Зафиксируем статус 'В работе' для наглядности
                     try:
                         appeals_service.set_status_in_work(user.id)
