@@ -571,6 +571,56 @@ class AppealsService:
             logger.error(f"Ошибка при установке статуса 'В работе': {e}")
             return False
 
+    def set_status_resolved(self, telegram_id: int) -> bool:
+        """
+        Устанавливает статус обращения на 'Решено' с зелёной заливкой #d9ead3.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            
+        Returns:
+            bool: True если статус установлен успешно
+        """
+        if not self.is_available():
+            logger.error("Сервис обращений недоступен")
+            return False
+
+        try:
+            # Ищем существующую строку для этого telegram_id
+            records = self.worksheet.get_all_records()
+            existing_row = None
+            
+            for i, record in enumerate(records, start=2):
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    existing_row = i
+                    break
+            
+            if existing_row:
+                # Устанавливаем статус "Решено" в колонке F (статус)
+                self.worksheet.batch_update([{
+                    'range': f'F{existing_row}',
+                    'values': [['Решено']]
+                }])
+                
+                # Зелёная заливка #d9ead3
+                self.worksheet.format(f'F{existing_row}', {
+                    "backgroundColor": {
+                        "red": 0.85,
+                        "green": 0.92,
+                        "blue": 0.83
+                    }
+                })
+                
+                logger.info(f"Статус установлен 'Решено' для пользователя {telegram_id} (строка {existing_row})")
+                return True
+            else:
+                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка при установке статуса 'Решено': {e}")
+            return False
+
     def get_appeal_status(self, telegram_id: int) -> str:
         """
         Получает статус обращения пользователя.
