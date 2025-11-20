@@ -4,7 +4,6 @@
 """
 
 import os
-import json
 from dotenv import load_dotenv
 from sheets import _load_service_account, SheetsNotConfiguredError
 

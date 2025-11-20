@@ -4,7 +4,6 @@
 
 import logging
 import asyncio
-from typing import Optional
 from telegram import Bot
 from appeals_service import AppealsService
 
@@ -135,8 +134,9 @@ class ResponseMonitor:
         try:
             telegram_id = response_data['telegram_id']
             response_text = response_data['response']
-            fio = response_data.get('fio', '')
-            code = response_data.get('code', '')
+            telegram_id = response_data['telegram_id']
+            response_text = response_data['response']
+            # fio and code are unused
             
             # Формируем сообщение о решении
             message = f"✅ Ваше обращение решено специалистом отдела маркетинга!\n\n{response_text}"
@@ -168,8 +168,9 @@ class ResponseMonitor:
         try:
             telegram_id = response_data['telegram_id']
             response_text = response_data['response']
-            fio = response_data.get('fio', '')
-            code = response_data.get('code', '')
+            telegram_id = response_data['telegram_id']
+            response_text = response_data['response']
+            # fio and code are unused
             
             # Формируем сообщение (без информации о пользователе)
             message = f"💬 Ответ от специалиста отдела маркетинга:\n\n{response_text}"

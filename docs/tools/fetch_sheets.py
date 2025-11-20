@@ -14,7 +14,7 @@ import argparse
 import json
 import os
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import gspread
 from google.oauth2.service_account import Credentials

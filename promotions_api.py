@@ -2,8 +2,7 @@
 import logging
 import os
 import json
-from typing import List, Dict, Optional
-from datetime import datetime
+from typing import List, Dict
 from dotenv import load_dotenv
 
 # Загружаем переменные окружения
@@ -63,19 +62,31 @@ def _get_promotions_client_and_sheet():
         logger.error(f"Failed to connect to Promotions Google Sheets: {e}")
         raise PromotionsNotConfiguredError(f'Promotions Google Sheets connection failed: {e}')
 
+# Global cache for promotions
+_promotions_cache = {
+    'data': [],
+    'timestamp': 0
+}
+CACHE_TTL = 300  # 5 minutes in seconds
+
 def get_active_promotions() -> List[Dict]:
     """
     Получает список активных акций из Google Sheets.
+    Использует кэширование на 5 минут.
     
     Returns:
-        List[Dict]: Список активных акций с полями:
-        - id: ID акции
-        - title: Название акции
-        - description: Описание акции
-        - status: Статус акции
-        - start_date: Дата начала
-        - end_date: Дата окончания
+        List[Dict]: Список активных акций
     """
+    global _promotions_cache
+    import time
+    
+    current_time = time.time()
+    
+    # Return cached data if valid
+    if _promotions_cache['data'] and (current_time - _promotions_cache['timestamp'] < CACHE_TTL):
+        logger.info("Возврат акций из кэша")
+        return _promotions_cache['data']
+
     try:
         _, worksheet = _get_promotions_client_and_sheet()
         records = worksheet.get_all_records()
@@ -113,6 +124,11 @@ def get_active_promotions() -> List[Dict]:
                     logger.info(f"Найдена активная акция: {promotion['title']}")
         
         logger.info(f"Всего найдено активных акций: {len(active_promotions)}")
+        
+        # Update cache
+        _promotions_cache['data'] = active_promotions
+        _promotions_cache['timestamp'] = current_time
+        
         return active_promotions
         
     except PromotionsNotConfiguredError:
@@ -120,6 +136,10 @@ def get_active_promotions() -> List[Dict]:
         return []
     except Exception as e:
         logger.error(f"Ошибка при получении активных акций: {e}")
+        # Return cached data if available even if expired in case of error
+        if _promotions_cache['data']:
+            logger.warning("Возврат устаревшего кэша из-за ошибки")
+            return _promotions_cache['data']
         return []
 
 def get_promotions_json() -> str:

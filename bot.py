@@ -6,14 +6,14 @@ from telegram.ext import Application
 # Загружаем .env как можно раньше, до импортов, читающих переменные окружения
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 
-from auth_service import AuthService
-from handlers import setup_handlers
-from openai_service import OpenAIService
-from response_monitor import ResponseMonitor
-from promotions_notifier import PromotionsNotifier
+from auth_service import AuthService  # noqa: E402
+from handlers import setup_handlers  # noqa: E402
+from openai_service import OpenAIService  # noqa: E402
+from response_monitor import ResponseMonitor  # noqa: E402
+from promotions_notifier import PromotionsNotifier  # noqa: E402
 
 # Импортируем AppealsService после загрузки переменных окружения
-from appeals_service import AppealsService
+from appeals_service import AppealsService  # noqa: E402
 
 # .env уже загружен выше
 

@@ -43,7 +43,7 @@ def check_pythonanywhere_status():
     try:
         from sheets import _get_client_and_sheet
         client, worksheet = _get_client_and_sheet()
-        print(f"   ✓ Подключение успешно")
+        print("   ✓ Подключение успешно")
         print(f"   Название листа: {worksheet.title}")
         print(f"   ID таблицы: {worksheet.spreadsheet.id}")
         

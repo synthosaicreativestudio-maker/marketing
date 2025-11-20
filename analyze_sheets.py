@@ -4,8 +4,6 @@
 Читает заголовки и первые несколько строк всех листов.
 """
 
-import os
-import json
 from dotenv import load_dotenv
 from sheets import _get_client_and_sheet, SheetsNotConfiguredError
 

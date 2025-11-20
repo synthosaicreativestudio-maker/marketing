@@ -2,7 +2,6 @@
 import logging
 import asyncio
 from typing import List, Dict
-from datetime import datetime, timedelta
 
 from promotions_api import check_new_promotions, is_promotions_available
 from auth_service import AuthService
@@ -77,7 +76,7 @@ class PromotionsNotifier:
         """Отправляет уведомление о новой акции пользователям"""
         try:
             # Формируем сообщение
-            message = f"🎉 **Новая акция!**\n\n"
+            message = "🎉 **Новая акция!**\n\n"
             message += f"**{promotion['title']}**\n\n"
             message += f"📝 {promotion['description'][:200]}{'...' if len(promotion['description']) > 200 else ''}\n\n"
             message += f"📅 **Период действия:** {promotion['start_date']} - {promotion['end_date']}\n\n"

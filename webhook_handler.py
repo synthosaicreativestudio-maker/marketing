@@ -2,12 +2,10 @@
 Webhook handler для получения уведомлений от Google Sheets
 """
 import logging
-import json
 import os
 from flask import Flask, request, jsonify
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from auth_service import AuthService
-from promotions_api import get_active_promotions
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +18,28 @@ web_app_url = os.getenv('WEB_APP_URL', '')
 
 bot = Bot(token=bot_token)
 auth_service = AuthService()
+
+# Импортируем API акций
+import promotions_api
+
+@app.after_request
+def after_request(response):
+    """Добавляем CORS заголовки для всех ответов"""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
+@app.route('/api/promotions', methods=['GET'])
+def get_promotions_api():
+    """API endpoint для получения списка акций"""
+    try:
+        logger.info("API Request: GET /api/promotions")
+        promotions_json = promotions_api.get_promotions_json()
+        return promotions_json, 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        logger.error(f"API Error: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
 
 @app.route('/webhook/promotions', methods=['POST'])
 def handle_promotion_webhook():
@@ -62,7 +82,7 @@ async def send_promotion_notification(promotion_data):
         end_date = promotion_data.get('end_date', '')
         
         # Формируем сообщение
-        message = f"🎉 **Новая акция!**\n\n"
+        message = "🎉 **Новая акция!**\n\n"
         message += f"**{title}**\n\n"
         if description:
             message += f"📝 {description}\n\n"
@@ -106,7 +126,7 @@ async def send_promotion_update_notification(promotion_data):
     try:
         title = promotion_data.get('title', 'Акция обновлена')
         
-        message = f"🔄 **Акция обновлена!**\n\n"
+        message = "🔄 **Акция обновлена!**\n\n"
         message += f"**{title}**\n\n"
         message += "Информация об акции была изменена. Нажмите кнопку ниже, чтобы посмотреть обновления!"
         
@@ -153,4 +173,4 @@ def get_authorized_users():
         return []
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=8080, debug=False)
