@@ -734,11 +734,13 @@
         async function fetchPromotions() {
             try {
                 const response = await fetch(`${API_BASE_URL}/api/promotions`);
-                if (!response.ok) throw new Error('Network response was not ok');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 return await response.json();
             } catch (error) {
                 console.error('Fetch error:', error);
-                return null;
+                return { error: error.message };
             }
         }
 
@@ -747,7 +749,7 @@
             const allContainer = document.getElementById('all-promotions-container');
 
             // If already loaded, don't reload
-            if (promotionsCache) {
+            if (promotionsCache && !promotionsCache.error) {
                 renderPromotions(promotionsCache, container, true); // Preview (limit 2)
                 renderPromotions(promotionsCache, allContainer, false); // All
                 return;
@@ -755,63 +757,23 @@
 
             const data = await fetchPromotions();
 
-            if (data) {
+            if (data && !data.error) {
                 promotionsCache = data;
                 renderPromotions(data, container, true);
                 renderPromotions(data, allContainer, false);
             } else {
-                showError(container);
-                showError(allContainer);
+                const errorMsg = data ? data.error : 'Unknown error';
+                showError(container, errorMsg);
+                showError(allContainer, errorMsg);
             }
         }
 
-        function renderPromotions(promotions, container, isPreview) {
-            if (!container) return;
-
-            container.innerHTML = '';
-
-            if (promotions.length === 0) {
-                container.innerHTML = `
-                    <div class="glass-card empty-state">
-                        <p>Нет активных акций на данный момент</p>
-                    </div>
-                `;
-                return;
-            }
-
-            const itemsToRender = isPreview ? promotions.slice(0, 2) : promotions;
-
-            itemsToRender.forEach(promo => {
-                const card = document.createElement('div');
-                card.className = 'glass-card promotion-card';
-                card.innerHTML = `
-                    <div class="promotion-header">
-                        <div class="promotion-title">${promo.title}</div>
-                        <div class="status-badge">Активна</div>
-                    </div>
-                    <div class="promotion-desc">${promo.description}</div>
-                    <div class="promotion-footer">
-                        <div class="date-info">📅 ${promo.start_date} - ${promo.end_date}</div>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
-
-            if (isPreview && promotions.length > 2) {
-                const moreBtn = document.createElement('div');
-                moreBtn.className = 'glass-card menu-item';
-                moreBtn.style.height = '50px';
-                moreBtn.innerHTML = '<div class="menu-item-title">Показать все (' + promotions.length + ')</div>';
-                moreBtn.onclick = () => switchTab('promotions');
-                container.appendChild(moreBtn);
-            }
-        }
-
-        function showError(container) {
+        function showError(container, message) {
             if (!container) return;
             container.innerHTML = `
                 <div class="glass-card error-state">
                     <p>Не удалось загрузить акции</p>
+                    <p style="font-size: 12px; opacity: 0.7; margin: 5px 0;">${message}</p>
                     <button onclick="loadPromotions()" style="margin-top:10px; padding: 8px 16px; border-radius: 8px; border: none; background: var(--primary-color); color: white;">Повторить</button>
                 </div>
             `;
