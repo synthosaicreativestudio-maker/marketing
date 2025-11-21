@@ -330,6 +330,47 @@ class AppealsService:
             logger.error(f"Ошибка проверки ответов: {e}")
             return []
 
+    def check_for_resolved_status(self) -> List[Dict]:
+        """
+        Проверяет наличие обращений со статусом 'Решено', о которых еще не уведомлен пользователь.
+        Определяет это по отсутствию системного сообщения о решении в тексте обращений.
+        
+        Returns:
+            List[Dict]: список решенных обращений для уведомления
+        """
+        if not self.is_available():
+            return []
+
+        try:
+            records = self.worksheet.get_all_records()
+            resolved_appeals = []
+            
+            for i, record in enumerate(records, start=2):
+                status = str(record.get('статус', '')).strip().lower()
+                appeals_text = str(record.get('текст_обращений', ''))
+                telegram_id = record.get('telegram_id', '')
+                
+                # Если статус "решено" и в тексте нет маркера закрытия
+                if status == 'решено' and telegram_id:
+                    # Маркер, который мы добавляем при закрытии
+                    closing_marker = "✅ Ваше обращение решено"
+                    
+                    if closing_marker not in appeals_text:
+                        resolved_appeals.append({
+                            'row': i,
+                            'telegram_id': int(telegram_id),
+                            'appeals_text': appeals_text
+                        })
+            
+            if resolved_appeals:
+                logger.info(f"Найдено {len(resolved_appeals)} решенных обращений для уведомления")
+                
+            return resolved_appeals
+            
+        except Exception as e:
+            logger.error(f"Ошибка проверки решенных статусов: {e}")
+            return []
+
     def clear_response(self, row: int) -> bool:
         """
         Очищает ответ специалиста в указанной строке.

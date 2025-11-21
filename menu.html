@@ -18,11 +18,11 @@
             --accent-color: #00BFFF;
             /* DeepSkyBlue */
             --bg-gradient: linear-gradient(135deg, #050505 0%, #1a1a2e 100%);
-            --glass-bg: rgba(255, 255, 255, 0.05);
-            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
             --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
             --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-secondary: rgba(255, 255, 255, 0.8);
             --success-color: #00e676;
             --card-radius: 20px;
             --transition-speed: 0.3s;
@@ -128,9 +128,9 @@
 
         /* Glass Cards */
         .glass-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--glass-border);
             border-radius: var(--card-radius);
             padding: 20px;
@@ -239,6 +239,100 @@
             display: flex;
             align-items: center;
             gap: 5px;
+        }
+
+        /* Lists (for Tools, Knowledge, Services) */
+        .glass-list {
+            list-style: none;
+        }
+
+        .glass-list-item {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 1px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .glass-list-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--primary-color);
+            transform: translateX(5px);
+        }
+
+        .item-title {
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 4px;
+            font-size: 15px;
+        }
+
+        .item-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* Accordion (for Services) */
+        .accordion-item {
+            margin-bottom: 10px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .accordion-header {
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .accordion-header:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .accordion-header.active {
+            background: rgba(138, 43, 226, 0.2);
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .accordion-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .accordion-content.open {
+            max-height: 500px;
+            /* Arbitrary large height */
+        }
+
+        .accordion-inner-list {
+            list-style: none;
+            padding: 15px;
+        }
+
+        .accordion-inner-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .accordion-inner-list li:last-child {
+            border-bottom: none;
         }
 
         /* Skeleton Loading */
@@ -380,6 +474,10 @@
                     <div class="menu-item-icon">📚</div>
                     <div class="menu-item-title">База знаний</div>
                 </div>
+                <div class="glass-card menu-item" onclick="switchTab('services')">
+                    <div class="menu-item-icon">🎯</div>
+                    <div class="menu-item-title">Услуги</div>
+                </div>
             </div>
 
             <h2>📢 Активные акции</h2>
@@ -398,26 +496,159 @@
             </div>
         </div>
 
-        <!-- Placeholder Sections -->
+        <!-- Tools Section -->
         <div id="tools-section" class="section">
-            <div class="glass-card empty-state">
-                <h3>🛠 Инструменты</h3>
-                <p>Раздел находится в разработке</p>
-            </div>
+            <h2>🛠 Инструменты</h2>
+            <ul class="glass-list">
+                <li class="glass-list-item">
+                    <div class="item-title">📱 CRM КОСМОС</div>
+                    <div class="item-desc">Работа с клиентской базой и управление сделками</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">🏠 Авито.Про</div>
+                    <div class="item-desc">Управление объявлениями и мониторинг выгрузки</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">📊 Калькуляторы</div>
+                    <div class="item-desc">Расчет стоимости, комиссий и рентабельности</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">📋 Шаблоны документов</div>
+                    <div class="item-desc">Готовые шаблоны для работы с клиентами</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">🔍 Поиск объектов</div>
+                    <div class="item-desc">Быстрый поиск и фильтрация объектов</div>
+                </li>
+            </ul>
         </div>
 
+        <!-- Analytics Section -->
         <div id="analytics-section" class="section">
-            <div class="glass-card empty-state">
-                <h3>📊 Аналитика</h3>
-                <p>Скоро здесь появится ваша статистика</p>
-            </div>
+            <h2>📊 Аналитика ОН</h2>
+            <ul class="glass-list">
+                <li class="glass-list-item">
+                    <div class="item-title">📈 Отчеты по продажам</div>
+                    <div class="item-desc">Детальная аналитика продаж и конверсий</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">👥 Статистика клиентов</div>
+                    <div class="item-desc">Анализ клиентской базы и поведения</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">🏠 Анализ объектов</div>
+                    <div class="item-desc">Статистика по объектам и их эффективности</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">💰 Финансовая отчетность</div>
+                    <div class="item-desc">Отчеты по доходам, расходам и прибыли</div>
+                </li>
+            </ul>
         </div>
 
+        <!-- Knowledge Section -->
         <div id="knowledge-section" class="section">
-            <div class="glass-card empty-state">
-                <h3>📚 База знаний</h3>
-                <p>Полезные материалы загружаются...</p>
+            <h2>📚 База знаний</h2>
+            <ul class="glass-list">
+                <li class="glass-list-item">
+                    <div class="item-title">📖 Руководства и инструкции</div>
+                    <div class="item-desc">Подробные руководства по работе с системами</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">❓ FAQ и решения проблем</div>
+                    <div class="item-desc">Часто задаваемые вопросы и их решения</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">🎓 Обучающие материалы</div>
+                    <div class="item-desc">Видеоуроки, вебинары и курсы</div>
+                </li>
+                <li class="glass-list-item">
+                    <div class="item-title">📋 Чек-листы и памятки</div>
+                    <div class="item-desc">Готовые чек-листы для различных задач</div>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Services Section (Accordion) -->
+        <div id="services-section" class="section">
+            <h2>🎯 Дополнительные услуги</h2>
+
+            <div class="accordion-item">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <div class="accordion-title"><span>📱</span> Контент для соцсетей</div>
+                    <div>▼</div>
+                </div>
+                <div class="accordion-content">
+                    <ul class="accordion-inner-list">
+                        <li>Создание контента для социальных сетей</li>
+                        <li>Пакетные предложения по созданию контента</li>
+                        <li>Ведение и оформление аккаунтов (ВК, Instagram, Дзен)</li>
+                        <li>Разработка и согласование контент-плана</li>
+                        <li>Фото- и видеосъемка людей и объектов</li>
+                    </ul>
+                </div>
             </div>
+
+            <div class="accordion-item">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <div class="accordion-title"><span>✍️</span> Тексты и копирайтинг</div>
+                    <div>▼</div>
+                </div>
+                <div class="accordion-content">
+                    <ul class="accordion-inner-list">
+                        <li>Написание текстов для соцсетей, заметки</li>
+                        <li>Интервью и сценарии для видео</li>
+                        <li>Ведение Telegram-канала</li>
+                        <li>Редактирование текстов</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <div class="accordion-title"><span>🎨</span> Дизайн и брендинг</div>
+                    <div>▼</div>
+                </div>
+                <div class="accordion-content">
+                    <ul class="accordion-inner-list">
+                        <li>Графический дизайн (буклеты, каталоги)</li>
+                        <li>Веб-баннеры и рекламные материалы</li>
+                        <li>Коммерческий дизайн: логотипы, брендинг</li>
+                        <li>3D-визуализации</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <div class="accordion-title"><span>📈</span> Реклама и продвижение</div>
+                    <div>▼</div>
+                </div>
+                <div class="accordion-content">
+                    <ul class="accordion-inner-list">
+                        <li>Настройка таргетированной рекламы</li>
+                        <li>Услуги SMM-специалиста</li>
+                        <li>Продюсирование запусков курсов</li>
+                        <li>SEO-продвижение</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <div class="accordion-title"><span>🤖</span> Автоматизация</div>
+                    <div>▼</div>
+                </div>
+                <div class="accordion-content">
+                    <ul class="accordion-inner-list">
+                        <li>Автоматизация контента</li>
+                        <li>Чат-боты и чат-боты с ИИ</li>
+                        <li>Разработка лендингов и сайтов</li>
+                        <li>Интеграции с CRM</li>
+                    </ul>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -434,6 +665,10 @@
         <div class="nav-item" onclick="switchTab('tools')">
             <span class="nav-icon">🛠</span>
             <span>Тулзы</span>
+        </div>
+        <div class="nav-item" onclick="switchTab('services')">
+            <span class="nav-icon">🎯</span>
+            <span>Услуги</span>
         </div>
     </nav>
 
@@ -453,10 +688,12 @@
             // Update Bottom Nav
             document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
 
-            // Map tab names to nav indices (simplified)
-            if (tabName === 'home') document.querySelectorAll('.nav-item')[0].classList.add('active');
-            if (tabName === 'promotions') document.querySelectorAll('.nav-item')[1].classList.add('active');
-            if (tabName === 'tools') document.querySelectorAll('.nav-item')[2].classList.add('active');
+            // Map tab names to nav indices
+            const navItems = document.querySelectorAll('.nav-item');
+            if (tabName === 'home') navItems[0].classList.add('active');
+            if (tabName === 'promotions') navItems[1].classList.add('active');
+            if (tabName === 'tools') navItems[2].classList.add('active');
+            if (tabName === 'services') navItems[3].classList.add('active');
 
             // Switch Sections
             document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
@@ -465,7 +702,6 @@
             if (targetSection) {
                 targetSection.classList.add('active');
             } else {
-                // Fallback for tabs without dedicated sections in this simplified demo
                 document.getElementById('home-section').classList.add('active');
             }
 
@@ -477,6 +713,20 @@
             // Haptic Feedback
             if (tg.HapticFeedback) {
                 tg.HapticFeedback.impactOccurred('light');
+            }
+
+            // Scroll to top
+            window.scrollTo(0, 0);
+        }
+
+        // Accordion Logic
+        function toggleAccordion(header) {
+            header.classList.toggle('active');
+            const content = header.nextElementSibling;
+            content.classList.toggle('open');
+
+            if (tg.HapticFeedback) {
+                tg.HapticFeedback.selectionChanged();
             }
         }
 
@@ -502,8 +752,6 @@
                 renderPromotions(promotionsCache, allContainer, false); // All
                 return;
             }
-
-            // Show Skeleton is already in HTML by default
 
             const data = await fetchPromotions();
 

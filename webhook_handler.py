@@ -9,7 +9,7 @@ from auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.', static_url_path='')
 
 # Инициализация бота и сервисов
 bot_token = os.getenv('TELEGRAM_TOKEN')
@@ -171,6 +171,16 @@ def get_authorized_users():
     except Exception as e:
         logger.error(f"Ошибка получения авторизованных пользователей: {e}")
         return []
+
+@app.route('/')
+def index():
+    """Serve the authorization page"""
+    return app.send_static_file('index.html')
+
+@app.route('/menu.html')
+def menu():
+    """Serve the menu page"""
+    return app.send_static_file('menu.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=False)

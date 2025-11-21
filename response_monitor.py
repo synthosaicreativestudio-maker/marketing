@@ -79,18 +79,50 @@ class ResponseMonitor:
     async def _check_and_send_responses(self):
         """Проверяет и отправляет ответы специалистов."""
         try:
+            # 1. Проверяем новые ответы в колонке G
             responses = self.appeals_service.check_for_responses()
             
             for response_data in responses:
-                # ВСЕГДА сначала отправляем ответ и устанавливаем "В работе"
                 await self._send_response(response_data)
                 
-                # ТОЛЬКО ПОТОМ проверяем, содержит ли ответ триггерные слова "решено"
+                # Если в ответе есть триггер "решено", помечаем
                 if self._is_resolved_response(response_data.get('response', '')):
                     await self._mark_as_resolved(response_data)
+
+            # 2. Проверяем изменение статуса на "Решено" в колонке F (ручное изменение)
+            await self._check_and_process_resolved_status()
                 
         except Exception as e:
             logger.error(f"Ошибка при проверке ответов: {e}")
+
+    async def _check_and_process_resolved_status(self):
+        """Обрабатывает обращения, переведенные в статус 'Решено' вручную."""
+        try:
+            resolved_appeals = self.appeals_service.check_for_resolved_status()
+            
+            for appeal in resolved_appeals:
+                telegram_id = appeal['telegram_id']
+                row = appeal['row']
+                
+                message = "✅ Ваше обращение отмечено как решенное специалистом."
+                
+                # Отправляем уведомление
+                await self.bot.send_message(
+                    chat_id=telegram_id,
+                    text=message
+                )
+                
+                # Добавляем системное сообщение в историю, чтобы не отправлять повторно
+                # Используем add_specialist_response для добавления в историю
+                self.appeals_service.add_specialist_response(
+                    telegram_id=telegram_id,
+                    response_text=message
+                )
+                
+                logger.info(f"Уведомление о ручном решении отправлено пользователю {telegram_id}")
+                
+        except Exception as e:
+            logger.error(f"Ошибка обработки ручных решений: {e}")
 
     def _is_resolved_response(self, response_text: str) -> bool:
         """
