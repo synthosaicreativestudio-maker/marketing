@@ -47,12 +47,23 @@ def _get_promotions_client_and_sheet():
             raise PromotionsNotConfiguredError('PROMOTIONS_SHEET_ID not provided')
         
         spreadsheet = client.open_by_key(sheet_id)
+        logger.info(f"Connected to Promotions Spreadsheet: '{spreadsheet.title}'")
+        
         sheet_name = os.environ.get('PROMOTIONS_SHEET_NAME', 'Sheet1')
         try:
             worksheet = spreadsheet.worksheet(sheet_name)
+            logger.info(f"Successfully opened worksheet: '{sheet_name}'")
         except Exception as e:
             logger.warning(f"Promotions worksheet '{sheet_name}' not found ({e}). Falling back to first sheet.")
             worksheet = spreadsheet.sheet1
+            logger.info(f"Fallback to first worksheet: '{worksheet.title}'")
+
+        # Debug: Log headers
+        try:
+            headers = worksheet.row_values(1)
+            logger.info(f"Sheet Headers: {headers}")
+        except Exception as e:
+            logger.error(f"Could not read headers: {e}")
 
         return client, worksheet
     
