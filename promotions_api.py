@@ -111,13 +111,13 @@ def get_active_promotions() -> List[Dict]:
                 # Используем описание как название, если название пустое
                 title = str(record.get('Название', '')).strip()
                 description = str(record.get('Описание', '')).strip()
-                start_date = str(record.get('Дата начала', ''))
-                end_date = str(record.get('Дата окончания', ''))
+                start_date = str(record.get('Дата начала', '')).strip()
+                end_date = str(record.get('Дата окончания', '')).strip()
                 
                 if not title or title == 'None' or title == '':
                     title = f"Акция {description}" if description and description != 'None' else "Акция без названия"
                 
-                # Создаем уникальный ID на основе содержимого акции
+                # Создаем уникальный ID
                 unique_id = f"{title}_{description}_{start_date}_{end_date}".replace(' ', '_').replace(':', '').replace('-', '')
                 
                 promotion = {
@@ -125,14 +125,16 @@ def get_active_promotions() -> List[Dict]:
                     'title': title,
                     'description': description if description and description != 'None' else "Описание отсутствует",
                     'status': status,
-                    'start_date': start_date,
-                    'end_date': end_date
+                    'start_date': start_date if start_date and start_date != 'None' else '',
+                    'end_date': end_date if end_date and end_date != 'None' else ''
                 }
                 
                 # Добавляем акцию, если есть хотя бы название или описание
                 if promotion['title'] and promotion['title'] != 'None':
                     active_promotions.append(promotion)
                     logger.info(f"Найдена активная акция: {promotion['title']}")
+                else:
+                    logger.warning(f"Пропущена акция без названия и описания (row data: {record})")
         
         logger.info(f"Всего найдено активных акций: {len(active_promotions)}")
         
