@@ -113,6 +113,7 @@ def get_active_promotions() -> List[Dict]:
                 description = str(record.get('Описание', '')).strip()
                 start_date = str(record.get('Дата начала', '')).strip()
                 end_date = str(record.get('Дата окончания', '')).strip()
+                content = str(record.get('Контент', '')).strip()
                 
                 if not title or title == 'None' or title == '':
                     title = f"Акция {description}" if description and description != 'None' else "Акция без названия"
@@ -128,6 +129,10 @@ def get_active_promotions() -> List[Dict]:
                     'start_date': start_date if start_date and start_date != 'None' else '',
                     'end_date': end_date if end_date and end_date != 'None' else ''
                 }
+                
+                # Добавляем контент, если он есть
+                if content and content != 'None' and content != '':
+                    promotion['content'] = content
                 
                 # Добавляем акцию, если есть хотя бы название или описание
                 if promotion['title'] and promotion['title'] != 'None':
@@ -201,6 +206,7 @@ def check_new_promotions() -> List[Dict]:
                             description = str(record.get('Описание', '')).strip()
                             start_date = str(record.get('Дата начала', ''))
                             end_date = str(record.get('Дата окончания', ''))
+                            content = str(record.get('Контент', '')).strip()
                             
                             if not title or title == 'None' or title == '':
                                 title = f"Акция {description}" if description and description != 'None' else "Акция без названия"
@@ -216,6 +222,10 @@ def check_new_promotions() -> List[Dict]:
                                 'end_date': end_date,
                                 'release_date': release_date
                             }
+                            
+                            # Добавляем контент, если он есть
+                            if content and content != 'None' and content != '':
+                                promotion['content'] = content
                             
                             if promotion['title'] and promotion['title'] != 'None':
                                 new_promotions.append(promotion)

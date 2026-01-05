@@ -361,10 +361,16 @@ class AppealsService:
                 
                 # Если статус "решено" и в тексте нет маркера закрытия
                 if status == 'решено' and telegram_id:
-                    # Маркер, который мы добавляем при закрытии
-                    closing_marker = "✅ Ваше обращение решено"
+                    # Маркеры, которые мы добавляем при закрытии (проверяем оба варианта)
+                    closing_markers = [
+                        "✅ Ваше обращение решено",
+                        "✅ Ваше обращение отмечено как решенное специалистом."
+                    ]
                     
-                    if closing_marker not in appeals_text:
+                    # Проверяем, есть ли хотя бы один маркер
+                    has_marker = any(marker in appeals_text for marker in closing_markers)
+                    
+                    if not has_marker:
                         resolved_appeals.append({
                             'row': i,
                             'telegram_id': int(telegram_id),

@@ -92,18 +92,58 @@ class PromotionsNotifier:
             ]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
+            # Проверяем наличие медиа-контента
+            content_url = promotion.get('content', '').strip()
+            has_media = content_url and content_url != 'None' and content_url != ''
+            
+            # Определяем тип медиа по расширению или URL
+            is_photo = False
+            is_video = False
+            if has_media:
+                content_lower = content_url.lower()
+                photo_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.webp')
+                video_extensions = ('.mp4', '.mov', '.avi', '.mkv', '.webm')
+                
+                if any(content_lower.endswith(ext) for ext in photo_extensions) or 'photo' in content_lower or 'image' in content_lower:
+                    is_photo = True
+                elif any(content_lower.endswith(ext) for ext in video_extensions) or 'video' in content_lower:
+                    is_video = True
+            
             # Отправляем уведомления всем пользователям
             sent_count = 0
             for user_id in users:
                 try:
-                    await self.bot.send_message(
-                        chat_id=user_id,
-                        text=message,
-                        parse_mode='Markdown',
-                        reply_markup=reply_markup
-                    )
+                    if has_media and is_photo:
+                        # Отправляем фото с подписью
+                        await self.bot.send_photo(
+                            chat_id=user_id,
+                            photo=content_url,
+                            caption=message,
+                            parse_mode='Markdown',
+                            reply_markup=reply_markup
+                        )
+                        logger.info(f"Уведомление о акции '{promotion['title']}' с фото отправлено пользователю {user_id}")
+                    elif has_media and is_video:
+                        # Отправляем видео с подписью
+                        await self.bot.send_video(
+                            chat_id=user_id,
+                            video=content_url,
+                            caption=message,
+                            parse_mode='Markdown',
+                            reply_markup=reply_markup
+                        )
+                        logger.info(f"Уведомление о акции '{promotion['title']}' с видео отправлено пользователю {user_id}")
+                    else:
+                        # Отправляем обычное текстовое сообщение
+                        await self.bot.send_message(
+                            chat_id=user_id,
+                            text=message,
+                            parse_mode='Markdown',
+                            reply_markup=reply_markup
+                        )
+                        logger.info(f"Уведомление о акции '{promotion['title']}' отправлено пользователю {user_id}")
+                    
                     sent_count += 1
-                    logger.info(f"Уведомление о акции '{promotion['title']}' отправлено пользователю {user_id}")
                     
                     # Небольшая задержка между отправками
                     await asyncio.sleep(0.1)

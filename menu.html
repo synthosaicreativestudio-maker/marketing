@@ -678,7 +678,10 @@
         tg.expand();
 
         // API Configuration
-        const API_BASE_URL = ''; // Relative path for same origin
+        // Определяем API URL динамически: если на PythonAnywhere - используем текущий домен, иначе - PythonAnywhere
+        const API_BASE_URL = window.location.hostname.includes('pythonanywhere') 
+            ? window.location.origin 
+            : 'https://SynthosAI.pythonanywhere.com';
 
         // State
         let promotionsCache = null;
