@@ -5,6 +5,7 @@
 
 import logging
 import datetime
+import time
 from typing import Optional, List, Dict
 from sheets import _get_appeals_client_and_sheet, SheetsNotConfiguredError
 
@@ -116,14 +117,22 @@ class AppealsService:
                 logger.info(f"Данные для записи: {row_data}")
                 self.worksheet.append_row(row_data)
                 
+                # Небольшая задержка для избежания конфликтов с API
+                time.sleep(0.1)
+                
                 # Устанавливаем заливку #f3cccc (светло-красный) для статуса "Новое"
-                self.worksheet.format(f'F{next_row}', {
-                    "backgroundColor": {
-                        "red": 0.95,    # #f3cccc
-                        "green": 0.8,
-                        "blue": 0.8
-                    }
-                })
+                try:
+                    logger.info(f"Попытка установить заливку #f3cccc для новой ячейки F{next_row}")
+                    format_result = self.worksheet.format(f'F{next_row}', {
+                        "backgroundColor": {
+                            "red": 0.95,    # #f3cccc
+                            "green": 0.8,
+                            "blue": 0.8
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{next_row}, результат: {format_result}")
+                except Exception as format_error:
+                    logger.error(f"Ошибка при установке заливки для ячейки F{next_row}: {format_error}", exc_info=True)
                 
                 logger.info(f"Создано новое обращение для пользователя {telegram_id} (строка {next_row})")
             
@@ -515,14 +524,25 @@ class AppealsService:
                     'values': [['Ответ ИИ']]
                 }])
                 
+                logger.info(f"Статус обновлен на 'Ответ ИИ' для строки {existing_row}")
+                
+                # Небольшая задержка для избежания конфликтов с API
+                time.sleep(0.1)
+                
                 # Устанавливаем заливку #ffffff (белый) для статуса "Ответ ИИ"
-                self.worksheet.format(f'F{existing_row}', {
-                    "backgroundColor": {
-                        "red": 1.0,    # #ffffff
-                        "green": 1.0,
-                        "blue": 1.0
-                    }
-                })
+                try:
+                    logger.info(f"Попытка установить заливку для ячейки F{existing_row}")
+                    format_result = self.worksheet.format(f'F{existing_row}', {
+                        "backgroundColor": {
+                            "red": 1.0,    # #ffffff
+                            "green": 1.0,
+                            "blue": 1.0
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
+                except Exception as format_error:
+                    logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
+                    # Продолжаем выполнение, даже если форматирование не удалось
                 
                 logger.info(f"Ответ ИИ добавлен для пользователя {telegram_id} (строка {existing_row})")
                 return True
@@ -602,14 +622,24 @@ class AppealsService:
                     'values': [['Передано специалисту']]
                 }])
                 
+                logger.info(f"Статус обновлен на 'Передано специалисту' для строки {existing_row}")
+                
+                # Небольшая задержка для избежания конфликтов с API
+                time.sleep(0.1)
+                
                 # Устанавливаем заливку #f3cccc (светло-красный) для колонки F
-                self.worksheet.format(f'F{existing_row}', {
-                    "backgroundColor": {
-                        "red": 0.95,    # #f3cccc
-                        "green": 0.8,
-                        "blue": 0.8
-                    }
-                })
+                try:
+                    logger.info(f"Попытка установить заливку #f3cccc для ячейки F{existing_row}")
+                    format_result = self.worksheet.format(f'F{existing_row}', {
+                        "backgroundColor": {
+                            "red": 0.95,    # #f3cccc
+                            "green": 0.8,
+                            "blue": 0.8
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
+                except Exception as format_error:
+                    logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                 
                 logger.info(f"Статус установлен 'Передано специалисту' для пользователя {telegram_id} (строка {existing_row})")
                 return True
@@ -652,14 +682,24 @@ class AppealsService:
                     'values': [['В работе']]
                 }])
                 
+                logger.info(f"Статус обновлен на 'В работе' для строки {existing_row}")
+                
+                # Небольшая задержка для избежания конфликтов с API
+                time.sleep(0.1)
+                
                 # Устанавливаем заливку #fff2cc (светло-желтый) для колонки F
-                self.worksheet.format(f'F{existing_row}', {
-                    "backgroundColor": {
-                        "red": 1.0,    # #fff2cc
-                        "green": 0.95,
-                        "blue": 0.8
-                    }
-                })
+                try:
+                    logger.info(f"Попытка установить заливку #fff2cc для ячейки F{existing_row}")
+                    format_result = self.worksheet.format(f'F{existing_row}', {
+                        "backgroundColor": {
+                            "red": 1.0,    # #fff2cc
+                            "green": 0.95,
+                            "blue": 0.8
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
+                except Exception as format_error:
+                    logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                 
                 logger.info(f"Статус установлен 'В работе' для пользователя {telegram_id} (строка {existing_row})")
                 return True
@@ -702,14 +742,24 @@ class AppealsService:
                     'values': [['Решено']]
                 }])
                 
+                logger.info(f"Статус обновлен на 'Решено' для строки {existing_row}")
+                
+                # Небольшая задержка для избежания конфликтов с API
+                time.sleep(0.1)
+                
                 # Зелёная заливка #d9ead3
-                self.worksheet.format(f'F{existing_row}', {
-                    "backgroundColor": {
-                        "red": 0.85,
-                        "green": 0.92,
-                        "blue": 0.83
-                    }
-                })
+                try:
+                    logger.info(f"Попытка установить заливку #d9ead3 для ячейки F{existing_row}")
+                    format_result = self.worksheet.format(f'F{existing_row}', {
+                        "backgroundColor": {
+                            "red": 0.85,
+                            "green": 0.92,
+                            "blue": 0.83
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
+                except Exception as format_error:
+                    logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                 
                 logger.info(f"Статус установлен 'Решено' для пользователя {telegram_id} (строка {existing_row})")
                 return True
@@ -746,6 +796,7 @@ class AppealsService:
                     # Авто-форматирование: если статус 'решено' (любой регистр) — зелёная заливка
                     try:
                         if str(status).strip().lower() == 'решено':
+                            logger.info(f"Попытка установить заливку #d9ead3 для ячейки F{i} (статус: решено)")
                             self.worksheet.format(f'F{i}', {
                                 "backgroundColor": {
                                     "red": 0.85,
@@ -753,8 +804,9 @@ class AppealsService:
                                     "blue": 0.83
                                 }
                             })
+                            logger.info(f"Заливка успешно установлена для ячейки F{i}")
                     except Exception as e:
-                        logger.debug(f"Не удалось применить форматирование для строки {i}: {e}")
+                        logger.error(f"Не удалось применить форматирование для строки {i}: {e}", exc_info=True)
                     return status
             
             logger.info(f"Статус для пользователя {telegram_id} не найден, возвращаем 'новое'")

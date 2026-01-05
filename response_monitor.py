@@ -6,6 +6,7 @@ import logging
 import asyncio
 from telegram import Bot
 from appeals_service import AppealsService
+from typing import Union
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 class ResponseMonitor:
     """Сервис для мониторинга и отправки ответов специалистов."""
     
-    def __init__(self, appeals_service: AppealsService, bot_token: str):
+    def __init__(self, appeals_service: Union[AppealsService, object], bot_token: str):
         """
         Инициализация монитора ответов.
         

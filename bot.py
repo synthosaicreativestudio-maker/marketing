@@ -15,6 +15,10 @@ from promotions_notifier import PromotionsNotifier  # noqa: E402
 # Импортируем AppealsService после загрузки переменных окружения
 from appeals_service import AppealsService  # noqa: E402
 
+# Импортируем AppealsServiceDB для работы с БД
+from api.services.appeals_db import AppealsServiceDB  # noqa: E402
+from db.database import SessionLocal, init_db  # noqa: E402
+
 # .env уже загружен выше
 
 # Настройка логирования
@@ -47,17 +51,42 @@ def main() -> None:
         logger.warning("OpenAIService отключен: отсутствуют OPENAI_API_KEY/OPENAI_ASSISTANT_ID")
 
     # Инициализация сервиса обращений
-    logger.info("Инициализация AppealsService...")
-    appeals_service = AppealsService()
-    if not appeals_service.is_available():
-        logger.warning("AppealsService отключен: лист 'обращения' недоступен")
+    # Проверяем, использовать ли БД или Google Sheets
+    use_database = os.getenv("USE_DATABASE", "false").lower() == "true"
+    
+    if use_database:
+        logger.info("Инициализация AppealsServiceDB (база данных)...")
+        # Инициализируем БД, если еще не создана
+        try:
+            init_db()
+            logger.info("База данных инициализирована")
+        except Exception as e:
+            logger.warning(f"База данных уже существует или ошибка инициализации: {e}")
+        
+        # Создаем сессию БД для сервиса
+        db_session = SessionLocal()
+        appeals_service = AppealsServiceDB(db_session)
+        if not appeals_service.is_available():
+            logger.warning("AppealsServiceDB отключен: база данных недоступна")
+            db_session.close()
+            appeals_service = None
+        else:
+            logger.info("AppealsServiceDB успешно инициализирован (работа с БД)")
+    else:
+        logger.info("Инициализация AppealsService (Google Sheets)...")
+        appeals_service = AppealsService()
+        if not appeals_service.is_available():
+            logger.warning("AppealsService отключен: лист 'обращения' недоступен")
+        else:
+            logger.info("AppealsService успешно инициализирован (работа с Google Sheets)")
 
     # Инициализация монитора ответов
     logger.info("Инициализация ResponseMonitor...")
-    response_monitor = ResponseMonitor(appeals_service, token)
-    if appeals_service.is_available():
+    if appeals_service and appeals_service.is_available():
+        response_monitor = ResponseMonitor(appeals_service, token)
         logger.info("ResponseMonitor готов к работе")
     else:
+        response_monitor = None
         logger.warning("ResponseMonitor отключен: AppealsService недоступен")
 
     # --- Создание и настройка приложения ---
@@ -79,7 +108,7 @@ def main() -> None:
         return
 
     # --- Запуск мониторинга ответов ---
-    if appeals_service.is_available():
+    if response_monitor and appeals_service and appeals_service.is_available():
         logger.info("Запуск мониторинга ответов специалистов...")
         try:
             # Запускаем мониторинг в фоновом режиме
@@ -112,11 +141,19 @@ def main() -> None:
         logger.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
     finally:
         # Останавливаем мониторинг при завершении работы бота
-        if appeals_service.is_available():
+        if response_monitor and appeals_service and appeals_service.is_available():
             try:
                 loop.run_until_complete(response_monitor.stop_monitoring())
             except Exception as e:
                 logger.error(f"Ошибка остановки мониторинга: {e}")
+        
+        # Закрываем сессию БД, если использовалась
+        if use_database and 'db_session' in locals():
+            try:
+                db_session.close()
+                logger.info("Сессия БД закрыта")
+            except Exception as e:
+                logger.error(f"Ошибка закрытия сессии БД: {e}")
 
 if __name__ == "__main__":
     main()
