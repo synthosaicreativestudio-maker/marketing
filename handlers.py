@@ -621,6 +621,20 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             except Exception as e:
                 logger.error(f"Ошибка при создании обращения: {e}", exc_info=True)
 
+        # Проверяем запрос специалиста ПЕРЕД вызовом ИИ
+        is_escalation_request = _is_user_escalation_request(text)
+        if is_escalation_request:
+            logger.info(f"Обнаружен запрос специалиста от пользователя {user.id}, показываем кнопку без вызова ИИ")
+            try:
+                await update.message.reply_text(
+                    "Ваш запрос в ближайшее время будет передан специалисту.",
+                    reply_markup=create_specialist_button()
+                )
+                logger.info(f"Показана кнопка специалиста для пользователя {user.id} (без вызова ИИ)")
+            except Exception as e:
+                logger.error(f"Ошибка отправки кнопки специалиста: {e}")
+            return
+
         # Если обращение находится у специалиста, переключаем в режим общения со специалистом
         if appeals_service and appeals_service.is_available():
             try:
@@ -649,8 +663,6 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                     return
             except Exception as e:
                 logger.warning(f"Не удалось проверить статус обращения: {e}")
-
-        # НЕ проверяем триггерные слова здесь - это делается после ответа ИИ
 
         # Проверка доступности OpenAI
         if not openai_service or not openai_service.is_enabled():
@@ -701,41 +713,24 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                         "Получен ответ от ассистента, но произошла ошибка форматирования."
                     )
                 
-                # Показываем инлайн-кнопку "Обратиться к специалисту" в двух случаях:
-                # 1. Прямые триггерные фразы от пользователя
-                # 2. ИИ спрашивает об эскалации И пользователь подтверждает
-                should_show_button = False
-                
-                # Отладочная информация
-                is_escalation_request = _is_user_escalation_request(text)
+                # Показываем инлайн-кнопку "Обратиться к специалисту" если ИИ спрашивает об эскалации И пользователь подтверждает
                 is_ai_asking = _is_ai_asking_for_escalation(reply)
                 is_confirmation = _is_escalation_confirmation(text)
                 
                 logger.info(f"Отладка кнопки для пользователя {user.id}:")
-                logger.info(f"  - is_escalation_request: {is_escalation_request}")
                 logger.info(f"  - is_ai_asking: {is_ai_asking}")
                 logger.info(f"  - is_confirmation: {is_confirmation}")
                 logger.info(f"  - text: '{text}'")
                 logger.info(f"  - reply: '{reply[:100] if reply else 'None'}...'")
                 
-                if is_escalation_request:
-                    # Путь 1: Прямые триггерные фразы
-                    should_show_button = True
-                    logger.info(f"Прямой запрос специалиста от пользователя {user.id}")
-                elif is_ai_asking and is_confirmation:
-                    # Путь 2: ИИ спрашивает + пользователь подтверждает
-                    should_show_button = True
-                    logger.info(f"Подтверждение эскалации от пользователя {user.id}")
-                
-                logger.info(f"should_show_button: {should_show_button}")
-                
-                if should_show_button:
+                if is_ai_asking and is_confirmation:
+                    # ИИ спрашивает + пользователь подтверждает
                     try:
                         await update.message.reply_text(
-                            "Если вам нужна помощь специалиста, нажмите кнопку ниже:",
+                            "Ваш запрос в ближайшее время будет передан специалисту.",
                             reply_markup=create_specialist_button()
                         )
-                        logger.info(f"Показана кнопка специалиста для пользователя {user.id}")
+                        logger.info(f"Показана кнопка специалиста для пользователя {user.id} (подтверждение эскалации)")
                     except Exception as e:
                         logger.error(f"Ошибка отправки кнопки специалиста: {e}")
                 
