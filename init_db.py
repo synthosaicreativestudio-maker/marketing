@@ -2,6 +2,13 @@
 Скрипт для инициализации базы данных.
 Создает все таблицы для работы с обращениями.
 """
+import os
+import sys
+
+# Устанавливаем DATABASE_URL по умолчанию, если не задан
+if not os.getenv('DATABASE_URL'):
+    os.environ['DATABASE_URL'] = 'sqlite:///./db/appeals.db'
+
 from db.database import init_db, engine
 from db.models import Base, Appeal, AppealMessage, SpecialistResponse
 
