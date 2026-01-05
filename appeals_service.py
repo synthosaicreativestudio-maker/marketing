@@ -793,15 +793,26 @@ class AppealsService:
                 if str(record.get('telegram_id', '')) == str(telegram_id):
                     status = record.get('статус', 'новое')
                     logger.info(f"Найден статус для пользователя {telegram_id}: {status}")
-                    # Авто-форматирование: если статус 'решено' (любой регистр) — зелёная заливка
+                    # Авто-форматирование: применяем заливку в зависимости от статуса
                     try:
-                        if str(status).strip().lower() == 'решено':
+                        status_lower = str(status).strip().lower()
+                        if status_lower == 'решено':
                             logger.info(f"Попытка установить заливку #d9ead3 для ячейки F{i} (статус: решено)")
                             self.worksheet.format(f'F{i}', {
                                 "backgroundColor": {
                                     "red": 0.85,
                                     "green": 0.92,
                                     "blue": 0.83
+                                }
+                            })
+                            logger.info(f"Заливка успешно установлена для ячейки F{i}")
+                        elif status_lower == 'в работе':
+                            logger.info(f"Попытка установить заливку #fff2cc для ячейки F{i} (статус: в работе)")
+                            self.worksheet.format(f'F{i}', {
+                                "backgroundColor": {
+                                    "red": 1.0,
+                                    "green": 0.95,
+                                    "blue": 0.8
                                 }
                             })
                             logger.info(f"Заливка успешно установлена для ячейки F{i}")

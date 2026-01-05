@@ -783,12 +783,12 @@ def callback_query_handler(auth_service: AuthService, appeals_service: AppealsSe
                             break
                     
                     if user_data:
-                        # Меняем статус на "передано специалисту" с красной заливкой
-                        success = appeals_service.set_status_escalated(user.id)
+                        # Меняем статус на "В работе" с желтой заливкой
+                        success = appeals_service.set_status_in_work(user.id)
                         if success:
                             await query.edit_message_text(
                                 "✅ Ваше обращение передано специалисту отдела маркетинга. "
-                                "Статус изменен на 'передано специалисту'. Специалист ответит в ближайшее время."
+                                "Статус изменен на 'В работе'. Специалист ответит в ближайшее время."
                             )
                         else:
                             await query.edit_message_text(
