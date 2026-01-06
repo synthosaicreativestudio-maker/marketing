@@ -765,9 +765,11 @@
         tg.expand();
 
         // API Configuration
-        // Используем относительный путь - мини-апп развернут на том же сервере, что и API
-        // Это позволяет избежать проблем с CORS и самоподписанными SSL сертификатами
-        const API_BASE_URL = window.location.origin;
+        // Для GitHub Pages используем HTTPS API через Cloudflare Tunnel или другой прокси
+        // Если мини-апп на том же домене - используем относительный путь
+        const API_BASE_URL = window.location.origin.includes('github.io')
+            ? 'https://158.160.0.127'  // API на Yandex VM
+            : window.location.origin;  // Относительный путь для локального развертывания
 
         // State
         let promotionsCache = null;
