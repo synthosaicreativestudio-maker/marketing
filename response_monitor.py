@@ -110,10 +110,10 @@ class ResponseMonitor:
                 # ВАЖНО: Добавляем маркер ДО отправки уведомления, чтобы предотвратить повторную отправку
                 # Используем add_specialist_response для добавления в историю
                 try:
-                    self.appeals_service.add_specialist_response(
-                        telegram_id=telegram_id,
-                        response_text=message
-                    )
+                self.appeals_service.add_specialist_response(
+                    telegram_id=telegram_id,
+                    response_text=message
+                )
                     logger.info(f"Маркер 'решено' добавлен в историю для пользователя {telegram_id}")
                 except Exception as e:
                     logger.error(f"Ошибка добавления маркера для пользователя {telegram_id}: {e}")
@@ -125,7 +125,7 @@ class ResponseMonitor:
                         chat_id=telegram_id,
                         text=message
                     )
-                    logger.info(f"Уведомление о ручном решении отправлено пользователю {telegram_id}")
+                logger.info(f"Уведомление о ручном решении отправлено пользователю {telegram_id}")
                 except Exception as e:
                     logger.error(f"Ошибка отправки уведомления пользователю {telegram_id}: {e}")
                 

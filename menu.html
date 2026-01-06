@@ -439,6 +439,89 @@
             padding: 40px 20px;
             color: var(--text-secondary);
         }
+
+        /* Profile Modal */
+        .profile-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+
+        .profile-modal.open {
+            display: flex;
+        }
+
+        .profile-card {
+            background: linear-gradient(135deg, rgba(15, 15, 30, 0.95), rgba(30, 30, 60, 0.95));
+            border-radius: 20px;
+            padding: 24px 20px 20px;
+            width: 90%;
+            max-width: 360px;
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.7);
+            border: 1px solid var(--glass-border);
+            position: relative;
+        }
+
+        .profile-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--glass-bg);
+            border: 2px solid var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .profile-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .profile-name {
+            font-weight: 600;
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+
+        .profile-username {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 14px;
+        }
+
+        .profile-field {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .profile-field-label {
+            color: var(--text-secondary);
+        }
+
+        .profile-field-value {
+            font-weight: 500;
+        }
+
+        .profile-close {
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
     </style>
 </head>
 
@@ -461,18 +544,6 @@
                 <div class="glass-card menu-item" onclick="switchTab('promotions')">
                     <div class="menu-item-icon">🔥</div>
                     <div class="menu-item-title">Акции</div>
-                </div>
-                <div class="glass-card menu-item" onclick="switchTab('tools')">
-                    <div class="menu-item-icon">🛠</div>
-                    <div class="menu-item-title">Инструменты</div>
-                </div>
-                <div class="glass-card menu-item" onclick="switchTab('analytics')">
-                    <div class="menu-item-icon">📊</div>
-                    <div class="menu-item-title">Аналитика</div>
-                </div>
-                <div class="glass-card menu-item" onclick="switchTab('knowledge')">
-                    <div class="menu-item-icon">📚</div>
-                    <div class="menu-item-title">База знаний</div>
                 </div>
                 <div class="glass-card menu-item" onclick="switchTab('services')">
                     <div class="menu-item-icon">🎯</div>
@@ -652,6 +723,26 @@
         </div>
     </div>
 
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="profile-modal">
+        <div class="profile-card">
+            <div class="profile-close" onclick="closeProfileModal()">✕</div>
+            <div class="profile-avatar" id="profile-avatar">
+                <span>👤</span>
+            </div>
+            <div class="profile-name" id="profile-name">Профиль</div>
+            <div class="profile-username" id="profile-username"></div>
+            <div class="profile-field">
+                <div class="profile-field-label">Код сотрудника</div>
+                <div class="profile-field-value" id="profile-code">—</div>
+            </div>
+            <div class="profile-field">
+                <div class="profile-field-label">Телефон</div>
+                <div class="profile-field-value" id="profile-phone">—</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Bottom Navigation -->
     <nav class="bottom-nav">
         <div class="nav-item active" onclick="switchTab('home')">
@@ -661,10 +752,6 @@
         <div class="nav-item" onclick="switchTab('promotions')">
             <span class="nav-icon">🔥</span>
             <span>Акции</span>
-        </div>
-        <div class="nav-item" onclick="switchTab('tools')">
-            <span class="nav-icon">🛠</span>
-            <span>Тулзы</span>
         </div>
         <div class="nav-item" onclick="switchTab('services')">
             <span class="nav-icon">🎯</span>
@@ -678,13 +765,17 @@
         tg.expand();
 
         // API Configuration
-        // Определяем API URL динамически: если на PythonAnywhere - используем текущий домен, иначе - PythonAnywhere
-        const API_BASE_URL = window.location.hostname.includes('pythonanywhere') 
-            ? window.location.origin 
-            : 'https://SynthosAI.pythonanywhere.com';
+        // Определяем API URL динамически: если мини-апп и API на одном домене — используем текущий origin,
+        // иначе используем адрес сервера на Yandex Cloud (замените на свой домен при настройке DNS/HTTPS)
+        const API_BASE_URL = window.location.origin.includes('github.io')
+            ? 'http://158.160.0.127:8080'
+            : window.location.origin;
 
         // State
         let promotionsCache = null;
+
+        // Telegram user info
+        const tgUser = tg?.initDataUnsafe?.user || null;
 
         // Navigation Logic
         function switchTab(tabName) {
@@ -695,8 +786,7 @@
             const navItems = document.querySelectorAll('.nav-item');
             if (tabName === 'home') navItems[0].classList.add('active');
             if (tabName === 'promotions') navItems[1].classList.add('active');
-            if (tabName === 'tools') navItems[2].classList.add('active');
-            if (tabName === 'services') navItems[3].classList.add('active');
+            if (tabName === 'services') navItems[2].classList.add('active');
 
             // Switch Sections
             document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
@@ -782,9 +872,69 @@
             `;
         }
 
+        function openProfileModal() {
+            const modal = document.getElementById('profile-modal');
+            const nameEl = document.getElementById('profile-name');
+            const usernameEl = document.getElementById('profile-username');
+            const codeEl = document.getElementById('profile-code');
+            const phoneEl = document.getElementById('profile-phone');
+            const avatarEl = document.getElementById('profile-avatar');
+
+            if (tgUser) {
+                const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ');
+                nameEl.textContent = fullName || 'Профиль';
+                usernameEl.textContent = tgUser.username ? `@${tgUser.username}` : '';
+            } else {
+                nameEl.textContent = 'Профиль';
+                usernameEl.textContent = '';
+            }
+
+            // Сбрасываем значения до загрузки с сервера
+            codeEl.textContent = '…';
+            phoneEl.textContent = '…';
+
+            // Загружаем данные профиля с сервера
+            if (tgUser && tgUser.id) {
+                fetch(`${API_BASE_URL}/api/profile?telegram_id=${tgUser.id}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data || data.error) return;
+                        if (data.partner_code) codeEl.textContent = data.partner_code;
+                        if (data.phone) phoneEl.textContent = data.phone;
+                    })
+                    .catch(err => {
+                        console.error('Profile fetch error', err);
+                    });
+            }
+
+            modal.classList.add('open');
+        }
+
+        function closeProfileModal() {
+            document.getElementById('profile-modal').classList.remove('open');
+        }
+
         // Init
         document.addEventListener('DOMContentLoaded', () => {
             loadPromotions();
+
+            const profileEl = document.querySelector('.user-profile');
+            if (tgUser) {
+                // Подтягиваем аватар из Telegram, если есть
+                if (tgUser.photo_url) {
+                    profileEl.style.backgroundImage = `url(${tgUser.photo_url})`;
+                    profileEl.style.backgroundSize = 'cover';
+                    profileEl.style.backgroundPosition = 'center';
+                    profileEl.textContent = '';
+                }
+
+                profileEl.addEventListener('click', () => {
+                    openProfileModal();
+                    if (tg.HapticFeedback) {
+                        tg.HapticFeedback.impactOccurred('medium');
+                    }
+                });
+            }
         });
 
     </script>

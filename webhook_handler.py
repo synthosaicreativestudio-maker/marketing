@@ -41,6 +41,35 @@ def get_promotions_api():
         logger.error(f"API Error: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
 
+
+@app.route('/api/profile', methods=['GET'])
+def get_profile():
+    """API endpoint для получения профиля сотрудника по Telegram ID."""
+    try:
+        telegram_id = request.args.get('telegram_id')
+        if not telegram_id:
+            return jsonify({'error': 'telegram_id is required'}), 400
+
+        if not auth_service or not auth_service.worksheet:
+            logger.error("AuthService недоступен для /api/profile")
+            return jsonify({'error': 'auth_service_unavailable'}), 500
+
+        records = auth_service.worksheet.get_all_records()
+        for record in records:
+            if str(record.get('Telegram ID', '')) == str(telegram_id):
+                profile = {
+                    'full_name': record.get('ФИО партнера', ''),
+                    'partner_code': record.get('Код партнера', ''),
+                    'phone': record.get('Телефон партнера', ''),
+                }
+                return jsonify(profile), 200
+
+        logger.info(f"Профиль для telegram_id={telegram_id} не найден в таблице авторизации")
+        return jsonify({'error': 'user_not_found'}), 404
+    except Exception as e:
+        logger.error(f"API Error in /api/profile: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
 @app.route('/webhook/promotions', methods=['POST'])
 def handle_promotion_webhook():
     """Обработчик webhook от Google Sheets для публикации акций"""

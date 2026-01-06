@@ -3,6 +3,7 @@ import time
 import logging
 from typing import Dict, Optional
 
+import httpx
 from openai import OpenAI
 
 
@@ -20,6 +21,7 @@ class OpenAIService:
     def __init__(self) -> None:
         api_key = os.getenv("OPENAI_API_KEY")
         assistant_id = os.getenv("OPENAI_ASSISTANT_ID")
+        proxy_url = os.getenv("OPENAI_PROXY_URL")
 
         if not api_key or not assistant_id:
             logger.warning(
@@ -28,7 +30,18 @@ class OpenAIService:
             self.client = None
             self.assistant_id = None
         else:
-            self.client = OpenAI(api_key=api_key)
+            # Настройка HTTP клиента с прокси, если указан
+            http_client = None
+            if proxy_url:
+                logger.info(f"Using proxy for OpenAI API: {proxy_url.split('@')[1] if '@' in proxy_url else proxy_url}")
+                http_client = httpx.Client(
+                    proxy=proxy_url,
+                    timeout=60.0
+                )
+            else:
+                http_client = httpx.Client(timeout=60.0)
+            
+            self.client = OpenAI(api_key=api_key, http_client=http_client)
             self.assistant_id = assistant_id
 
         self.user_threads: Dict[int, str] = {}

@@ -681,63 +681,63 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             reply = await asyncio.get_event_loop().run_in_executor(
                 None, openai_service.ask, user.id, text
             )
-            if reply:
-                # Логируем ответ ИИ для отладки
-                logger.info(f"Ответ ИИ для пользователя {user.id}: {reply[:200]}...")
-                    
-                # Записываем ответ ИИ в таблицу обращений
-                if appeals_service and appeals_service.is_available():
-                    try:
-                        success = appeals_service.add_ai_response(user.id, reply)
-                        if success:
-                            logger.info(f"Ответ ИИ записан для пользователя {user.id}")
-                            # Если ранее было 'Решено' специалистом и диалог возвращён к ИИ — оставляем белую заливку
-                        else:
-                            logger.warning(f"Не удалось записать ответ ИИ для пользователя {user.id}")
-                    except Exception as e:
-                        logger.error(f"Ошибка при записи ответа ИИ: {e}")
+
+            # Если ИИ не ответил, не отправляем локальное приветствие/сообщение — только логируем.
+            if not reply:
+                logger.warning(f"Пустой ответ ИИ для пользователя {user.id}")
+                return
+
+            # Логируем ответ ИИ для отладки
+            logger.info(f"Ответ ИИ для пользователя {user.id}: {reply[:200]}...")
                 
-                # Очищаем ответ от неправильного Markdown
-                clean_reply = reply.replace('*', '').replace('_', '').replace('[', '').replace(']', '').replace('`', '')
-                
-                # Отправляем ответ ИИ пользователю
+            # Записываем ответ ИИ в таблицу обращений
+            if appeals_service and appeals_service.is_available():
+                try:
+                    success = appeals_service.add_ai_response(user.id, reply)
+                    if success:
+                        logger.info(f"Ответ ИИ записан для пользователя {user.id}")
+                        # Если ранее было 'Решено' специалистом и диалог возвращён к ИИ — оставляем белую заливку
+                    else:
+                        logger.warning(f"Не удалось записать ответ ИИ для пользователя {user.id}")
+                except Exception as e:
+                    logger.error(f"Ошибка при записи ответа ИИ: {e}")
+            
+            # Очищаем ответ от неправильного Markdown
+            clean_reply = reply.replace('*', '').replace('_', '').replace('[', '').replace(']', '').replace('`', '')
+            
+            # Отправляем ответ ИИ пользователю
+            try:
+                await update.message.reply_text(
+                    clean_reply
+                )
+                logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
+            except Exception as e:
+                logger.error(f"Ошибка отправки ответа ИИ: {e}")
+                # Если все еще не работает, отправляем простой текст
+                await update.message.reply_text(
+                    "Получен ответ от ассистента, но произошла ошибка форматирования."
+                )
+            
+            # Показываем инлайн-кнопку "Обратиться к специалисту", если ИИ предлагает эскалацию
+            is_ai_asking = _is_ai_asking_for_escalation(reply)
+            is_confirmation = _is_escalation_confirmation(text)
+            
+            logger.info(f"Отладка кнопки для пользователя {user.id}:")
+            logger.info(f"  - is_ai_asking: {is_ai_asking}")
+            logger.info(f"  - is_confirmation: {is_confirmation}")
+            logger.info(f"  - text: '{text}'")
+            logger.info(f"  - reply: '{reply[:100] if reply else 'None'}...'")
+            
+            if is_ai_asking:
+                # Всегда предлагаем пользователю кнопку для эскалации, если ИИ говорит о передаче специалисту
                 try:
                     await update.message.reply_text(
-                        clean_reply
+                        "Если вы хотите передать ваш запрос специалисту отдела маркетинга, нажмите кнопку ниже.",
+                        reply_markup=create_specialist_button()
                     )
-                    logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
+                    logger.info(f"Показана кнопка специалиста для пользователя {user.id} (ИИ предложил эскалацию)")
                 except Exception as e:
-                    logger.error(f"Ошибка отправки ответа ИИ: {e}")
-                    # Если все еще не работает, отправляем простой текст
-                    await update.message.reply_text(
-                        "Получен ответ от ассистента, но произошла ошибка форматирования."
-                    )
-                
-                # Показываем инлайн-кнопку "Обратиться к специалисту" если ИИ спрашивает об эскалации И пользователь подтверждает
-                is_ai_asking = _is_ai_asking_for_escalation(reply)
-                is_confirmation = _is_escalation_confirmation(text)
-                
-                logger.info(f"Отладка кнопки для пользователя {user.id}:")
-                logger.info(f"  - is_ai_asking: {is_ai_asking}")
-                logger.info(f"  - is_confirmation: {is_confirmation}")
-                logger.info(f"  - text: '{text}'")
-                logger.info(f"  - reply: '{reply[:100] if reply else 'None'}...'")
-                
-                if is_ai_asking and is_confirmation:
-                    # ИИ спрашивает + пользователь подтверждает
-                    try:
-                        await update.message.reply_text(
-                            "Ваш запрос в ближайшее время будет передан специалисту.",
-                            reply_markup=create_specialist_button()
-                        )
-                        logger.info(f"Показана кнопка специалиста для пользователя {user.id} (подтверждение эскалации)")
-                    except Exception as e:
-                        logger.error(f"Ошибка отправки кнопки специалиста: {e}")
-                
-            else:
-                await update.message.reply_text(
-                    "Не удалось получить ответ ассистента. Попробуйте ещё раз."
-                )
+                    logger.error(f"Ошибка отправки кнопки специалиста: {e}")
         except Exception as e:
             logger.error(f"Ошибка при обращении к OpenAI: {e}")
             await update.message.reply_text(

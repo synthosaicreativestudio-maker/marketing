@@ -124,12 +124,12 @@ class AppealsService:
                 try:
                     logger.info(f"Попытка установить заливку #f3cccc для новой ячейки F{next_row}")
                     format_result = self.worksheet.format(f'F{next_row}', {
-                        "backgroundColor": {
-                            "red": 0.95,    # #f3cccc
-                            "green": 0.8,
-                            "blue": 0.8
-                        }
-                    })
+                    "backgroundColor": {
+                        "red": 0.95,    # #f3cccc
+                        "green": 0.8,
+                        "blue": 0.8
+                    }
+                })
                     logger.info(f"Заливка успешно установлена для ячейки F{next_row}, результат: {format_result}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{next_row}: {format_error}", exc_info=True)
@@ -539,12 +539,12 @@ class AppealsService:
                 try:
                     logger.info(f"Попытка установить заливку для ячейки F{existing_row}")
                     format_result = self.worksheet.format(f'F{existing_row}', {
-                        "backgroundColor": {
-                            "red": 1.0,    # #ffffff
-                            "green": 1.0,
-                            "blue": 1.0
-                        }
-                    })
+                    "backgroundColor": {
+                        "red": 1.0,    # #ffffff
+                        "green": 1.0,
+                        "blue": 1.0
+                    }
+                })
                     logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
@@ -637,12 +637,12 @@ class AppealsService:
                 try:
                     logger.info(f"Попытка установить заливку #f3cccc для ячейки F{existing_row}")
                     format_result = self.worksheet.format(f'F{existing_row}', {
-                        "backgroundColor": {
-                            "red": 0.95,    # #f3cccc
-                            "green": 0.8,
-                            "blue": 0.8
-                        }
-                    })
+                    "backgroundColor": {
+                        "red": 0.95,    # #f3cccc
+                        "green": 0.8,
+                        "blue": 0.8
+                    }
+                })
                     logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
@@ -697,12 +697,12 @@ class AppealsService:
                 try:
                     logger.info(f"Попытка установить заливку #fff2cc для ячейки F{existing_row}")
                     format_result = self.worksheet.format(f'F{existing_row}', {
-                        "backgroundColor": {
-                            "red": 1.0,    # #fff2cc
-                            "green": 0.95,
-                            "blue": 0.8
-                        }
-                    })
+                    "backgroundColor": {
+                        "red": 1.0,    # #fff2cc
+                        "green": 0.95,
+                        "blue": 0.8
+                    }
+                })
                     logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
@@ -757,12 +757,12 @@ class AppealsService:
                 try:
                     logger.info(f"Попытка установить заливку #d9ead3 для ячейки F{existing_row}")
                     format_result = self.worksheet.format(f'F{existing_row}', {
-                        "backgroundColor": {
-                            "red": 0.85,
-                            "green": 0.92,
-                            "blue": 0.83
-                        }
-                    })
+                    "backgroundColor": {
+                        "red": 0.85,
+                        "green": 0.92,
+                        "blue": 0.83
+                    }
+                })
                     logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
