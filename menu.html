@@ -777,8 +777,13 @@
         
         if (isGitHubPages) {
             // Мини-приложение на GitHub Pages - используем Cloudflare Tunnel
-            // Пробуем несколько вариантов URL туннеля
+            // ВАЖНО: Если туннель не работает, нужно проверить Cloudflare Dashboard
+            // и получить правильный URL туннеля или настроить его заново
             API_BASE_URL = 'https://marketingbot.trycloudflare.com';
+            
+            // Временный fallback: если туннель не работает, можно использовать
+            // прокси через GitHub Pages (требует настройки)
+            // Или настроить туннель правильно в Cloudflare Dashboard
         } else {
             // Мини-приложение на том же сервере - используем относительный путь
             API_BASE_URL = window.location.origin;
@@ -846,8 +851,12 @@
             // Пробуем несколько вариантов URL, если первый не работает
             const urlsToTry = [
                 `${API_BASE_URL}/api/promotions`,
-                // Fallback варианты (если Cloudflare Tunnel не работает)
             ];
+            
+            // Если Cloudflare Tunnel не работает, можно добавить fallback варианты:
+            // - Прокси через GitHub Pages (требует настройки)
+            // - Другой URL туннеля из Cloudflare Dashboard
+            // - Временное решение через другой сервис
             
             for (const url of urlsToTry) {
                 try {
