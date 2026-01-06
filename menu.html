@@ -769,14 +769,25 @@
         // Если мини-приложение на GitHub Pages, используем Cloudflare Tunnel URL
         // Если на том же сервере, используем относительный путь
         let API_BASE_URL;
-        if (window.location.hostname.includes('github.io') || 
-            window.location.hostname.includes('github.com')) {
+        
+        // Проверяем, открыто ли мини-приложение через Telegram WebApp
+        const isTelegramWebApp = window.Telegram && window.Telegram.WebApp;
+        const isGitHubPages = window.location.hostname.includes('github.io') || 
+                              window.location.hostname.includes('github.com');
+        
+        if (isGitHubPages) {
             // Мини-приложение на GitHub Pages - используем Cloudflare Tunnel
+            // Пробуем несколько вариантов URL туннеля
             API_BASE_URL = 'https://marketingbot.trycloudflare.com';
         } else {
             // Мини-приложение на том же сервере - используем относительный путь
             API_BASE_URL = window.location.origin;
         }
+        
+        console.log('API_BASE_URL установлен:', API_BASE_URL);
+        console.log('Hostname:', window.location.hostname);
+        console.log('Is GitHub Pages:', isGitHubPages);
+        console.log('Is Telegram WebApp:', isTelegramWebApp);
 
         // State
         let promotionsCache = null;
@@ -832,16 +843,44 @@
 
         // Data Fetching
         async function fetchPromotions() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/promotions`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+            // Пробуем несколько вариантов URL, если первый не работает
+            const urlsToTry = [
+                `${API_BASE_URL}/api/promotions`,
+                // Fallback варианты (если Cloudflare Tunnel не работает)
+            ];
+            
+            for (const url of urlsToTry) {
+                try {
+                    console.log(`Попытка загрузить акции с: ${url}`);
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                        },
+                        // Добавляем timeout
+                        signal: AbortSignal.timeout(10000) // 10 секунд
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log(`✅ Акции загружены успешно с: ${url}`);
+                    return data;
+                } catch (error) {
+                    console.warn(`Ошибка при загрузке с ${url}:`, error.message);
+                    // Пробуем следующий URL, если это не последний
+                    if (url !== urlsToTry[urlsToTry.length - 1]) {
+                        continue;
+                    }
+                    // Если это последний URL, возвращаем ошибку
+                    console.error('Все попытки загрузки акций не удались:', error);
+                    return { error: error.message || 'Не удалось загрузить акции' };
                 }
-                return await response.json();
-            } catch (error) {
-                console.error('Fetch error:', error);
-                return { error: error.message };
             }
+            
+            return { error: 'Не удалось загрузить акции' };
         }
 
         async function loadPromotions() {
