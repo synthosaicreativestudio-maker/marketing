@@ -55,7 +55,7 @@ def main() -> None:
     # Инициализация монитора ответов
     logger.info("Инициализация ResponseMonitor...")
     if appeals_service and appeals_service.is_available():
-        response_monitor = ResponseMonitor(appeals_service, token)
+    response_monitor = ResponseMonitor(appeals_service, token)
         logger.info("ResponseMonitor готов к работе")
     else:
         response_monitor = None

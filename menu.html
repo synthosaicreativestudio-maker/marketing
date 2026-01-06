@@ -765,9 +765,19 @@
         tg.expand();
 
         // API Configuration
-        // Используем относительный путь - мини-апп развернут на том же сервере, что и API
-        // Это позволяет избежать проблем с CORS и mixed content
-        const API_BASE_URL = window.location.origin;
+        // Определяем API_BASE_URL в зависимости от окружения
+        // Если мини-приложение на GitHub Pages, используем Cloudflare Tunnel URL
+        // Если на том же сервере, используем относительный путь
+        let API_BASE_URL;
+        if (window.location.hostname.includes('github.io') || 
+            window.location.hostname.includes('github.com')) {
+            // Мини-приложение на GitHub Pages - используем Cloudflare Tunnel
+            // TODO: Замените на ваш реальный Tunnel URL после настройки
+            API_BASE_URL = 'https://marketingbot-<TUNNEL_ID>.trycloudflare.com';
+        } else {
+            // Мини-приложение на том же сервере - используем относительный путь
+            API_BASE_URL = window.location.origin;
+        }
 
         // State
         let promotionsCache = null;
