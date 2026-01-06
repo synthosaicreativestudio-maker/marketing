@@ -125,7 +125,7 @@ class ResponseMonitor:
                         chat_id=telegram_id,
                         text=message
                     )
-                logger.info(f"Уведомление о ручном решении отправлено пользователю {telegram_id}")
+                    logger.info(f"Уведомление о ручном решении отправлено пользователю {telegram_id}")
                 except Exception as e:
                     logger.error(f"Ошибка отправки уведомления пользователю {telegram_id}: {e}")
                 
