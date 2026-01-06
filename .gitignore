@@ -6,6 +6,7 @@
 .env.staging
 .env.backup
 .env.enc
+env.server.txt
 
 # Файлы credentials и приватные ключи
 *.json
