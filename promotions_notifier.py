@@ -135,12 +135,12 @@ class PromotionsNotifier:
                         logger.info(f"Уведомление о акции '{promotion['title']}' с видео отправлено пользователю {user_id}")
                     else:
                         # Отправляем обычное текстовое сообщение
-                    await self.bot.send_message(
-                        chat_id=user_id,
-                        text=message,
-                        parse_mode='Markdown',
-                        reply_markup=reply_markup
-                    )
+                        await self.bot.send_message(
+                            chat_id=user_id,
+                            text=message,
+                            parse_mode='Markdown',
+                            reply_markup=reply_markup
+                        )
                         logger.info(f"Уведомление о акции '{promotion['title']}' отправлено пользователю {user_id}")
                     
                     sent_count += 1
