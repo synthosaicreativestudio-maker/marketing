@@ -7,6 +7,7 @@
 .env.backup
 .env.enc
 env.server.txt
+cloudflare_tunnel_token.txt
 
 # Файлы credentials и приватные ключи
 *.json
