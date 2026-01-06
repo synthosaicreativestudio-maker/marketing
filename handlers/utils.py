@@ -1,22 +1,49 @@
 import os
 import logging
+from urllib.parse import urlparse
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 logger = logging.getLogger(__name__)
 
+def _validate_url(url: str) -> bool:
+    """Проверяет, является ли строка валидным URL."""
+    if not url:
+        return False
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except Exception:
+        return False
+
 def get_web_app_url() -> str:
     """Ленивое чтение URL WebApp из окружения (после загрузки .env)."""
     base_url = os.getenv("WEB_APP_URL") or ""
+    
+    # Валидация URL
+    if base_url and not _validate_url(base_url):
+        logger.error(f"WEB_APP_URL содержит невалидный URL: {base_url}")
+        return ""
+    
     if base_url and not base_url.endswith('/'):
         base_url += '/'
-    return base_url + "index.html"
+    url = base_url + "index.html"
+    logger.debug(f"Generated WebApp URL: {url}")
+    return url
 
 def get_spa_menu_url() -> str:
     """Ленивое чтение URL SPA меню из окружения."""
     base_url = os.getenv("WEB_APP_URL") or ""
+    
+    # Валидация URL
+    if base_url and not _validate_url(base_url):
+        logger.error(f"WEB_APP_URL содержит невалидный URL: {base_url}")
+        return ""
+    
     if base_url and not base_url.endswith('/'):
         base_url += '/'
-    return base_url + "menu.html"
+    url = base_url + "menu.html"
+    logger.debug(f"Generated SPA Menu URL: {url}")
+    return url
 
 def create_specialist_button() -> InlineKeyboardMarkup:
     """

@@ -83,11 +83,14 @@ class PromotionsNotifier:
             message += f"✨ Акция активна с {promotion['release_date']}"
             
             # Создаем инлайн кнопку
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+            import os
+            web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
+            menu_url = f"{web_app_url}menu.html" if web_app_url.endswith('/') else f"{web_app_url}/menu.html"
             keyboard = [[
                 InlineKeyboardButton(
                     "📋 Посмотреть все акции", 
-                    web_app={"url": "https://synthosaicreativestudio-maker.github.io/marketing/menu.html"}
+                    web_app=WebAppInfo(url=menu_url)
                 )
             ]]
             reply_markup = InlineKeyboardMarkup(keyboard)

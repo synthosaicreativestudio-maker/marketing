@@ -4,7 +4,7 @@ Webhook handler для получения уведомлений от Google She
 import logging
 import os
 from flask import Flask, request, jsonify
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -120,10 +120,11 @@ async def send_promotion_notification(promotion_data):
         message += "Нажмите кнопку ниже, чтобы посмотреть все акции!"
         
         # Создаем кнопку для открытия Mini App
+        menu_url = f"{web_app_url}menu.html#promotions" if web_app_url.endswith('/') else f"{web_app_url}/menu.html#promotions"
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(
                 "👀 Посмотреть все акции", 
-                web_app={'url': f"{web_app_url}menu.html#promotions"}
+                web_app=WebAppInfo(url=menu_url)
             )]
         ])
         
@@ -159,10 +160,11 @@ async def send_promotion_update_notification(promotion_data):
         message += f"**{title}**\n\n"
         message += "Информация об акции была изменена. Нажмите кнопку ниже, чтобы посмотреть обновления!"
         
+        menu_url = f"{web_app_url}menu.html#promotions" if web_app_url.endswith('/') else f"{web_app_url}/menu.html#promotions"
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(
                 "👀 Посмотреть акции", 
-                web_app={'url': f"{web_app_url}menu.html#promotions"}
+                web_app=WebAppInfo(url=menu_url)
             )]
         ])
         
