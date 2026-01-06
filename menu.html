@@ -765,11 +765,9 @@
         tg.expand();
 
         // API Configuration
-        // Определяем API URL динамически: если мини-апп и API на одном домене — используем текущий origin,
-        // иначе используем адрес сервера на Yandex Cloud с HTTPS
-        const API_BASE_URL = window.location.origin.includes('github.io')
-            ? 'https://158.160.0.127'
-            : window.location.origin;
+        // Используем относительный путь - мини-апп развернут на том же сервере, что и API
+        // Это позволяет избежать проблем с CORS и самоподписанными SSL сертификатами
+        const API_BASE_URL = window.location.origin;
 
         // State
         let promotionsCache = null;
