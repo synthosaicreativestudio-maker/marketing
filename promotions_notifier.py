@@ -86,7 +86,13 @@ class PromotionsNotifier:
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
             import os
             web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
-            menu_url = f"{web_app_url}menu.html" if web_app_url.endswith('/') else f"{web_app_url}/menu.html"
+            # Добавляем версию для сброса кеша Telegram WebView
+            version = "v=20260107-2"
+            menu_url = (
+                f"{web_app_url}menu.html?{version}"
+                if web_app_url.endswith('/')
+                else f"{web_app_url}/menu.html?{version}"
+            )
             keyboard = [[
                 InlineKeyboardButton(
                     "📋 Посмотреть все акции", 

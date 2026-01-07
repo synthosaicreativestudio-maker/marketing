@@ -119,8 +119,13 @@ async def send_promotion_notification(promotion_data):
             message += f"📅 Период: {start_date} - {end_date}\n\n"
         message += "Нажмите кнопку ниже, чтобы посмотреть все акции!"
         
-        # Создаем кнопку для открытия Mini App
-        menu_url = f"{web_app_url}menu.html#promotions" if web_app_url.endswith('/') else f"{web_app_url}/menu.html#promotions"
+        # Создаем кнопку для открытия Mini App (добавляем версию для сброса кеша)
+        version = "v=20260107-2"
+        menu_url = (
+            f"{web_app_url}menu.html?{version}#promotions"
+            if web_app_url.endswith('/')
+            else f"{web_app_url}/menu.html?{version}#promotions"
+        )
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(
                 "👀 Посмотреть все акции", 
@@ -160,7 +165,12 @@ async def send_promotion_update_notification(promotion_data):
         message += f"**{title}**\n\n"
         message += "Информация об акции была изменена. Нажмите кнопку ниже, чтобы посмотреть обновления!"
         
-        menu_url = f"{web_app_url}menu.html#promotions" if web_app_url.endswith('/') else f"{web_app_url}/menu.html#promotions"
+        version = "v=20260107-2"
+        menu_url = (
+            f"{web_app_url}menu.html?{version}#promotions"
+            if web_app_url.endswith('/')
+            else f"{web_app_url}/menu.html?{version}#promotions"
+        )
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton(
                 "👀 Посмотреть акции", 

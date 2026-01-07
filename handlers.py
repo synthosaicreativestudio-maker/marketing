@@ -24,7 +24,9 @@ def get_spa_menu_url() -> str:
     base_url = os.getenv("WEB_APP_URL") or ""
     if base_url and not base_url.endswith('/'):
         base_url += '/'
-    return base_url + "menu.html"
+    # Версия для принудительного обновления кеша WebApp
+    cache_bust = "v=20260107-2"
+    return f"{base_url}menu.html?{cache_bust}"
 
 def create_specialist_button() -> InlineKeyboardMarkup:
     """
