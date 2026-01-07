@@ -57,6 +57,6 @@ sudo systemctl restart marketingbot-web.service
 
 ## Дополнительная помощь
 
-- [Настройка Cloudflare Tunnel](../deployment/CLOUDFLARE_TUNNEL_SETUP.md)
 - [Развертывание на Yandex Cloud](../deployment/DEPLOYMENT_YANDEX.md)
 - [Общее руководство по устранению неполадок](TROUBLESHOOTING.md)
+- [Проблемы с акциями](PROMOTIONS_ISSUES.md)
