@@ -11,12 +11,13 @@ const STATUS_COL = 4;
 const START_DATE_COL = 5;
 const END_DATE_COL = 6;
 const CONTENT_COL = 7;
-const ACTION_COL = 8;
+const LINK_COL = 8;
+const ACTION_COL = 9;
 
 // Заголовки столбцов
 const HEADERS = [
   "Дата релиза", "Название", "Описание", "Статус", 
-  "Дата начала", "Дата окончания", "Контент", "Действие"
+  "Дата начала", "Дата окончания", "Контент", "Ссылка", "Действие"
 ];
 
 // Новые статусы
@@ -78,7 +79,7 @@ function setupSheet() {
     .setDataValidation(SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(false).build());
 
   sheet.clearConditionalFormatRules();
-  const fullRange = `A2:H${sheet.getMaxRows()}`;
+  const fullRange = `A2:I${sheet.getMaxRows()}`;
   const rules = [
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(`=$D2="${STATUS_PENDING}"`).setBackground(COLOR_PENDING).setRanges([sheet.getRange(fullRange)]).build(),
     SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(`=$D2="${STATUS_ACTIVE}"`).setBackground(COLOR_ACTIVE).setRanges([sheet.getRange(fullRange)]).build(),
@@ -324,12 +325,14 @@ function doGet(e) {
     
     rows.forEach(function(row, rowIndex) {
       // Получаем данные акции по индексам колонок (индекс начинается с 0)
+      var releaseDate = row[RELEASE_DATE_COL - 1]; // Колонка A (индекс 0)
       var status = row[STATUS_COL - 1]; // Колонка D (индекс 3)
       var title = row[TITLE_COL - 1]; // Колонка B (индекс 1)
       var description = row[DESCRIPTION_COL - 1]; // Колонка C (индекс 2)
       var startDate = row[START_DATE_COL - 1]; // Колонка E (индекс 4)
       var endDate = row[END_DATE_COL - 1]; // Колонка F (индекс 5)
       var content = row[CONTENT_COL - 1]; // Колонка G (индекс 6)
+      var link = row[LINK_COL - 1]; // Колонка H (индекс 7)
       
       // Проверяем, что статус равен "Активна"
       if (status && String(status).trim() === STATUS_ACTIVE) {
@@ -339,8 +342,15 @@ function doGet(e) {
         }
         
         // Форматируем даты, если они есть
+        var formattedReleaseDate = '';
         var formattedStartDate = '';
         var formattedEndDate = '';
+        
+        if (releaseDate instanceof Date) {
+          formattedReleaseDate = Utilities.formatDate(releaseDate, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+        } else if (releaseDate) {
+          formattedReleaseDate = String(releaseDate).trim();
+        }
         
         if (startDate instanceof Date) {
           formattedStartDate = Utilities.formatDate(startDate, Session.getScriptTimeZone(), 'dd.MM.yyyy');
@@ -366,6 +376,7 @@ function doGet(e) {
           'title': String(title).trim(),
           'description': description ? String(description).trim() : 'Описание отсутствует',
           'status': STATUS_ACTIVE,
+          'release_date': formattedReleaseDate,
           'start_date': formattedStartDate,
           'end_date': formattedEndDate
         };
@@ -379,11 +390,23 @@ function doGet(e) {
           }
         }
         
+        // Добавляем ссылку, если она есть
+        if (link && link !== 'None' && link !== '') {
+          promotion['link'] = String(link).trim();
+        }
+        
         // Добавляем акцию в результат, если есть название
         if (promotion['title'] && promotion['title'] !== 'None') {
           result.push(promotion);
         }
       }
+    });
+    
+    // Сортировка по release_date (от новых к старым)
+    result.sort(function(a, b) {
+      var dateA = a.release_date ? new Date(a.release_date.split('.').reverse().join('-')) : new Date(0);
+      var dateB = b.release_date ? new Date(b.release_date.split('.').reverse().join('-')) : new Date(0);
+      return dateB - dateA; // От новых к старым
     });
     
     // Возвращаем результат в формате JSON

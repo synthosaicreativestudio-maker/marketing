@@ -82,7 +82,7 @@ class PromotionsNotifier:
             message += f"📅 **Период действия:** {promotion['start_date']} - {promotion['end_date']}\n\n"
             message += f"✨ Акция активна с {promotion['release_date']}"
             
-            # Создаем инлайн кнопку
+            # Создаем инлайн кнопки
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
             import os
             web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
@@ -93,13 +93,19 @@ class PromotionsNotifier:
                 if web_app_url.endswith('/')
                 else f"{web_app_url}/menu.html?{version}"
             )
-            keyboard = [[
-                InlineKeyboardButton(
-                    "📋 Посмотреть все акции", 
-                    web_app=WebAppInfo(url=menu_url)
-                )
-            ]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Формируем кнопки: сначала ссылка (если есть), потом мини-приложение
+            buttons = []
+            if promotion.get('link') and promotion['link'].strip():
+                buttons.append([InlineKeyboardButton(
+                    "📎 Перейти к материалам",
+                    url=promotion['link'].strip()
+                )])
+            buttons.append([InlineKeyboardButton(
+                "📋 Посмотреть все акции", 
+                web_app=WebAppInfo(url=menu_url)
+            )])
+            reply_markup = InlineKeyboardMarkup(buttons)
             
             # Проверяем наличие медиа-контента
             content_url = promotion.get('content', '').strip()
@@ -110,12 +116,26 @@ class PromotionsNotifier:
             is_video = False
             if has_media:
                 content_lower = content_url.lower()
-                photo_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.webp')
+                photo_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg')
                 video_extensions = ('.mp4', '.mov', '.avi', '.mkv', '.webm')
                 
-                if any(content_lower.endswith(ext) for ext in photo_extensions) or 'photo' in content_lower or 'image' in content_lower:
+                # Проверка по расширению файла
+                has_photo_extension = any(content_lower.endswith(ext) for ext in photo_extensions)
+                has_video_extension = any(content_lower.endswith(ext) for ext in video_extensions)
+                
+                # Проверка на известные хостинги изображений (как в menu.html)
+                is_image_hosting = (
+                    'googleusercontent.com' in content_lower or
+                    'drive.google.com' in content_lower or
+                    'googleapis.com' in content_lower or
+                    'imgur.com' in content_lower or
+                    'imgbb.com' in content_lower or
+                    'cloudinary.com' in content_lower
+                )
+                
+                if has_photo_extension or 'photo' in content_lower or 'image' in content_lower or (is_image_hosting and not has_video_extension):
                     is_photo = True
-                elif any(content_lower.endswith(ext) for ext in video_extensions) or 'video' in content_lower:
+                elif has_video_extension or 'video' in content_lower:
                     is_video = True
             
             # Отправляем уведомления всем пользователям

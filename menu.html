@@ -1163,6 +1163,16 @@
                 }
 
                 const dateText = (start || end) ? `${start}${start && end ? ' — ' : ''}${end}` : 'Без даты';
+                const link = (p.link || '').toString().trim();
+                
+                // Кнопка со ссылкой (если есть)
+                const linkButtonHtml = link ? `
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--glass-border);">
+                        <a href="${_escapeHtml(link)}" target="_blank" style="display: inline-block; padding: 8px 16px; background: rgba(138, 43, 226, 0.3); border: 1px solid var(--primary-color); border-radius: 8px; color: white; text-decoration: none; font-size: 14px; transition: all 0.3s;">
+                            📎 Перейти к материалам
+                        </a>
+                    </div>
+                ` : '';
 
                 const card = document.createElement('div');
                 card.className = 'glass-card promotion-card';
@@ -1176,8 +1186,122 @@
                     <div class="promotion-footer">
                         <div class="date-info">📅 ${dateText}</div>
                     </div>
+                    ${linkButtonHtml}
                 `;
                 container.appendChild(card);
+            }
+        }
+
+        function renderPromotionsAccordion(promotions, container) {
+            if (!container) return;
+
+            const list = Array.isArray(promotions) ? promotions : [];
+
+            // Clear skeleton / previous content
+            container.innerHTML = '';
+
+            if (list.length === 0) {
+                container.innerHTML = `
+                    <div class="glass-card promotion-card">
+                        <div class="promotion-header">
+                            <div class="promotion-title">Акций пока нет</div>
+                            <div class="status-badge">ПУСТО</div>
+                        </div>
+                        <div class="promotion-desc">Сейчас нет активных акций. Загляните позже.</div>
+                    </div>
+                `;
+                return;
+            }
+
+            for (const p of list) {
+                const title = _escapeHtml(p.title || 'Акция');
+                const desc = _escapeHtml(p.description || '');
+                const status = _escapeHtml(p.status || '');
+                const start = _escapeHtml(p.start_date || '');
+                const end = _escapeHtml(p.end_date || '');
+                const content = (p.content || '').toString().trim();
+                const link = (p.link || '').toString().trim();
+
+                let mediaHtml = '';
+                if (content) {
+                    const lower = content.toLowerCase();
+                    const isDataImage = lower.startsWith('data:image/');
+                    const isHttp = lower.startsWith('http://') || lower.startsWith('https://');
+                    
+                    // Проверка на известные хостинги изображений (Google Drive, Imgur, etc.)
+                    const isImageHosting = isHttp && (
+                        lower.includes('googleusercontent.com') ||
+                        lower.includes('drive.google.com') ||
+                        lower.includes('googleapis.com') ||
+                        lower.includes('imgur.com') ||
+                        lower.includes('imgbb.com') ||
+                        lower.includes('cloudinary.com')
+                    );
+                    
+                    // Проверка по расширению файла
+                    const hasImageExtension = isHttp && (
+                        lower.endsWith('.jpg') || 
+                        lower.endsWith('.jpeg') || 
+                        lower.endsWith('.png') || 
+                        lower.endsWith('.gif') || 
+                        lower.endsWith('.webp') ||
+                        lower.endsWith('.svg')
+                    );
+                    
+                    // Проверка на видео
+                    const isVideoUrl = isHttp && (
+                        lower.endsWith('.mp4') || 
+                        lower.endsWith('.webm') || 
+                        lower.endsWith('.mov') ||
+                        lower.endsWith('.avi')
+                    );
+                    
+                    const isImageUrl = isHttp && !isVideoUrl && (hasImageExtension || isImageHosting);
+
+                    if (isDataImage || isImageUrl) {
+                        mediaHtml = `<img src="${_escapeHtml(content)}" alt="promotion" style="width:100%; border-radius:12px; margin:10px 0; display:block;" loading="lazy" />`;
+                    } else if (isVideoUrl) {
+                        mediaHtml = `<video src="${_escapeHtml(content)}" controls style="width:100%; border-radius:12px; margin:10px 0; display:block;"></video>`;
+                    }
+                }
+
+                const dateText = (start || end) ? `${start}${start && end ? ' — ' : ''}${end}` : 'Без даты';
+                
+                // Кнопка со ссылкой (если есть)
+                const linkButtonHtml = link ? `
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--glass-border);">
+                        <a href="${_escapeHtml(link)}" target="_blank" style="display: inline-block; padding: 8px 16px; background: rgba(138, 43, 226, 0.3); border: 1px solid var(--primary-color); border-radius: 8px; color: white; text-decoration: none; font-size: 14px; transition: all 0.3s;">
+                            📎 Перейти к материалам
+                        </a>
+                    </div>
+                ` : '';
+
+                // Заголовок аккордеона: "Название Дата начала — Дата окончания"
+                const accordionTitle = `${title} ${dateText}`;
+
+                const accordionItem = document.createElement('div');
+                accordionItem.className = 'accordion-item';
+                accordionItem.innerHTML = `
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <div class="accordion-title">${accordionTitle}</div>
+                    </div>
+                    <div class="accordion-content">
+                        <div class="glass-card promotion-card" style="margin: 15px; background: rgba(255, 255, 255, 0.03);">
+                            <div class="promotion-header">
+                                <div class="promotion-title">${title}</div>
+                                <div class="status-badge">${status ? _escapeHtml(status) : 'АКТИВНА'}</div>
+                            </div>
+                            ${mediaHtml}
+                            <div class="promotion-desc">${desc || 'Описание отсутствует'}</div>
+                            <div class="promotion-footer">
+                                <div class="date-info">📅 ${dateText}</div>
+                            </div>
+                            ${linkButtonHtml}
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(accordionItem);
             }
         }
 
@@ -1187,17 +1311,33 @@
 
             // If already loaded, don't reload
             if (promotionsCache && !promotionsCache.error) {
-                renderPromotions(promotionsCache, container, true); // Preview (limit 2)
-                renderPromotions(promotionsCache, allContainer, false); // All
+                // Главная страница: только последняя акция
+                renderPromotions(promotionsCache[0] ? [promotionsCache[0]] : [], container, true);
+                // Страница "Все акции": все акции в аккордеонах
+                renderPromotionsAccordion(promotionsCache, allContainer);
                 return;
             }
 
             const data = await fetchPromotions();
 
             if (data && !data.error) {
-                promotionsCache = data;
-                renderPromotions(data, container, true);
-                renderPromotions(data, allContainer, false);
+                // Сортировка по release_date (от новых к старым), если не отсортировано в GAS
+                let sortedData = Array.isArray(data) ? [...data] : [];
+                if (sortedData.length > 0 && sortedData[0].release_date) {
+                    sortedData.sort((a, b) => {
+                        const dateA = a.release_date ? new Date(a.release_date.split('.').reverse().join('-')) : new Date(0);
+                        const dateB = b.release_date ? new Date(b.release_date.split('.').reverse().join('-')) : new Date(0);
+                        return dateB - dateA; // От новых к старым
+                    });
+                }
+                
+                promotionsCache = sortedData;
+                
+                // Главная страница: только последняя акция (первая после сортировки)
+                renderPromotions(sortedData[0] ? [sortedData[0]] : [], container, true);
+                
+                // Страница "Все акции": все акции в аккордеонах
+                renderPromotionsAccordion(sortedData, allContainer);
             } else {
                 const errorMsg = data ? data.error : 'Unknown error';
                 showError(container, errorMsg);
