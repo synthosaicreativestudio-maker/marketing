@@ -874,23 +874,60 @@
             for (const url of urlsToTry) {
                 try {
                     console.log(`Попытка загрузить акции с: ${url}`);
-                    const response = await fetch(url, {
+                    
+                    // Для Google Apps Script используем mode: 'no-cors' может не работать
+                    // Попробуем обычный fetch сначала
+                    const fetchOptions = {
                         method: 'GET',
                         headers: {
                             'Accept': 'application/json',
                         },
-                        // Добавляем timeout
-                        signal: AbortSignal.timeout(10000) // 10 секунд
-                    });
+                    };
                     
+                    // Добавляем timeout только если поддерживается
+                    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+                        fetchOptions.signal = AbortSignal.timeout(10000);
+                    }
+                    
+                    const response = await fetch(url, fetchOptions);
+                    
+                    // Проверяем статус ответа
                     if (!response.ok) {
+                        const errorText = await response.text().catch(() => '');
+                        console.warn(`HTTP error! status: ${response.status}, body: ${errorText}`);
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     
-                    const data = await response.json();
+                    // Получаем текст ответа для отладки
+                    const responseText = await response.text();
+                    console.log(`Ответ от ${url} (первые 500 символов):`, responseText.substring(0, 500));
+                    
+                    // Парсим JSON
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (parseError) {
+                        console.error(`Ошибка парсинга JSON от ${url}:`, parseError);
+                        console.error(`Полный текст ответа:`, responseText);
+                        // Если это не последний URL, пробуем следующий
+                        if (url !== urlsToTry[urlsToTry.length - 1]) {
+                            continue;
+                        }
+                        throw new Error(`Invalid JSON response: ${parseError.message}`);
+                    }
+                    
+                    console.log(`Данные от ${url}:`, data);
                     
                     // Проверяем, что данные в правильном формате
                     if (Array.isArray(data)) {
+                        if (data.length === 0) {
+                            console.warn(`Пустой массив акций от ${url}`);
+                            // Если это не последний URL, пробуем следующий
+                            if (url !== urlsToTry[urlsToTry.length - 1]) {
+                                continue;
+                            }
+                            return []; // Возвращаем пустой массив, если это последний источник
+                        }
                         console.log(`✅ Акции загружены успешно с: ${url} (${data.length} акций)`);
                         return data;
                     } else if (data.promotions && Array.isArray(data.promotions)) {
@@ -900,21 +937,29 @@
                     } else if (data.error) {
                         // Если есть ошибка в ответе, пробуем следующий URL
                         console.warn(`Ошибка в ответе от ${url}:`, data.error);
-                        continue;
+                        if (url !== urlsToTry[urlsToTry.length - 1]) {
+                            continue;
+                        }
+                        return { error: data.error };
                     } else {
                         // Неожиданный формат данных
                         console.warn(`Неожиданный формат данных от ${url}:`, data);
-                        continue;
+                        if (url !== urlsToTry[urlsToTry.length - 1]) {
+                            continue;
+                        }
+                        return { error: 'Неожиданный формат данных' };
                     }
                 } catch (error) {
-                    console.warn(`Ошибка при загрузке с ${url}:`, error.message);
+                    console.warn(`Ошибка при загрузке с ${url}:`, error);
+                    console.warn(`Тип ошибки: ${error.name}, Сообщение: ${error.message}`);
                     
                     // Пробуем следующий URL, если это не последний
                     if (url !== urlsToTry[urlsToTry.length - 1]) {
+                        console.log(`Пробуем следующий источник...`);
                         continue;
                     }
                     // Если это последний URL, возвращаем ошибку
-                    console.error('Все попытки загрузки акций не удались:', error);
+                    console.error('Все попытки загрузки акций не удались. Последняя ошибка:', error);
                     return { error: error.message || 'Не удалось загрузить акции' };
                 }
             }
@@ -947,7 +992,11 @@
         }
 
         function showError(container, message) {
-            if (!container) return;
+            console.error('showError вызвана:', message, 'для контейнера:', container);
+            if (!container) {
+                console.error('Контейнер не найден!');
+                return;
+            }
             container.innerHTML = `
                 <div class="glass-card error-state">
                     <p>Не удалось загрузить акции</p>
