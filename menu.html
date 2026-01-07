@@ -1077,6 +1077,80 @@
             return { error: 'Не удалось загрузить акции: все источники недоступны' };
         }
 
+        function _escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function renderPromotions(promotions, container, isPreview = false) {
+            if (!container) return;
+
+            const list = Array.isArray(promotions) ? promotions : [];
+            const items = isPreview ? list.slice(0, 2) : list;
+
+            // Clear skeleton / previous content
+            container.innerHTML = '';
+
+            if (items.length === 0) {
+                container.innerHTML = `
+                    <div class="glass-card promotion-card">
+                        <div class="promotion-header">
+                            <div class="promotion-title">Акций пока нет</div>
+                            <div class="status-badge">ПУСТО</div>
+                        </div>
+                        <div class="promotion-desc">Сейчас нет активных акций. Загляните позже.</div>
+                    </div>
+                `;
+                return;
+            }
+
+            for (const p of items) {
+                const title = _escapeHtml(p.title || 'Акция');
+                const desc = _escapeHtml(p.description || '');
+                const status = _escapeHtml(p.status || '');
+                const start = _escapeHtml(p.start_date || '');
+                const end = _escapeHtml(p.end_date || '');
+                const content = (p.content || '').toString().trim();
+
+                let mediaHtml = '';
+                if (content) {
+                    const lower = content.toLowerCase();
+                    const isDataImage = lower.startsWith('data:image/');
+                    const isHttp = lower.startsWith('http://') || lower.startsWith('https://');
+                    const isImageUrl = isHttp && (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp'));
+                    const isVideoUrl = isHttp && (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov'));
+
+                    if (isDataImage || isImageUrl) {
+                        mediaHtml = `<img src="${_escapeHtml(content)}" alt="promotion" style="width:100%; border-radius:12px; margin:10px 0; display:block;" />`;
+                    } else if (isVideoUrl) {
+                        mediaHtml = `<video src="${_escapeHtml(content)}" controls style="width:100%; border-radius:12px; margin:10px 0; display:block;"></video>`;
+                    }
+                }
+
+                const dateText = (start || end) ? `${start}${start && end ? ' — ' : ''}${end}` : 'Без даты';
+
+                const card = document.createElement('div');
+                card.className = 'glass-card promotion-card';
+                card.innerHTML = `
+                    <div class="promotion-header">
+                        <div class="promotion-title">${title}</div>
+                        <div class="status-badge">${status ? _escapeHtml(status) : 'АКТИВНА'}</div>
+                    </div>
+                    ${mediaHtml}
+                    <div class="promotion-desc">${desc || 'Описание отсутствует'}</div>
+                    <div class="promotion-footer">
+                        <div class="date-info">📅 ${dateText}</div>
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+        }
+
         async function loadPromotions() {
             const container = document.getElementById('promotions-container');
             const allContainer = document.getElementById('all-promotions-container');
