@@ -8,11 +8,15 @@
 
 ## Что нужно сделать
 
-### 1. Закоммитить и запушить изменения
+### 1. Запушить изменения (коммит уже создан)
 
 ```bash
-git add webhook_handler.py promotions_notifier.py handlers/utils.py FIX_WEBAPP_URL.md DEPLOY_FIXES.md update_yandex_server.sh
-git commit -m "Fix: Исправлено использование WebAppInfo вместо словарей для мини-приложения"
+git push origin main
+```
+
+**Примечание:** Коммит уже создан локально. Если возникнут проблемы с SSL сертификатами при push, выполните:
+```bash
+git config --global http.sslVerify false
 git push origin main
 ```
 
