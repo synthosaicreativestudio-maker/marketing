@@ -312,10 +312,12 @@
             overflow: hidden;
             transition: max-height 0.3s ease-out;
             background: rgba(0, 0, 0, 0.2);
+            padding: 0;
         }
 
         .accordion-content.open {
-            max-height: 500px;
+            max-height: 5000px;
+            padding: 15px;
             /* Arbitrary large height */
         }
 
@@ -1091,7 +1093,8 @@
             if (!container) return;
 
             const list = Array.isArray(promotions) ? promotions : [];
-            const items = isPreview ? list.slice(0, 2) : list;
+            // Главная страница: только одна последняя акция
+            const items = isPreview ? list.slice(0, 1) : list;
 
             // Clear skeleton / previous content
             container.innerHTML = '';
@@ -1286,7 +1289,7 @@
                         <div class="accordion-title">${accordionTitle}</div>
                     </div>
                     <div class="accordion-content">
-                        <div class="glass-card promotion-card" style="margin: 15px; background: rgba(255, 255, 255, 0.03);">
+                        <div class="glass-card promotion-card" style="background: rgba(255, 255, 255, 0.03);">
                             <div class="promotion-header">
                                 <div class="promotion-title">${title}</div>
                                 <div class="status-badge">${status ? _escapeHtml(status) : 'АКТИВНА'}</div>
