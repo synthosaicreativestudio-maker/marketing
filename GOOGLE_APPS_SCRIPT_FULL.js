@@ -234,69 +234,72 @@ function handlePublish(sheet, row) {
   }
   statusCell.setValue(finalStatus);
   
-  // Собираем данные акции для отправки на webhook (всегда, независимо от статуса)
-  var releaseDate = rowValues[RELEASE_DATE_COL - 1];
-  var title = rowValues[TITLE_COL - 1];
-  var description = rowValues[DESCRIPTION_COL - 1];
-  var content = rowValues[CONTENT_COL - 1];
-  var link = rowValues[LINK_COL - 1];
-  
-  // Форматируем даты
-  var formattedReleaseDate = '';
-  var formattedStartDate = '';
-  var formattedEndDate = '';
-  
-  if (releaseDate instanceof Date) {
-    formattedReleaseDate = Utilities.formatDate(releaseDate, Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss');
-  } else if (releaseDate) {
-    formattedReleaseDate = String(releaseDate).trim();
-  } else {
-    // Если дата релиза не установлена, используем текущее время
-    formattedReleaseDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss');
+  // Отправляем webhook ТОЛЬКО если статус "Активна"
+  if (finalStatus === STATUS_ACTIVE) {
+    // Собираем данные акции для отправки на webhook
+    var releaseDate = rowValues[RELEASE_DATE_COL - 1];
+    var title = rowValues[TITLE_COL - 1];
+    var description = rowValues[DESCRIPTION_COL - 1];
+    var content = rowValues[CONTENT_COL - 1];
+    var link = rowValues[LINK_COL - 1];
+    
+    // Форматируем даты
+    var formattedReleaseDate = '';
+    var formattedStartDate = '';
+    var formattedEndDate = '';
+    
+    if (releaseDate instanceof Date) {
+      formattedReleaseDate = Utilities.formatDate(releaseDate, Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss');
+    } else if (releaseDate) {
+      formattedReleaseDate = String(releaseDate).trim();
+    } else {
+      // Если дата релиза не установлена, используем текущее время
+      formattedReleaseDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss');
+    }
+    
+    if (startDate instanceof Date) {
+      formattedStartDate = Utilities.formatDate(startDate, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+    } else if (startDate) {
+      formattedStartDate = String(startDate).trim();
+    }
+    
+    var endDate = rowValues[END_DATE_COL - 1];
+    if (endDate instanceof Date) {
+      formattedEndDate = Utilities.formatDate(endDate, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+    } else if (endDate) {
+      formattedEndDate = String(endDate).trim();
+    }
+    
+    // Конвертируем контент (если это Google Drive ссылка)
+    var convertedContent = content && content !== 'None' && content !== '' 
+      ? convertImageUrl(content) 
+      : null;
+    
+    // Формируем объект данных акции для webhook
+    var promotionData = {
+      title: String(title).trim(),
+      description: description ? String(description).trim() : 'Описание отсутствует',
+      start_date: formattedStartDate,
+      end_date: formattedEndDate,
+      release_date: formattedReleaseDate,
+      status: finalStatus  // Добавляем статус в данные акции
+    };
+    
+    // Добавляем контент, если есть
+    if (convertedContent) {
+      promotionData.content = convertedContent;
+    } else if (content && content !== 'None' && content !== '') {
+      promotionData.content = String(content).trim();
+    }
+    
+    // Добавляем ссылку, если есть
+    if (link && link !== 'None' && link !== '') {
+      promotionData.link = String(link).trim();
+    }
+    
+    // Отправляем данные на webhook для мгновенной отправки уведомлений (только для статуса "Активна")
+    sendWebhookNotification(promotionData);
   }
-  
-  if (startDate instanceof Date) {
-    formattedStartDate = Utilities.formatDate(startDate, Session.getScriptTimeZone(), 'dd.MM.yyyy');
-  } else if (startDate) {
-    formattedStartDate = String(startDate).trim();
-  }
-  
-  var endDate = rowValues[END_DATE_COL - 1];
-  if (endDate instanceof Date) {
-    formattedEndDate = Utilities.formatDate(endDate, Session.getScriptTimeZone(), 'dd.MM.yyyy');
-  } else if (endDate) {
-    formattedEndDate = String(endDate).trim();
-  }
-  
-  // Конвертируем контент (если это Google Drive ссылка)
-  var convertedContent = content && content !== 'None' && content !== '' 
-    ? convertImageUrl(content) 
-    : null;
-  
-  // Формируем объект данных акции для webhook
-  var promotionData = {
-    title: String(title).trim(),
-    description: description ? String(description).trim() : 'Описание отсутствует',
-    start_date: formattedStartDate,
-    end_date: formattedEndDate,
-    release_date: formattedReleaseDate,
-    status: finalStatus  // Добавляем статус в данные акции
-  };
-  
-  // Добавляем контент, если есть
-  if (convertedContent) {
-    promotionData.content = convertedContent;
-  } else if (content && content !== 'None' && content !== '') {
-    promotionData.content = String(content).trim();
-  }
-  
-  // Добавляем ссылку, если есть
-  if (link && link !== 'None' && link !== '') {
-    promotionData.link = String(link).trim();
-  }
-  
-  // Отправляем данные на webhook для мгновенной отправки уведомлений (всегда, независимо от статуса)
-  sendWebhookNotification(promotionData);
   
   sheet.getRange(row, ACTION_COL).clearContent();
 }
