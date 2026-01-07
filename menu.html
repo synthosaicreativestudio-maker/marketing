@@ -892,15 +892,22 @@
                     const response = await fetch(url, fetchOptions);
                     
                     // Проверяем статус ответа
-                    if (!response.ok) {
+                    // Google Apps Script может возвращать 200 даже при редиректе
+                    console.log(`Response status: ${response.status}, ok: ${response.ok}, type: ${response.type}`);
+                    
+                    if (!response.ok && response.status !== 0) {
                         const errorText = await response.text().catch(() => '');
-                        console.warn(`HTTP error! status: ${response.status}, body: ${errorText}`);
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                        console.warn(`HTTP error! status: ${response.status}, body: ${errorText.substring(0, 200)}`);
+                        // Для некоторых случаев пробуем прочитать ответ даже при ошибке
+                        if (response.status >= 400 && response.status < 500) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
                     }
                     
                     // Получаем текст ответа для отладки
                     const responseText = await response.text();
                     console.log(`Ответ от ${url} (первые 500 символов):`, responseText.substring(0, 500));
+                    console.log(`Длина ответа: ${responseText.length} символов`);
                     
                     // Парсим JSON
                     let data;
