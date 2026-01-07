@@ -230,6 +230,59 @@ function updateStatusesDaily() {
 }
 
 // ============================================================================
+// ФУНКЦИЯ КОНВЕРТАЦИИ ССЫЛОК НА КАРТИНКИ
+// ============================================================================
+
+/**
+ * Конвертирует ссылки Google Drive в прямые ссылки на изображения.
+ * Обычные ссылки и base64 возвращает без изменений.
+ * 
+ * Поддерживаемые форматы Google Drive:
+ * - https://drive.google.com/file/d/ID/view?usp=sharing
+ * - https://drive.google.com/file/d/ID/view
+ * - https://drive.google.com/open?id=ID
+ * - https://drive.google.com/uc?id=ID
+ * - https://drive.google.com/uc?export=view&id=ID
+ * 
+ * @param {string} url - URL картинки (Google Drive, обычная ссылка или base64)
+ * @returns {string|null} - Прямая ссылка на картинку или null
+ */
+function convertImageUrl(url) {
+  // Если URL пустой или null
+  if (!url || url === 'None' || url === '') {
+    return null;
+  }
+  
+  var urlStr = String(url).trim();
+  
+  // Если это base64 — возвращаем как есть
+  if (urlStr.indexOf('data:image') === 0) {
+    return urlStr;
+  }
+  
+  // Паттерны для Google Drive ссылок
+  var drivePatterns = [
+    /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,      // /file/d/ID/
+    /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,     // /open?id=ID
+    /drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/,     // /uc?id=ID или /uc?export=view&id=ID
+    /drive\.google\.com\/uc\?id=([a-zA-Z0-9_-]+)/        // /uc?id=ID
+  ];
+  
+  // Проверяем каждый паттерн
+  for (var i = 0; i < drivePatterns.length; i++) {
+    var match = urlStr.match(drivePatterns[i]);
+    if (match && match[1]) {
+      // Возвращаем прямую ссылку через googleusercontent
+      // Это более надежный способ, чем drive.google.com/uc?export=view
+      return 'https://lh3.googleusercontent.com/d/' + match[1];
+    }
+  }
+  
+  // Если это не Google Drive — возвращаем как есть (обычная ссылка из интернета)
+  return urlStr;
+}
+
+// ============================================================================
 // API ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ АКТИВНЫХ АКЦИЙ (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 // ============================================================================
 
@@ -317,9 +370,13 @@ function doGet(e) {
           'end_date': formattedEndDate
         };
         
-        // Добавляем контент, если он есть
+        // Добавляем контент (картинку), если он есть
+        // Автоматически конвертируем Google Drive ссылки в прямые ссылки
         if (content && content !== 'None' && content !== '') {
-          promotion['content'] = String(content).trim();
+          var convertedContent = convertImageUrl(content);
+          if (convertedContent) {
+            promotion['content'] = convertedContent;
+          }
         }
         
         // Добавляем акцию в результат, если есть название
@@ -354,4 +411,29 @@ function doGet(e) {
 function testGetPromotions() {
   var result = doGet({});
   Logger.log(result.getContent());
+}
+
+/**
+ * Тестовая функция для проверки конвертации ссылок на картинки.
+ * Запустите эту функцию в редакторе Apps Script для проверки.
+ */
+function testConvertImageUrl() {
+  var testUrls = [
+    'https://drive.google.com/file/d/1Mw89IfV3FlK0TGPJbFyPAdMFhqpp0Csl/view?usp=sharing',
+    'https://drive.google.com/file/d/ABC123XYZ/view',
+    'https://drive.google.com/open?id=ABC123XYZ',
+    'https://drive.google.com/uc?id=ABC123XYZ',
+    'https://drive.google.com/uc?export=view&id=ABC123XYZ',
+    'https://example.com/image.jpg',
+    'data:image/jpeg;base64,/9j/4AAQSkZJRg...',
+    '',
+    null
+  ];
+  
+  testUrls.forEach(function(url) {
+    var result = convertImageUrl(url);
+    Logger.log('Input:  ' + url);
+    Logger.log('Output: ' + result);
+    Logger.log('---');
+  });
 }
