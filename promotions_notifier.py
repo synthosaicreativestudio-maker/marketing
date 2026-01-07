@@ -87,7 +87,7 @@ class PromotionsNotifier:
             import os
             web_app_url = os.getenv('WEB_APP_URL', 'https://synthosaicreativestudio-maker.github.io/marketing/')
             # Добавляем версию для сброса кеша Telegram WebView
-            version = "v=20260107-2"
+            version = "v=20260107-3"
             menu_url = (
                 f"{web_app_url}menu.html?{version}"
                 if web_app_url.endswith('/')
