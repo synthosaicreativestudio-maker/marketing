@@ -857,116 +857,174 @@
             const urlsToTry = [];
             
             // 1. Google Apps Script (самый быстрый и надежный)
-            if (GOOGLE_APPS_SCRIPT_URL) {
-                urlsToTry.push(GOOGLE_APPS_SCRIPT_URL);
+            if (GOOGLE_APPS_SCRIPT_URL && GOOGLE_APPS_SCRIPT_URL.trim()) {
+                urlsToTry.push({
+                    url: GOOGLE_APPS_SCRIPT_URL,
+                    isGas: true,
+                    name: 'Google Apps Script'
+                });
+                console.log('✅ Google Apps Script URL добавлен:', GOOGLE_APPS_SCRIPT_URL);
+            } else {
+                console.warn('⚠️ Google Apps Script URL не настроен или пуст');
             }
             
             // 2. Cloudflare Tunnel (fallback)
-            urlsToTry.push(`${CLOUDFLARE_TUNNEL_URL}/api/promotions`);
+            urlsToTry.push({
+                url: `${CLOUDFLARE_TUNNEL_URL}/api/promotions`,
+                isGas: false,
+                name: 'Cloudflare Tunnel'
+            });
             
             // 3. Локальный API (если мини-приложение на том же сервере)
             if (!isGitHubPages) {
-                urlsToTry.push(`${API_BASE_URL}/api/promotions`);
+                urlsToTry.push({
+                    url: `${API_BASE_URL}/api/promotions`,
+                    isGas: false,
+                    name: 'Local API'
+                });
             }
             
-            console.log(`Попытка загрузить акции с ${urlsToTry.length} источников:`, urlsToTry);
+            console.log(`📡 Попытка загрузить акции с ${urlsToTry.length} источников:`, urlsToTry.map(u => `${u.name}: ${u.url}`));
             
-            for (const url of urlsToTry) {
+            for (let i = 0; i < urlsToTry.length; i++) {
+                const { url, isGas, name } = urlsToTry[i];
+                const isLast = i === urlsToTry.length - 1;
+                
                 try {
-                    console.log(`Попытка загрузить акции с: ${url}`);
+                    console.log(`🔄 [${i + 1}/${urlsToTry.length}] Попытка загрузить акции с: ${name} (${url})`);
                     
-                    // Для Google Apps Script используем mode: 'no-cors' может не работать
-                    // Попробуем обычный fetch сначала
-                    // Для Google Apps Script не используем заголовки, которые могут вызвать CORS проблемы
+                    // Для Google Apps Script используем специальные настройки
                     const fetchOptions = {
                         method: 'GET',
-                        mode: 'cors', // Явно указываем CORS режим
+                        mode: 'cors',
                         cache: 'no-cache',
+                        redirect: 'follow', // Следуем редиректам (Google Apps Script может редиректить)
                     };
                     
                     // Добавляем timeout только если поддерживается
                     if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
-                        fetchOptions.signal = AbortSignal.timeout(15000); // Увеличиваем до 15 секунд
+                        fetchOptions.signal = AbortSignal.timeout(20000); // Увеличиваем до 20 секунд для GAS
                     }
                     
-                    const response = await fetch(url, fetchOptions);
+                    let response;
+                    try {
+                        response = await fetch(url, fetchOptions);
+                    } catch (fetchError) {
+                        // Обрабатываем сетевые ошибки (CORS, DNS, etc.)
+                        console.error(`❌ Ошибка сети при запросе к ${name}:`, fetchError);
+                        console.error(`   Тип ошибки: ${fetchError.name}`);
+                        console.error(`   Сообщение: ${fetchError.message}`);
+                        
+                        if (!isLast) {
+                            console.log(`⏭️ Пробуем следующий источник...`);
+                            continue;
+                        }
+                        throw fetchError;
+                    }
                     
                     // Проверяем статус ответа
-                    // Google Apps Script может возвращать 200 даже при редиректе
-                    console.log(`Response status: ${response.status}, ok: ${response.ok}, type: ${response.type}`);
+                    console.log(`📊 ${name} - Response status: ${response.status}, ok: ${response.ok}, type: ${response.type}, redirected: ${response.redirected}`);
                     
-                    if (!response.ok && response.status !== 0) {
+                    // Для Google Apps Script, даже если статус не ok, пробуем прочитать ответ
+                    // (GAS может возвращать 200 с редиректом или другие статусы)
+                    if (!response.ok && response.status !== 0 && !isGas) {
                         const errorText = await response.text().catch(() => '');
-                        console.warn(`HTTP error! status: ${response.status}, body: ${errorText.substring(0, 200)}`);
-                        // Для некоторых случаев пробуем прочитать ответ даже при ошибке
+                        console.warn(`⚠️ HTTP error от ${name}! status: ${response.status}, body: ${errorText.substring(0, 200)}`);
                         if (response.status >= 400 && response.status < 500) {
+                            if (!isLast) {
+                                console.log(`⏭️ Пробуем следующий источник...`);
+                                continue;
+                            }
                             throw new Error(`HTTP error! status: ${response.status}`);
                         }
                     }
                     
                     // Получаем текст ответа для отладки
-                    const responseText = await response.text();
-                    console.log(`Ответ от ${url} (первые 500 символов):`, responseText.substring(0, 500));
-                    console.log(`Длина ответа: ${responseText.length} символов`);
+                    let responseText;
+                    try {
+                        responseText = await response.text();
+                    } catch (textError) {
+                        console.error(`❌ Ошибка чтения ответа от ${name}:`, textError);
+                        if (!isLast) {
+                            console.log(`⏭️ Пробуем следующий источник...`);
+                            continue;
+                        }
+                        throw textError;
+                    }
+                    
+                    console.log(`📥 ${name} - Ответ получен (${responseText.length} символов)`);
+                    console.log(`📄 ${name} - Первые 500 символов:`, responseText.substring(0, 500));
                     
                     // Парсим JSON
                     let data;
                     try {
                         data = JSON.parse(responseText);
                     } catch (parseError) {
-                        console.error(`Ошибка парсинга JSON от ${url}:`, parseError);
-                        console.error(`Полный текст ответа:`, responseText);
-                        // Если это не последний URL, пробуем следующий
-                        if (url !== urlsToTry[urlsToTry.length - 1]) {
+                        console.error(`❌ Ошибка парсинга JSON от ${name}:`, parseError);
+                        console.error(`📄 Полный текст ответа:`, responseText);
+                        
+                        // Если это HTML страница (возможно редирект или ошибка GAS)
+                        if (responseText.trim().startsWith('<')) {
+                            console.warn(`⚠️ ${name} вернул HTML вместо JSON. Возможно, требуется авторизация или URL неверный.`);
+                        }
+                        
+                        if (!isLast) {
+                            console.log(`⏭️ Пробуем следующий источник...`);
                             continue;
                         }
                         throw new Error(`Invalid JSON response: ${parseError.message}`);
                     }
                     
-                    console.log(`Данные от ${url}:`, data);
+                    console.log(`✅ ${name} - Данные получены:`, data);
                     
                     // Проверяем, что данные в правильном формате
                     if (Array.isArray(data)) {
                         if (data.length === 0) {
-                            console.warn(`Пустой массив акций от ${url}`);
-                            // Если это не последний URL, пробуем следующий
-                            if (url !== urlsToTry[urlsToTry.length - 1]) {
+                            console.warn(`⚠️ ${name} вернул пустой массив акций`);
+                            if (!isLast) {
+                                console.log(`⏭️ Пробуем следующий источник...`);
                                 continue;
                             }
                             return []; // Возвращаем пустой массив, если это последний источник
                         }
-                        console.log(`✅ Акции загружены успешно с: ${url} (${data.length} акций)`);
+                        console.log(`✅ ✅ ✅ Акции загружены успешно с: ${name} (${data.length} акций)`);
                         return data;
                     } else if (data.promotions && Array.isArray(data.promotions)) {
                         // Если данные обернуты в объект
-                        console.log(`✅ Акции загружены успешно с: ${url} (${data.promotions.length} акций)`);
+                        console.log(`✅ ✅ ✅ Акции загружены успешно с: ${name} (${data.promotions.length} акций)`);
                         return data.promotions;
                     } else if (data.error) {
                         // Если есть ошибка в ответе, пробуем следующий URL
-                        console.warn(`Ошибка в ответе от ${url}:`, data.error);
-                        if (url !== urlsToTry[urlsToTry.length - 1]) {
+                        console.warn(`⚠️ Ошибка в ответе от ${name}:`, data.error);
+                        if (!isLast) {
+                            console.log(`⏭️ Пробуем следующий источник...`);
                             continue;
                         }
                         return { error: data.error };
                     } else {
                         // Неожиданный формат данных
-                        console.warn(`Неожиданный формат данных от ${url}:`, data);
-                        if (url !== urlsToTry[urlsToTry.length - 1]) {
+                        console.warn(`⚠️ Неожиданный формат данных от ${name}:`, data);
+                        if (!isLast) {
+                            console.log(`⏭️ Пробуем следующий источник...`);
                             continue;
                         }
                         return { error: 'Неожиданный формат данных' };
                     }
                 } catch (error) {
-                    console.warn(`Ошибка при загрузке с ${url}:`, error);
-                    console.warn(`Тип ошибки: ${error.name}, Сообщение: ${error.message}`);
+                    console.error(`❌ Ошибка при загрузке с ${name} (${url}):`, error);
+                    console.error(`   Тип ошибки: ${error.name}`);
+                    console.error(`   Сообщение: ${error.message}`);
+                    if (error.stack) {
+                        console.error(`   Stack:`, error.stack);
+                    }
                     
                     // Пробуем следующий URL, если это не последний
-                    if (url !== urlsToTry[urlsToTry.length - 1]) {
-                        console.log(`Пробуем следующий источник...`);
+                    if (!isLast) {
+                        console.log(`⏭️ Пробуем следующий источник...`);
                         continue;
                     }
                     // Если это последний URL, возвращаем ошибку
-                    console.error('Все попытки загрузки акций не удались. Последняя ошибка:', error);
+                    console.error('❌ ❌ ❌ Все попытки загрузки акций не удались. Последняя ошибка:', error);
                     return { error: error.message || 'Не удалось загрузить акции' };
                 }
             }
