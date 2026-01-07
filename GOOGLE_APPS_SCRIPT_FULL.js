@@ -34,6 +34,10 @@ const COLOR_PENDING = "#fff2cc";   // Светло-желтый
 const COLOR_ACTIVE = "#d9ead3";    // Светло-зеленый
 const COLOR_FINISHED = "#f4cccc";  // Светло-красный
 
+// Webhook настройки для мгновенных уведомлений
+const WEBHOOK_URL = 'http://158.160.0.127:8080/webhook/promotions';
+const WEBHOOK_SECRET = 'default_secret'; // Должен совпадать с WEBHOOK_SECRET на сервере
+
 // === КОНЕЦ КОНФИГУРАЦИИ ===
 
 
@@ -154,6 +158,48 @@ function onEditTrigger(e) {
 }
 
 /**
+ * Отправляет данные акции на webhook для мгновенной отправки уведомлений.
+ * @param {Object} promotionData - Данные акции в формате, совместимом с webhook_handler.py
+ * @returns {boolean} - true если запрос успешен, false в противном случае
+ */
+function sendWebhookNotification(promotionData) {
+  try {
+    var payload = {
+      action: 'publish',
+      promotion: promotionData
+    };
+    
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'X-Webhook-Secret': WEBHOOK_SECRET
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    var response = UrlFetchApp.fetch(WEBHOOK_URL, options);
+    var responseCode = response.getResponseCode();
+    var responseText = response.getContentText();
+    
+    Logger.log('Webhook response code: ' + responseCode);
+    Logger.log('Webhook response: ' + responseText);
+    
+    if (responseCode === 200) {
+      Logger.log('✅ Webhook успешно отправлен для акции: ' + promotionData.title);
+      return true;
+    } else {
+      Logger.log('⚠️ Webhook вернул код ошибки: ' + responseCode);
+      return false;
+    }
+  } catch (error) {
+    Logger.log('❌ Ошибка отправки webhook: ' + error.toString());
+    return false;
+  }
+}
+
+/**
  * Логика для действия "Опубликовать".
  */
 function handlePublish(sheet, row) {
@@ -183,6 +229,69 @@ function handlePublish(sheet, row) {
     statusCell.setValue(STATUS_PENDING);
   } else {
     statusCell.setValue(STATUS_ACTIVE);
+    
+    // Собираем данные акции для отправки на webhook
+    var releaseDate = rowValues[RELEASE_DATE_COL - 1];
+    var title = rowValues[TITLE_COL - 1];
+    var description = rowValues[DESCRIPTION_COL - 1];
+    var content = rowValues[CONTENT_COL - 1];
+    var link = rowValues[LINK_COL - 1];
+    
+    // Форматируем даты
+    var formattedReleaseDate = '';
+    var formattedStartDate = '';
+    var formattedEndDate = '';
+    
+    if (releaseDate instanceof Date) {
+      formattedReleaseDate = Utilities.formatDate(releaseDate, Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss');
+    } else if (releaseDate) {
+      formattedReleaseDate = String(releaseDate).trim();
+    } else {
+      // Если дата релиза не установлена, используем текущее время
+      formattedReleaseDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss');
+    }
+    
+    if (startDate instanceof Date) {
+      formattedStartDate = Utilities.formatDate(startDate, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+    } else if (startDate) {
+      formattedStartDate = String(startDate).trim();
+    }
+    
+    var endDate = rowValues[END_DATE_COL - 1];
+    if (endDate instanceof Date) {
+      formattedEndDate = Utilities.formatDate(endDate, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+    } else if (endDate) {
+      formattedEndDate = String(endDate).trim();
+    }
+    
+    // Конвертируем контент (если это Google Drive ссылка)
+    var convertedContent = content && content !== 'None' && content !== '' 
+      ? convertImageUrl(content) 
+      : null;
+    
+    // Формируем объект данных акции для webhook
+    var promotionData = {
+      title: String(title).trim(),
+      description: description ? String(description).trim() : 'Описание отсутствует',
+      start_date: formattedStartDate,
+      end_date: formattedEndDate,
+      release_date: formattedReleaseDate
+    };
+    
+    // Добавляем контент, если есть
+    if (convertedContent) {
+      promotionData.content = convertedContent;
+    } else if (content && content !== 'None' && content !== '') {
+      promotionData.content = String(content).trim();
+    }
+    
+    // Добавляем ссылку, если есть
+    if (link && link !== 'None' && link !== '') {
+      promotionData.link = String(link).trim();
+    }
+    
+    // Отправляем данные на webhook для мгновенной отправки уведомлений
+    sendWebhookNotification(promotionData);
   }
   
   sheet.getRange(row, ACTION_COL).clearContent();
