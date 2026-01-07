@@ -771,11 +771,7 @@
         // Google Apps Script URL
         // ВАЖНО: После развертывания Google Apps Script скопируйте URL из окна развертывания
         // и вставьте его здесь. URL будет вида: https://script.google.com/macros/s/.../exec
-        // Если URL не указан, будет использован fallback на Cloudflare Tunnel
         const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQ8pDvdc6ZriqchBvto6prPk0OOwTsHiUx_GAZhkCtXQjtCfM5-KZO4uH7zIUCgbqOsA/exec';
-        
-        // Cloudflare Tunnel URL (fallback)
-        const CLOUDFLARE_TUNNEL_URL = 'https://marketingbot.trycloudflare.com';
         
         // Проверяем, открыто ли мини-приложение через Telegram WebApp
         const isTelegramWebApp = window.Telegram && window.Telegram.WebApp;
@@ -786,8 +782,8 @@
         
         if (isGitHubPages) {
             // Мини-приложение на GitHub Pages
-            // Используем Cloudflare Tunnel как fallback, если Google Apps Script не настроен
-            API_BASE_URL = CLOUDFLARE_TUNNEL_URL;
+            // Используем только Google Apps Script (локальный API недоступен)
+            API_BASE_URL = null;
         } else {
             // Мини-приложение на том же сервере - используем относительный путь
             API_BASE_URL = window.location.origin;
@@ -856,7 +852,7 @@
             // Список URL для попыток загрузки (в порядке приоритета)
             const urlsToTry = [];
             
-            // 1. Google Apps Script (самый быстрый и надежный)
+            // 1. Google Apps Script (основной источник)
             if (GOOGLE_APPS_SCRIPT_URL && GOOGLE_APPS_SCRIPT_URL.trim()) {
                 urlsToTry.push({
                     url: GOOGLE_APPS_SCRIPT_URL,
@@ -868,15 +864,8 @@
                 console.warn('⚠️ Google Apps Script URL не настроен или пуст');
             }
             
-            // 2. Cloudflare Tunnel (fallback)
-            urlsToTry.push({
-                url: `${CLOUDFLARE_TUNNEL_URL}/api/promotions`,
-                isGas: false,
-                name: 'Cloudflare Tunnel'
-            });
-            
-            // 3. Локальный API (если мини-приложение на том же сервере)
-            if (!isGitHubPages) {
+            // 2. Локальный API (только если мини-приложение на том же сервере)
+            if (API_BASE_URL && !isGitHubPages) {
                 urlsToTry.push({
                     url: `${API_BASE_URL}/api/promotions`,
                     isGas: false,
@@ -922,9 +911,17 @@
                         
                         // Если это CORS ошибка, даем более понятное сообщение
                         if (fetchError.name === 'TypeError' && fetchError.message.includes('Failed to fetch')) {
-                            console.error(`   💡 Это может быть CORS ошибка. Проверьте настройки развертывания Google Apps Script:`);
-                            console.error(`      1. Убедитесь, что доступ установлен на "Все"`);
-                            console.error(`      2. Проверьте, что функция doGet() правильно настроена`);
+                            if (isGas) {
+                                console.error(`   💡 CORS ошибка при обращении к Google Apps Script. Решение:`);
+                                console.error(`      1. Откройте Google Apps Script`);
+                                console.error(`      2. "Развернуть" → "Управление развертываниями"`);
+                                console.error(`      3. Нажмите ✏️ (редактировать) на активном развертывании`);
+                                console.error(`      4. Убедитесь, что "У кого есть доступ" = "Все"`);
+                                console.error(`      5. Нажмите "Развернуть" для создания новой версии`);
+                                console.error(`      6. Подождите 1-2 минуты и попробуйте снова`);
+                            } else {
+                                console.error(`   💡 Ошибка сети при обращении к ${name}`);
+                            }
                         }
                         
                         if (!isLast) {
@@ -1110,11 +1107,21 @@
                 console.error('Контейнер не найден!');
                 return;
             }
+            
+            // Улучшенное сообщение для пользователя
+            let userMessage = message;
+            if (message.includes('Failed to fetch') || message.includes('CORS')) {
+                userMessage = 'Проблема с доступом к данным. Проверьте настройки Google Apps Script: доступ должен быть установлен на "Все" (Anyone).';
+            }
+            
             container.innerHTML = `
                 <div class="glass-card error-state">
-                    <p>Не удалось загрузить акции</p>
-                    <p style="font-size: 12px; opacity: 0.7; margin: 5px 0;">${message}</p>
-                    <button onclick="loadPromotions()" style="margin-top:10px; padding: 8px 16px; border-radius: 8px; border: none; background: var(--primary-color); color: white;">Повторить</button>
+                    <p>❌ Не удалось загрузить акции</p>
+                    <p style="font-size: 12px; opacity: 0.7; margin: 5px 0;">${userMessage}</p>
+                    <p style="font-size: 11px; opacity: 0.5; margin: 5px 0; margin-top: 10px;">
+                        💡 Откройте консоль браузера (F12) для детальной информации
+                    </p>
+                    <button onclick="loadPromotions()" style="margin-top:10px; padding: 8px 16px; border-radius: 8px; border: none; background: var(--primary-color); color: white; cursor: pointer;">🔄 Повторить</button>
                 </div>
             `;
         }
