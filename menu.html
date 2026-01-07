@@ -1122,11 +1122,41 @@
                     const lower = content.toLowerCase();
                     const isDataImage = lower.startsWith('data:image/');
                     const isHttp = lower.startsWith('http://') || lower.startsWith('https://');
-                    const isImageUrl = isHttp && (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp'));
-                    const isVideoUrl = isHttp && (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov'));
+                    
+                    // Проверка на известные хостинги изображений (Google Drive, Imgur, etc.)
+                    const isImageHosting = isHttp && (
+                        lower.includes('googleusercontent.com') ||  // Google Drive конвертированные ссылки
+                        lower.includes('drive.google.com') ||      // Оригинальные Google Drive ссылки
+                        lower.includes('googleapis.com') ||        // Google API ссылки
+                        lower.includes('imgur.com') ||             // Imgur
+                        lower.includes('imgbb.com') ||             // ImgBB
+                        lower.includes('cloudinary.com')           // Cloudinary
+                    );
+                    
+                    // Проверка по расширению файла
+                    const hasImageExtension = isHttp && (
+                        lower.endsWith('.jpg') || 
+                        lower.endsWith('.jpeg') || 
+                        lower.endsWith('.png') || 
+                        lower.endsWith('.gif') || 
+                        lower.endsWith('.webp') ||
+                        lower.endsWith('.svg')
+                    );
+                    
+                    // Проверка на видео
+                    const isVideoUrl = isHttp && (
+                        lower.endsWith('.mp4') || 
+                        lower.endsWith('.webm') || 
+                        lower.endsWith('.mov') ||
+                        lower.endsWith('.avi')
+                    );
+                    
+                    // Если это HTTP ссылка и не видео, и (имеет расширение изображения ИЛИ известный хостинг изображений)
+                    // То считаем это изображением
+                    const isImageUrl = isHttp && !isVideoUrl && (hasImageExtension || isImageHosting);
 
                     if (isDataImage || isImageUrl) {
-                        mediaHtml = `<img src="${_escapeHtml(content)}" alt="promotion" style="width:100%; border-radius:12px; margin:10px 0; display:block;" />`;
+                        mediaHtml = `<img src="${_escapeHtml(content)}" alt="promotion" style="width:100%; border-radius:12px; margin:10px 0; display:block;" loading="lazy" />`;
                     } else if (isVideoUrl) {
                         mediaHtml = `<video src="${_escapeHtml(content)}" controls style="width:100%; border-radius:12px; margin:10px 0; display:block;"></video>`;
                     }
