@@ -894,11 +894,14 @@
                     console.log(`🔄 [${i + 1}/${urlsToTry.length}] Попытка загрузить акции с: ${name} (${url})`);
                     
                     // Для Google Apps Script используем специальные настройки
+                    // Google Apps Script делает редирект на script.googleusercontent.com
+                    // Это нормально, но может вызвать проблемы с CORS
                     const fetchOptions = {
                         method: 'GET',
-                        mode: 'cors',
+                        mode: 'cors', // Важно: 'cors' для работы с редиректами
                         cache: 'no-cache',
-                        redirect: 'follow', // Следуем редиректам (Google Apps Script может редиректить)
+                        redirect: 'follow', // Следуем редиректам (Google Apps Script редиректит на googleusercontent.com)
+                        credentials: 'omit', // Не отправляем cookies
                     };
                     
                     // Добавляем timeout только если поддерживается
@@ -908,12 +911,21 @@
                     
                     let response;
                     try {
+                        console.log(`🌐 Начинаем запрос к ${name}...`);
                         response = await fetch(url, fetchOptions);
+                        console.log(`✅ Запрос к ${name} выполнен успешно`);
                     } catch (fetchError) {
                         // Обрабатываем сетевые ошибки (CORS, DNS, etc.)
                         console.error(`❌ Ошибка сети при запросе к ${name}:`, fetchError);
                         console.error(`   Тип ошибки: ${fetchError.name}`);
                         console.error(`   Сообщение: ${fetchError.message}`);
+                        
+                        // Если это CORS ошибка, даем более понятное сообщение
+                        if (fetchError.name === 'TypeError' && fetchError.message.includes('Failed to fetch')) {
+                            console.error(`   💡 Это может быть CORS ошибка. Проверьте настройки развертывания Google Apps Script:`);
+                            console.error(`      1. Убедитесь, что доступ установлен на "Все"`);
+                            console.error(`      2. Проверьте, что функция doGet() правильно настроена`);
+                        }
                         
                         if (!isLast) {
                             console.log(`⏭️ Пробуем следующий источник...`);
@@ -925,9 +937,19 @@
                     // Проверяем статус ответа
                     console.log(`📊 ${name} - Response status: ${response.status}, ok: ${response.ok}, type: ${response.type}, redirected: ${response.redirected}`);
                     
+                    // Для Google Apps Script редирект на googleusercontent.com - это нормально
+                    if (isGas && response.redirected) {
+                        console.log(`✅ ${name} - Редирект выполнен успешно (это нормально для Google Apps Script)`);
+                    }
+                    
                     // Проверяем Content-Type
                     const contentType = response.headers.get('content-type') || '';
                     console.log(`📋 ${name} - Content-Type: ${contentType}`);
+                    
+                    // Для Google Apps Script проверяем, что Content-Type правильный
+                    if (isGas && contentType && !contentType.includes('json') && !contentType.includes('text')) {
+                        console.warn(`⚠️ ${name} - Неожиданный Content-Type: ${contentType}. Ожидался JSON.`);
+                    }
                     
                     // Для Google Apps Script, даже если статус не ok, пробуем прочитать ответ
                     // (GAS может возвращать 200 с редиректом или другие статусы)
