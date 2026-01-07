@@ -34,7 +34,7 @@ def get_spa_menu_url() -> str:
     """Ленивое чтение URL SPA меню из окружения."""
     base_url = os.getenv("WEB_APP_URL") or ""
     # Версия для принудительного обновления кеша WebApp
-    cache_bust = "v=20260107-3"
+    cache_bust = "v=20260107-4"
     
     # Валидация URL
     if base_url and not _validate_url(base_url):

@@ -25,7 +25,7 @@ def get_spa_menu_url() -> str:
     if base_url and not base_url.endswith('/'):
         base_url += '/'
     # Версия для принудительного обновления кеша WebApp
-    cache_bust = "v=20260107-3"
+    cache_bust = "v=20260107-4"
     return f"{base_url}menu.html?{cache_bust}"
 
 def create_specialist_button() -> InlineKeyboardMarkup:
