@@ -766,30 +766,35 @@
 
         // API Configuration
         // Определяем API_BASE_URL в зависимости от окружения
-        // Если мини-приложение на GitHub Pages, используем Cloudflare Tunnel URL
-        // Если на том же сервере, используем относительный путь
-        let API_BASE_URL;
+        // Приоритет: Google Apps Script > Cloudflare Tunnel > локальный сервер
+        
+        // Google Apps Script URL
+        // ВАЖНО: После развертывания Google Apps Script скопируйте URL из окна развертывания
+        // и вставьте его здесь. URL будет вида: https://script.google.com/macros/s/.../exec
+        // Если URL не указан, будет использован fallback на Cloudflare Tunnel
+        const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxLWWXHpDinqz0F6-Nkf1OBXv0IpHx66J3D-P_4MA5N5qSO8QmaJh5JlUjTYJuLUt0BBg/exec';
+        
+        // Cloudflare Tunnel URL (fallback)
+        const CLOUDFLARE_TUNNEL_URL = 'https://marketingbot.trycloudflare.com';
         
         // Проверяем, открыто ли мини-приложение через Telegram WebApp
         const isTelegramWebApp = window.Telegram && window.Telegram.WebApp;
         const isGitHubPages = window.location.hostname.includes('github.io') || 
                               window.location.hostname.includes('github.com');
         
+        let API_BASE_URL;
+        
         if (isGitHubPages) {
-            // Мини-приложение на GitHub Pages - используем Cloudflare Tunnel
-            // ВАЖНО: Если туннель не работает, нужно проверить Cloudflare Dashboard
-            // и получить правильный URL туннеля или настроить его заново
-            API_BASE_URL = 'https://marketingbot.trycloudflare.com';
-            
-            // Временный fallback: если туннель не работает, можно использовать
-            // прокси через GitHub Pages (требует настройки)
-            // Или настроить туннель правильно в Cloudflare Dashboard
+            // Мини-приложение на GitHub Pages
+            // Используем Cloudflare Tunnel как fallback, если Google Apps Script не настроен
+            API_BASE_URL = CLOUDFLARE_TUNNEL_URL;
         } else {
             // Мини-приложение на том же сервере - используем относительный путь
             API_BASE_URL = window.location.origin;
         }
         
         console.log('API_BASE_URL установлен:', API_BASE_URL);
+        console.log('Google Apps Script URL:', GOOGLE_APPS_SCRIPT_URL || 'не настроен');
         console.log('Hostname:', window.location.hostname);
         console.log('Is GitHub Pages:', isGitHubPages);
         console.log('Is Telegram WebApp:', isTelegramWebApp);
@@ -848,15 +853,23 @@
 
         // Data Fetching
         async function fetchPromotions() {
-            // Пробуем несколько вариантов URL, если первый не работает
-            const urlsToTry = [
-                `${API_BASE_URL}/api/promotions`,
-            ];
+            // Список URL для попыток загрузки (в порядке приоритета)
+            const urlsToTry = [];
             
-            // Если Cloudflare Tunnel не работает, можно добавить fallback варианты:
-            // - Прокси через GitHub Pages (требует настройки)
-            // - Другой URL туннеля из Cloudflare Dashboard
-            // - Временное решение через другой сервис
+            // 1. Google Apps Script (самый быстрый и надежный)
+            if (GOOGLE_APPS_SCRIPT_URL) {
+                urlsToTry.push(GOOGLE_APPS_SCRIPT_URL);
+            }
+            
+            // 2. Cloudflare Tunnel (fallback)
+            urlsToTry.push(`${CLOUDFLARE_TUNNEL_URL}/api/promotions`);
+            
+            // 3. Локальный API (если мини-приложение на том же сервере)
+            if (!isGitHubPages) {
+                urlsToTry.push(`${API_BASE_URL}/api/promotions`);
+            }
+            
+            console.log(`Попытка загрузить акции с ${urlsToTry.length} источников:`, urlsToTry);
             
             for (const url of urlsToTry) {
                 try {
@@ -875,10 +888,27 @@
                     }
                     
                     const data = await response.json();
-                    console.log(`✅ Акции загружены успешно с: ${url}`);
-                    return data;
+                    
+                    // Проверяем, что данные в правильном формате
+                    if (Array.isArray(data)) {
+                        console.log(`✅ Акции загружены успешно с: ${url} (${data.length} акций)`);
+                        return data;
+                    } else if (data.promotions && Array.isArray(data.promotions)) {
+                        // Если данные обернуты в объект
+                        console.log(`✅ Акции загружены успешно с: ${url} (${data.promotions.length} акций)`);
+                        return data.promotions;
+                    } else if (data.error) {
+                        // Если есть ошибка в ответе, пробуем следующий URL
+                        console.warn(`Ошибка в ответе от ${url}:`, data.error);
+                        continue;
+                    } else {
+                        // Неожиданный формат данных
+                        console.warn(`Неожиданный формат данных от ${url}:`, data);
+                        continue;
+                    }
                 } catch (error) {
                     console.warn(`Ошибка при загрузке с ${url}:`, error.message);
+                    
                     // Пробуем следующий URL, если это не последний
                     if (url !== urlsToTry[urlsToTry.length - 1]) {
                         continue;
@@ -889,7 +919,7 @@
                 }
             }
             
-            return { error: 'Не удалось загрузить акции' };
+            return { error: 'Не удалось загрузить акции: все источники недоступны' };
         }
 
         async function loadPromotions() {
