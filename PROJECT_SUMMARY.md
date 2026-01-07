@@ -96,20 +96,25 @@
 
 #### Поток получения акций:
 ```
-Mini App (menu.html) → fetch('/api/promotions') → 
-Cloudflare Tunnel → Yandex VM (localhost:8080) → 
-Flask API → promotions_api.py → Google Sheets API → 
-Возврат JSON → Mini App отображает акции
+1. Пользователь открывает Mini App (menu.html)
+2. JavaScript делает fetch() запрос к /api/promotions
+3. Запрос идет через Cloudflare Tunnel на https://marketingbot.trycloudflare.com/api/promotions
+4. Cloudflare Tunnel проксирует на Yandex VM (localhost:8080)
+5. Flask API вызывает promotions_api.py
+6. promotions_api.py читает данные из Google Sheets через gspread
+7. Фильтрует акции со статусом "Активна"
+8. Возвращает JSON с акциями
+9. Mini App отображает акции в виде карточек
 ```
 
 #### Используемые технологии:
-- **Python 3.x** - основной язык бота
-- **python-telegram-bot** - библиотека для Telegram Bot API
-- **Flask** - веб-фреймворк для API
+- **Python 3.x** - для API сервера
+- **Flask** - веб-фреймворк для REST API
 - **gspread** - библиотека для Google Sheets API
-- **Cloudflare Tunnel (cloudflared)** - туннель для публичного доступа
-- **JavaScript (Vanilla)** - для Mini App
 - **Google Service Account** - для доступа к Google Sheets
+- **Cloudflare Tunnel (cloudflared)** - туннель для публичного доступа к API
+- **JavaScript (Vanilla)** - для Mini App
+- **GitHub Pages** - хостинг для Mini App
 
 ---
 
