@@ -177,12 +177,25 @@ async def send_promotion_notification(promotion_data):
         ])
         
         # Получаем всех авторизованных пользователей
-        logger.info(f"Получение списка авторизованных пользователей для отправки уведомления о акции '{title}'")
+        logger.info(f"👥 Получение списка авторизованных пользователей для отправки уведомления о акции '{title}'")
         authorized_users = get_authorized_users()
-        logger.info(f"Найдено {len(authorized_users)} авторизованных пользователей для отправки уведомления")
+        logger.info(f"👥 Найдено {len(authorized_users)} авторизованных пользователей для отправки уведомления")
         
         if not authorized_users:
-            logger.warning(f"Нет авторизованных пользователей для отправки уведомления о акции '{title}'")
+            logger.warning(f"⚠️ Нет авторизованных пользователей для отправки уведомления о акции '{title}'")
+            # Отправляем уведомление админу, если есть
+            if admin_telegram_id:
+                try:
+                    await bot.send_message(
+                        chat_id=admin_telegram_id,
+                        text=f"⚠️ **Проблема с уведомлениями**\n\n"
+                             f"Публикация акции '{title}' прошла успешно, но нет авторизованных пользователей для отправки уведомлений.\n\n"
+                             f"Проверьте таблицу авторизации.",
+                        parse_mode='Markdown'
+                    )
+                    logger.info(f"📧 Уведомление о проблеме отправлено админу {admin_telegram_id}")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка отправки уведомления админу: {e}")
             return
         
         # Отправляем уведомления
@@ -245,20 +258,35 @@ async def send_promotion_update_notification(promotion_data):
 def get_authorized_users():
     """Получает список всех авторизованных пользователей"""
     try:
+        if not auth_service or not auth_service.worksheet:
+            logger.error("AuthService или worksheet недоступен")
+            return []
+            
         records = auth_service.worksheet.get_all_records()
+        logger.info(f"📋 Всего записей в таблице авторизации: {len(records)}")
         authorized_users = []
         
         for record in records:
-            if (record.get('Статус авторизации', '').lower() == 'авторизован' and 
-                record.get('Telegram ID')):
+            status = record.get('Статус авторизации', '').strip().lower()
+            telegram_id_str = record.get('Telegram ID', '')
+            
+            # Поддерживаем оба варианта статуса: русский "авторизован" и английский "authorized"
+            is_authorized = status in ('авторизован', 'authorized')
+            
+            if is_authorized and telegram_id_str:
                 try:
-                    telegram_id = int(record.get('Telegram ID'))
+                    telegram_id = int(telegram_id_str)
                     authorized_users.append(telegram_id)
-                except (ValueError, TypeError):
-                    logger.warning(f"Не удалось преобразовать Telegram ID в число: {record.get('Telegram ID')}")
+                    logger.debug(f"✅ Найден авторизованный пользователь: ID={telegram_id}, статус='{record.get('Статус авторизации', '')}'")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"⚠️ Не удалось преобразовать Telegram ID в число: '{telegram_id_str}' для записи: {record.get('ФИО партнера', 'N/A')}")
                     continue
+            elif telegram_id_str:
+                logger.debug(f"⏭️ Пропущен пользователь (статус='{record.get('Статус авторизации', '')}'): ID={telegram_id_str}")
         
-        logger.info(f"📋 Найдено {len(authorized_users)} авторизованных пользователей")
+        logger.info(f"📋 Найдено {len(authorized_users)} авторизованных пользователей из {len(records)} записей")
+        if authorized_users:
+            logger.info(f"📋 Список ID авторизованных пользователей: {authorized_users[:10]}")  # Показываем первые 10
         return authorized_users
         
     except Exception as e:
