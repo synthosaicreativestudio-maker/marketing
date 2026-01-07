@@ -70,9 +70,20 @@ def get_profile():
         logger.error(f"API Error in /api/profile: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
 
-@app.route('/webhook/promotions', methods=['POST'])
+@app.route('/webhook/promotions', methods=['GET', 'POST'])
 def handle_promotion_webhook():
     """Обработчик webhook от Google Sheets для публикации акций"""
+    # Для GET запроса (когда открывают в браузере) - показываем информационную страницу
+    if request.method == 'GET':
+        return jsonify({
+            'status': 'webhook_active',
+            'message': 'Webhook endpoint для уведомлений о публикации акций',
+            'method': 'POST',
+            'url': '/webhook/promotions',
+            'note': 'Этот endpoint работает только с POST запросами. Браузер делает GET запрос, поэтому показывается эта информация.'
+        }), 200
+    
+    # Обработка POST запроса (от Google Apps Script)
     try:
         data = request.get_json()
         logger.info(f"Получен webhook от Google Sheets: {data}")
@@ -90,11 +101,33 @@ def handle_promotion_webhook():
         action = data.get('action', '')
         
         if action == 'publish':
+            # Запускаем асинхронную функцию в новом event loop
             import asyncio
-            asyncio.create_task(send_promotion_notification(promotion_data))
+            import threading
+            
+            def run_async(coro):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(coro)
+                finally:
+                    loop.close()
+            
+            # Запускаем в отдельном потоке, чтобы не блокировать ответ webhook
+            threading.Thread(target=run_async, args=(send_promotion_notification(promotion_data),), daemon=True).start()
         elif action == 'update':
             import asyncio
-            asyncio.create_task(send_promotion_update_notification(promotion_data))
+            import threading
+            
+            def run_async(coro):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(coro)
+                finally:
+                    loop.close()
+            
+            threading.Thread(target=run_async, args=(send_promotion_update_notification(promotion_data),), daemon=True).start()
         
         return jsonify({'status': 'success'})
         
