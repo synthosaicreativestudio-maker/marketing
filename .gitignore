@@ -89,13 +89,26 @@ node_modules/
 # 🐳 DOCKER
 .dockerignore
 
-# 🚨 ВРЕМЕННЫЕ ФАЙЛЫ АУДИТА (удалить после завершения)
+# 🚨 ВРЕМЕННЫЕ ФАЙЛЫ АУДИТА И ДОКУМЕНТАЦИИ (удалить после завершения)
 DOCS_ANALYSIS.md
 DOCS_OPTIMIZATION_REPORT.md
 AUDIT_REPORT*.md
 ULTRA_SIMPLE_PLAN.md
 OPTIMIZATION_PLAN.md
 SIMPLIFICATION_CHECKLIST.md
+FIX_*.md
+CHECK_*.md
+DEBUG_*.md
+FINAL_*.md
+*_ПРОВЕРКА*.md
+*_ПРОВЕРКА_*.md
+РЕШЕНИЕ_*.md
+APPLIED_*.md
+DEPLOY_FIXES.md
+UPDATE_EXISTING_SCRIPT.md
+RESTORE_POINTS.md
+DNS_WAIT_*.md
+HOW_TO_*.md
 
 # Файлы с учетными данными Google Cloud
 credentials.json

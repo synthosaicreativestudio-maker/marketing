@@ -25,17 +25,24 @@ marketingbot/
 ├── 🎯 handlers.py             # Обработчики команд и сообщений
 ├── 🔐 auth_service.py         # Сервис авторизации
 ├── 📊 sheets.py               # Интеграция с Google Sheets
-├── 🤖 appeals_service.py      # Сервис обращений
+├── 🤖 appeals_service.py       # Сервис обращений
 ├── 🧠 openai_service.py       # Интеграция с OpenAI
 ├── 📊 response_monitor.py     # Мониторинг ответов
+├── 📊 promotions_api.py        # API для акций
 ├── 🌐 index.html              # WebApp авторизации
 ├── 🌐 menu.html               # WebApp личного кабинета
 ├── 🌐 app.js                  # JavaScript для WebApp
-├── 📚 docs/                   # Подробная документация
+├── 📚 docs/                   # Документация (структурированная)
+│   ├── getting-started/       # Быстрый старт
+│   ├── deployment/            # Развертывание
+│   ├── guides/                # Руководства
+│   ├── troubleshooting/       # Решение проблем
+│   └── reference/             # Справочники
+├── 🔧 scripts/                # Вспомогательные скрипты
 ├── 🔄 .github/workflows/      # GitHub Actions
-├── requirements.txt        # Зависимости Python
-├── .env.example           # Пример переменных окружения
-└── README.md              # Этот файл
+├── requirements.txt            # Зависимости Python
+├── .env.example               # Пример переменных окружения
+└── README.md                  # Этот файл
 ```
 
 ## 🚀 Быстрый старт
@@ -65,13 +72,16 @@ marketingbot/
 
 ## 📚 Документация
 
-Вся подробная документация находится в папке `docs`:
+Вся подробная документация находится в папке [`docs`](./docs/). Начните с [README документации](./docs/README.md) для навигации.
 
-- **[Архитектура](./docs/ARCHITECTURE_V3.md)**: Описание компонентов и потоков данных.
-- **[Установка и развертывание](./docs/DEPLOYMENT.md)**: Инструкции по запуску проекта.
-- **[История изменений](./docs/CHANGELOG.md)**: Лог всех версий и изменений.
-- **[Безопасность](./docs/SECURITY.md)**: Политика безопасности проекта.
-- **[Система акций](./docs/PROMOTIONS_SYSTEM.md)**: Управление акциями и событиями.
+### Быстрый доступ
+
+- **[🚀 Быстрый старт](./docs/getting-started/INSTALLATION.md)** - Установка и настройка
+- **[🏗️ Архитектура](./docs/ARCHITECTURE.md)** - Описание компонентов и потоков данных
+- **[🚢 Развертывание](./docs/deployment/DEPLOYMENT_YANDEX.md)** - Инструкции по развертыванию
+- **[🐛 Решение проблем](./docs/troubleshooting/TROUBLESHOOTING.md)** - Устранение неполадок
+- **[📡 API Справочник](./docs/reference/API_REFERENCE.md)** - Документация REST API
+- **[📝 История изменений](./docs/CHANGELOG.md)** - Лог всех версий и изменений
 
 ### 🧰 Dev-tools
 
