@@ -86,19 +86,21 @@ def handle_promotion_webhook():
     # Обработка POST запроса (от Google Apps Script)
     try:
         data = request.get_json()
-        logger.info(f"Получен webhook от Google Sheets: {data}")
+        promotion_data = data.get('promotion', {})
+        action = data.get('action', '')
+        title = promotion_data.get('title', 'Неизвестная акция')
+        status = promotion_data.get('status', '')
+        
+        logger.info(f"Получен webhook от Google Sheets: action={action}, title='{title}', status='{status}'")
+        logger.info(f"Данные акции: {promotion_data}")
         
         # Проверяем секретный ключ для безопасности
         secret_key = request.headers.get('X-Webhook-Secret')
         expected_secret = os.getenv('WEBHOOK_SECRET', 'default_secret')
         
         if secret_key != expected_secret:
-            logger.warning("Неверный секретный ключ webhook")
+            logger.warning(f"Неверный секретный ключ webhook: получен '{secret_key}', ожидается '{expected_secret}'")
             return jsonify({'error': 'Unauthorized'}), 401
-        
-        # Извлекаем данные акции
-        promotion_data = data.get('promotion', {})
-        action = data.get('action', '')
         
         if action == 'publish':
             # Запускаем асинхронную функцию в новом event loop
@@ -132,7 +134,7 @@ def handle_promotion_webhook():
         return jsonify({'status': 'success'})
         
     except Exception as e:
-        logger.error(f"Ошибка в webhook handler: {e}")
+        logger.error(f"Ошибка в webhook handler: {e}", exc_info=True)
         return jsonify({'error': 'Internal server error'}), 500
 
 async def send_promotion_notification(promotion_data):
@@ -142,15 +144,23 @@ async def send_promotion_notification(promotion_data):
         description = promotion_data.get('description', '')
         start_date = promotion_data.get('start_date', '')
         end_date = promotion_data.get('end_date', '')
+        status = promotion_data.get('status', 'Активна')
         
-        # Формируем сообщение
-        message = "🎉 **Новая акция!**\n\n"
+        # Формируем сообщение в зависимости от статуса
+        if status == 'Ожидает':
+            message = "📅 **Скоро: Новая акция!**\n\n"
+        else:
+            message = "🎉 **Новая акция!**\n\n"
+        
         message += f"**{title}**\n\n"
         if description:
             message += f"📝 {description}\n\n"
         if start_date and end_date:
             message += f"📅 Период: {start_date} - {end_date}\n\n"
-        message += "Нажмите кнопку ниже, чтобы посмотреть все акции!"
+        if status == 'Ожидает':
+            message += "Акция будет активна в указанный период. Нажмите кнопку ниже, чтобы посмотреть все акции!"
+        else:
+            message += "Нажмите кнопку ниже, чтобы посмотреть все акции!"
         
         # Создаем кнопку для открытия Mini App (добавляем версию для сброса кеша)
         version = "v=20260107-4"
@@ -167,10 +177,17 @@ async def send_promotion_notification(promotion_data):
         ])
         
         # Получаем всех авторизованных пользователей
+        logger.info(f"Получение списка авторизованных пользователей для отправки уведомления о акции '{title}'")
         authorized_users = get_authorized_users()
+        logger.info(f"Найдено {len(authorized_users)} авторизованных пользователей для отправки уведомления")
+        
+        if not authorized_users:
+            logger.warning(f"Нет авторизованных пользователей для отправки уведомления о акции '{title}'")
+            return
         
         # Отправляем уведомления
         sent_count = 0
+        failed_count = 0
         for user_id in authorized_users:
             try:
                 await bot.send_message(
@@ -180,14 +197,15 @@ async def send_promotion_notification(promotion_data):
                     reply_markup=keyboard
                 )
                 sent_count += 1
-                logger.info(f"Уведомление о акции '{title}' отправлено пользователю {user_id}")
+                logger.info(f"✅ Уведомление о акции '{title}' (статус: {status}) отправлено пользователю {user_id}")
             except Exception as e:
-                logger.error(f"Ошибка отправки уведомления пользователю {user_id}: {e}")
+                failed_count += 1
+                logger.error(f"❌ Ошибка отправки уведомления пользователю {user_id}: {e}")
         
-        logger.info(f"Уведомление о акции '{title}' отправлено {sent_count} пользователям")
+        logger.info(f"📊 Итого: уведомление о акции '{title}' (статус: {status}) отправлено {sent_count} пользователям, ошибок: {failed_count}")
         
     except Exception as e:
-        logger.error(f"Ошибка отправки уведомления о акции: {e}")
+        logger.error(f"Ошибка отправки уведомления о акции: {e}", exc_info=True)
 
 async def send_promotion_update_notification(promotion_data):
     """Отправляет уведомление об обновлении акции"""
@@ -237,13 +255,14 @@ def get_authorized_users():
                     telegram_id = int(record.get('Telegram ID'))
                     authorized_users.append(telegram_id)
                 except (ValueError, TypeError):
+                    logger.warning(f"Не удалось преобразовать Telegram ID в число: {record.get('Telegram ID')}")
                     continue
         
-        logger.info(f"Найдено {len(authorized_users)} авторизованных пользователей")
+        logger.info(f"📋 Найдено {len(authorized_users)} авторизованных пользователей")
         return authorized_users
         
     except Exception as e:
-        logger.error(f"Ошибка получения авторизованных пользователей: {e}")
+        logger.error(f"Ошибка получения авторизованных пользователей: {e}", exc_info=True)
         return []
 
 @app.route('/')
