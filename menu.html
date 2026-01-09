@@ -6,46 +6,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Marketing Bot Menu</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Google Fonts: Premium Luxury Typography -->
+    <!-- Google Fonts: Outfit for modern premium look -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
         :root {
-            /* Premium Luxury Color Palette - Gold & Black */
-            --bg-primary: #0F0F10; /* Deep graphite */
-            --bg-gradient: linear-gradient(135deg, #0F0F10 0%, #141414 100%);
-            
-            /* Gold Colors - Matte Gold */
-            --gold-dark: #B88A44; /* Dark bronze */
-            --gold-light: #FAD961; /* Light gold */
-            --gold-gradient: linear-gradient(135deg, #B88A44 0%, #FAD961 50%, #B88A44 100%);
-            --gold-matte: linear-gradient(135deg, #B88A44 0%, #D4A574 30%, #FAD961 60%, #D4A574 100%);
-            
-            /* Legacy colors */
-            --primary-color: #B88A44;
-            --accent-color: #FAD961;
-            
-            /* Glass effects */
-            --glass-bg: rgba(30, 30, 30, 0.9);
-            --glass-border: rgba(184, 138, 68, 0.3);
-            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-            
-            /* Text colors */
-            --text-primary: #FFFFFF;
-            --text-secondary: #9CA3AF;
-            --text-gold: linear-gradient(135deg, #B88A44 0%, #FAD961 100%);
-            
-            /* Status */
+            --primary-color: #8A2BE2;
+            /* BlueViolet */
+            --accent-color: #00BFFF;
+            /* DeepSkyBlue */
+            --bg-gradient: linear-gradient(135deg, #050505 0%, #1a1a2e 100%);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.8);
             --success-color: #00e676;
-            
-            /* Spacing */
             --card-radius: 20px;
             --transition-speed: 0.3s;
-            
-            /* 3D Effects */
-            --gold-3d-shadow: 0 4px 8px rgba(184, 138, 68, 0.3), 0 2px 4px rgba(184, 138, 68, 0.2);
         }
 
         * {
@@ -56,41 +36,25 @@
         }
 
         body {
-            font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-primary);
-            background-image: 
-                radial-gradient(circle at 20% 50%, rgba(184, 138, 68, 0.03) 0%, transparent 50%),
-                radial-gradient(circle at 80% 80%, rgba(250, 217, 97, 0.02) 0%, transparent 50%);
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-gradient);
             color: var(--text-primary);
             min-height: 100vh;
             overflow-x: hidden;
-            padding-bottom: 100px;
-            position: relative;
-        }
-        
-        /* Subtle noise texture */
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
-            pointer-events: none;
-            z-index: 0;
+            padding-bottom: 80px;
+            /* Space for bottom nav */
         }
 
-        /* Background Ambient Glow - Gold tones */
+        /* Background Ambient Glow */
         .ambient-glow {
             position: fixed;
             top: -20%;
             left: -20%;
             width: 60%;
             height: 60%;
-            background: radial-gradient(circle, rgba(184, 138, 68, 0.08) 0%, transparent 70%);
-            filter: blur(100px);
-            z-index: 0;
+            background: radial-gradient(circle, rgba(138, 43, 226, 0.2) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: -1;
             animation: float 10s infinite ease-in-out;
         }
 
@@ -100,9 +64,9 @@
             right: -20%;
             width: 60%;
             height: 60%;
-            background: radial-gradient(circle, rgba(250, 217, 97, 0.05) 0%, transparent 70%);
-            filter: blur(100px);
-            z-index: 0;
+            background: radial-gradient(circle, rgba(0, 191, 255, 0.15) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: -1;
             animation: float 15s infinite ease-in-out reverse;
         }
 
@@ -128,37 +92,11 @@
         }
 
         .logo {
-            font-family: 'Playfair Display', 'Cinzel', serif;
-            font-size: 28px;
+            font-size: 24px;
             font-weight: 700;
-            background: var(--gold-gradient);
+            background: linear-gradient(to right, #fff, #a5a5a5);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-shadow: 0 2px 8px rgba(184, 138, 68, 0.3);
-            letter-spacing: 0.5px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        
-        .logo-icon {
-            width: 32px;
-            height: 32px;
-            flex-shrink: 0;
-        }
-        
-        .synthos-branding {
-            font-size: 10px;
-            font-weight: 500;
-            letter-spacing: 0.8px;
-            background: var(--gold-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            opacity: 0.85;
-            text-transform: uppercase;
-            margin-top: 2px;
         }
 
         .user-profile {
@@ -179,66 +117,32 @@
         }
 
         h2 {
-            font-family: 'Playfair Display', 'Cinzel', serif;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 600;
-            margin-bottom: 20px;
-            margin-top: 10px;
+            margin-bottom: 15px;
             color: var(--text-primary);
             display: flex;
             align-items: center;
-            gap: 12px;
-            letter-spacing: 0.3px;
+            gap: 10px;
         }
 
-        /* Glass Cards - Premium Dark with Gold Border */
+        /* Glass Cards */
         .glass-card {
-            background: var(--glass-bg);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid transparent;
+            border: 1px solid var(--glass-border);
             border-radius: var(--card-radius);
             padding: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             box-shadow: var(--glass-shadow);
             transition: transform var(--transition-speed), box-shadow var(--transition-speed);
             position: relative;
             overflow: hidden;
         }
-        
-        /* Gold gradient border */
-        .glass-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: var(--card-radius);
-            padding: 1px;
-            background: var(--gold-gradient);
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            opacity: 0.5;
-        }
-        
-        /* Bottom glow */
-        .glass-card::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 10%;
-            right: 10%;
-            height: 2px;
-            background: var(--gold-gradient);
-            filter: blur(4px);
-            opacity: 0.4;
-        }
 
         .glass-card:active {
             transform: scale(0.98);
-        }
-        
-        .glass-card:hover {
-            box-shadow: var(--glass-shadow), 0 0 20px rgba(184, 138, 68, 0.2);
         }
 
         /* Menu Grid */
@@ -260,22 +164,15 @@
         }
 
         .menu-item-icon {
-            width: 32px;
-            height: 32px;
+            font-size: 32px;
             margin-bottom: 10px;
-            filter: drop-shadow(0 2px 8px rgba(184, 138, 68, 0.4));
-        }
-        
-        .menu-item-icon svg {
-            width: 100%;
-            height: 100%;
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
         }
 
         .menu-item-title {
             font-size: 14px;
             font-weight: 500;
             color: var(--text-secondary);
-            font-family: 'Inter', 'Roboto', sans-serif;
         }
 
         /* Promotions Section */
@@ -290,8 +187,8 @@
             left: 0;
             width: 4px;
             height: 100%;
-            background: var(--gold-gradient);
-            box-shadow: 0 0 10px rgba(184, 138, 68, 0.5);
+            background: var(--primary-color);
+            box-shadow: 0 0 10px var(--primary-color);
         }
 
         .promotion-header {
@@ -304,9 +201,8 @@
         .promotion-title {
             font-size: 18px;
             font-weight: 600;
-            color: var(--text-primary);
+            color: #fff;
             margin-right: 10px;
-            font-family: 'Inter', 'Roboto', sans-serif;
         }
 
         .status-badge {
@@ -327,7 +223,6 @@
             color: var(--text-secondary);
             line-height: 1.5;
             margin-bottom: 15px;
-            font-family: 'Inter', 'Roboto', sans-serif;
         }
 
         .promotion-footer {
@@ -352,42 +247,38 @@
         }
 
         .glass-list-item {
-            background: rgba(30, 30, 30, 0.5);
+            background: rgba(255, 255, 255, 0.03);
             border-radius: 12px;
             padding: 15px;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             border: 1px solid transparent;
             transition: all 0.3s;
         }
 
         .glass-list-item:hover {
-            background: rgba(30, 30, 30, 0.7);
-            border-color: rgba(184, 138, 68, 0.4);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--primary-color);
             transform: translateX(5px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         .item-title {
             font-weight: 600;
-            color: var(--text-primary);
+            color: #fff;
             margin-bottom: 4px;
             font-size: 15px;
-            font-family: 'Inter', 'Roboto', sans-serif;
         }
 
         .item-desc {
             font-size: 13px;
             color: var(--text-secondary);
-            font-family: 'Inter', 'Roboto', sans-serif;
         }
 
         /* Accordion (for Services) */
         .accordion-item {
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             border-radius: 12px;
             overflow: hidden;
-            background: rgba(30, 30, 30, 0.5);
-            border: 1px solid rgba(184, 138, 68, 0.2);
+            background: rgba(255, 255, 255, 0.03);
         }
 
         .accordion-header {
@@ -400,12 +291,12 @@
         }
 
         .accordion-header:hover {
-            background: rgba(30, 30, 30, 0.7);
+            background: rgba(255, 255, 255, 0.08);
         }
 
         .accordion-header.active {
-            background: rgba(184, 138, 68, 0.15);
-            border-left: 3px solid var(--gold-light);
+            background: rgba(138, 43, 226, 0.2);
+            border-left: 3px solid var(--primary-color);
         }
 
         .accordion-title {
@@ -414,15 +305,13 @@
             gap: 10px;
             font-weight: 600;
             font-size: 15px;
-            font-family: 'Inter', 'Roboto', sans-serif;
-            color: var(--text-primary);
         }
 
         .accordion-content {
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.3s ease-out;
-            background: rgba(20, 20, 20, 0.4);
+            background: rgba(0, 0, 0, 0.2);
             padding: 0;
         }
 
@@ -439,10 +328,9 @@
 
         .accordion-inner-list li {
             padding: 8px 0;
-            border-bottom: 1px solid rgba(184, 138, 68, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             font-size: 14px;
             color: var(--text-secondary);
-            font-family: 'Inter', 'Roboto', sans-serif;
         }
 
         .accordion-inner-list li:last-child {
@@ -471,26 +359,25 @@
             height: 140px;
         }
 
-        /* Bottom Navigation - Floating Dock */
+        /* Bottom Navigation */
         .bottom-nav {
             position: fixed;
-            bottom: 16px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            width: calc(100% - 32px);
+            width: 90%;
             max-width: 400px;
-            height: 64px;
-            background: rgba(20, 20, 20, 0.85);
-            backdrop-filter: blur(30px);
-            -webkit-backdrop-filter: blur(30px);
-            border: 1px solid rgba(184, 138, 68, 0.2);
-            border-radius: 32px;
+            height: 60px;
+            background: rgba(20, 20, 35, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 30px;
             display: flex;
             justify-content: space-around;
             align-items: center;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(184, 138, 68, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
             z-index: 100;
-            padding: 0 16px;
         }
 
         .nav-item {
@@ -504,43 +391,20 @@
             cursor: pointer;
             transition: all 0.3s;
             width: 60px;
-            position: relative;
         }
 
         .nav-item.active {
-            color: var(--gold-light);
+            color: var(--accent-color);
         }
 
         .nav-item.active .nav-icon {
-            transform: translateY(-3px);
-            filter: drop-shadow(0 0 8px rgba(250, 217, 97, 0.6));
-        }
-        
-        .nav-item.active::after {
-            content: '';
-            position: absolute;
-            bottom: 4px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 4px;
-            height: 4px;
-            background: var(--gold-gradient);
-            border-radius: 50%;
-            box-shadow: 0 0 8px rgba(250, 217, 97, 0.8);
+            transform: translateY(-5px);
+            text-shadow: 0 0 10px var(--accent-color);
         }
 
         .nav-icon {
-            width: 20px;
-            height: 20px;
+            font-size: 20px;
             transition: transform 0.3s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .nav-icon svg {
-            width: 100%;
-            height: 100%;
         }
 
         /* Sections */
@@ -594,29 +458,14 @@
         }
 
         .profile-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(30px);
-            -webkit-backdrop-filter: blur(30px);
+            background: linear-gradient(135deg, rgba(15, 15, 30, 0.95), rgba(30, 30, 60, 0.95));
             border-radius: 20px;
             padding: 24px 20px 20px;
             width: 90%;
             max-width: 360px;
             box-shadow: 0 18px 45px rgba(0, 0, 0, 0.7);
-            border: 1px solid rgba(184, 138, 68, 0.3);
+            border: 1px solid var(--glass-border);
             position: relative;
-        }
-        
-        .profile-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: 20px;
-            padding: 1px;
-            background: var(--gold-gradient);
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            opacity: 0.4;
         }
 
         .profile-avatar {
@@ -624,14 +473,13 @@
             height: 64px;
             border-radius: 50%;
             background: var(--glass-bg);
-            border: 2px solid var(--gold-light);
+            border: 2px solid var(--accent-color);
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 28px;
             margin-bottom: 12px;
             overflow: hidden;
-            box-shadow: 0 0 15px rgba(184, 138, 68, 0.3);
         }
 
         .profile-avatar img {
@@ -644,8 +492,6 @@
             font-weight: 600;
             font-size: 18px;
             margin-bottom: 4px;
-            color: var(--text-primary);
-            font-family: 'Inter', 'Roboto', sans-serif;
         }
 
         .profile-username {
@@ -668,8 +514,6 @@
 
         .profile-field-value {
             font-weight: 500;
-            color: var(--text-primary);
-            font-family: 'Inter', 'Roboto', sans-serif;
         }
 
         .profile-close {
@@ -690,87 +534,26 @@
     <div class="ambient-glow-2"></div>
 
     <header>
-        <div style="display: flex; flex-direction: column; gap: 4px;">
-            <div class="logo">
-                <svg class="logo-icon" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                        <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color:#B88A44;stop-opacity:1" />
-                            <stop offset="50%" style="stop-color:#FAD961;stop-opacity:1" />
-                            <stop offset="100%" style="stop-color:#B88A44;stop-opacity:1" />
-                        </linearGradient>
-                        <filter id="goldShadow">
-                            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
-                            <feOffset dx="0" dy="2" result="offsetblur"/>
-                            <feComponentTransfer>
-                                <feFuncA type="linear" slope="0.3"/>
-                            </feComponentTransfer>
-                            <feMerge>
-                                <feMergeNode/>
-                                <feMergeNode in="SourceGraphic"/>
-                            </feMerge>
-                        </filter>
-                    </defs>
-                    <!-- Circle background -->
-                    <circle cx="32" cy="32" r="30" fill="url(#goldGradient)" opacity="0.9" filter="url(#goldShadow)"/>
-                    <!-- Vertical bars (growth chart) -->
-                    <rect x="14" y="38" width="4" height="8" fill="#0F0F10" opacity="0.8"/>
-                    <rect x="20" y="34" width="4" height="12" fill="#0F0F10" opacity="0.8"/>
-                    <rect x="26" y="28" width="4" height="18" fill="#0F0F10" opacity="0.8"/>
-                    <rect x="32" y="22" width="4" height="24" fill="#0F0F10" opacity="0.8"/>
-                    <!-- Curved arrow -->
-                    <path d="M 18 42 Q 24 36, 30 30" stroke="#0F0F10" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.9"/>
-                    <path d="M 28 32 L 30 30 L 32 32" stroke="#0F0F10" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
-                </svg>
-                <span>MARKETING</span>
-            </div>
-            <div class="synthos-branding">produced by SYNTHOS AI®</div>
-        </div>
+        <div class="logo">Marketing Bot</div>
         <div class="user-profile">👤</div>
     </header>
 
     <div class="container">
         <!-- Main Menu Grid -->
         <div id="home-section" class="section active">
-            <h2>Добро пожаловать</h2>
+            <h2>👋 Добро пожаловать</h2>
             <div class="menu-grid">
                 <div class="glass-card menu-item" onclick="switchTab('promotions')">
-                    <div class="menu-item-icon">
-                        <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                            <defs>
-                                <linearGradient id="flameGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#B88A44;stop-opacity:1" />
-                                    <stop offset="50%" style="stop-color:#FAD961;stop-opacity:1" />
-                                    <stop offset="100%" style="stop-color:#B88A44;stop-opacity:1" />
-                                </linearGradient>
-                            </defs>
-                            <path d="M 16 28 Q 12 24, 10 18 Q 8 12, 10 8 Q 12 4, 16 4 Q 20 4, 22 8 Q 24 12, 22 18 Q 20 24, 16 28 Z" fill="url(#flameGradient)" opacity="0.9"/>
-                            <path d="M 16 24 Q 14 20, 13 16 Q 12 12, 13 10 Q 14 8, 16 8 Q 18 8, 19 10 Q 20 12, 19 16 Q 18 20, 16 24 Z" fill="#FAD961" opacity="0.6"/>
-                        </svg>
-                    </div>
+                    <div class="menu-item-icon">🔥</div>
                     <div class="menu-item-title">Акции</div>
                 </div>
                 <div class="glass-card menu-item" onclick="switchTab('services')">
-                    <div class="menu-item-icon">
-                        <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                            <defs>
-                                <linearGradient id="targetGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#B88A44;stop-opacity:1" />
-                                    <stop offset="50%" style="stop-color:#FAD961;stop-opacity:1" />
-                                    <stop offset="100%" style="stop-color:#B88A44;stop-opacity:1" />
-                                </linearGradient>
-                            </defs>
-                            <circle cx="16" cy="16" r="12" fill="none" stroke="url(#targetGradient)" stroke-width="2" opacity="0.9"/>
-                            <circle cx="16" cy="16" r="8" fill="none" stroke="url(#targetGradient)" stroke-width="1.5" opacity="0.7"/>
-                            <circle cx="16" cy="16" r="4" fill="url(#targetGradient)" opacity="0.9"/>
-                            <path d="M 16 4 L 16 8 M 16 24 L 16 28 M 4 16 L 8 16 M 24 16 L 28 16" stroke="url(#targetGradient)" stroke-width="1.5" opacity="0.6"/>
-                        </svg>
-                    </div>
+                    <div class="menu-item-icon">🎯</div>
                     <div class="menu-item-title">Услуги</div>
                 </div>
             </div>
 
-            <h2>Активные акции</h2>
+            <h2>📢 Активные акции</h2>
             <div id="promotions-container">
                 <!-- Content will be loaded here -->
                 <div class="glass-card skeleton skeleton-card"></div>
@@ -780,7 +563,7 @@
 
         <!-- Promotions Section -->
         <div id="promotions-section" class="section">
-            <h2>Все акции</h2>
+            <h2>🔥 Все акции</h2>
             <div id="all-promotions-container">
                 <!-- Content will be loaded here -->
             </div>
@@ -788,26 +571,26 @@
 
         <!-- Tools Section -->
         <div id="tools-section" class="section">
-            <h2>Инструменты</h2>
+            <h2>🛠 Инструменты</h2>
             <ul class="glass-list">
                 <li class="glass-list-item">
-                    <div class="item-title">CRM КОСМОС</div>
+                    <div class="item-title">📱 CRM КОСМОС</div>
                     <div class="item-desc">Работа с клиентской базой и управление сделками</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">Авито.Про</div>
+                    <div class="item-title">🏠 Авито.Про</div>
                     <div class="item-desc">Управление объявлениями и мониторинг выгрузки</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">Калькуляторы</div>
+                    <div class="item-title">📊 Калькуляторы</div>
                     <div class="item-desc">Расчет стоимости, комиссий и рентабельности</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">Шаблоны документов</div>
+                    <div class="item-title">📋 Шаблоны документов</div>
                     <div class="item-desc">Готовые шаблоны для работы с клиентами</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">Поиск объектов</div>
+                    <div class="item-title">🔍 Поиск объектов</div>
                     <div class="item-desc">Быстрый поиск и фильтрация объектов</div>
                 </li>
             </ul>
@@ -815,22 +598,22 @@
 
         <!-- Analytics Section -->
         <div id="analytics-section" class="section">
-            <h2>Аналитика ОН</h2>
+            <h2>📊 Аналитика ОН</h2>
             <ul class="glass-list">
                 <li class="glass-list-item">
-                    <div class="item-title">Отчеты по продажам</div>
+                    <div class="item-title">📈 Отчеты по продажам</div>
                     <div class="item-desc">Детальная аналитика продаж и конверсий</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">Статистика клиентов</div>
+                    <div class="item-title">👥 Статистика клиентов</div>
                     <div class="item-desc">Анализ клиентской базы и поведения</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">Анализ объектов</div>
+                    <div class="item-title">🏠 Анализ объектов</div>
                     <div class="item-desc">Статистика по объектам и их эффективности</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">Финансовая отчетность</div>
+                    <div class="item-title">💰 Финансовая отчетность</div>
                     <div class="item-desc">Отчеты по доходам, расходам и прибыли</div>
                 </li>
             </ul>
@@ -838,22 +621,22 @@
 
         <!-- Knowledge Section -->
         <div id="knowledge-section" class="section">
-            <h2>База знаний</h2>
+            <h2>📚 База знаний</h2>
             <ul class="glass-list">
                 <li class="glass-list-item">
-                    <div class="item-title">Руководства и инструкции</div>
+                    <div class="item-title">📖 Руководства и инструкции</div>
                     <div class="item-desc">Подробные руководства по работе с системами</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">FAQ и решения проблем</div>
+                    <div class="item-title">❓ FAQ и решения проблем</div>
                     <div class="item-desc">Часто задаваемые вопросы и их решения</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">Обучающие материалы</div>
+                    <div class="item-title">🎓 Обучающие материалы</div>
                     <div class="item-desc">Видеоуроки, вебинары и курсы</div>
                 </li>
                 <li class="glass-list-item">
-                    <div class="item-title">Чек-листы и памятки</div>
+                    <div class="item-title">📋 Чек-листы и памятки</div>
                     <div class="item-desc">Готовые чек-листы для различных задач</div>
                 </li>
             </ul>
@@ -861,11 +644,11 @@
 
         <!-- Services Section (Accordion) -->
         <div id="services-section" class="section">
-            <h2>Дополнительные услуги</h2>
+            <h2>🎯 Дополнительные услуги</h2>
 
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this)">
-                    <div class="accordion-title"><span>Контент для соцсетей</span></div>
+                    <div class="accordion-title"><span>📱</span> Контент для соцсетей</div>
                     <div>▼</div>
                 </div>
                 <div class="accordion-content">
@@ -881,7 +664,7 @@
 
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this)">
-                    <div class="accordion-title"><span>Тексты и копирайтинг</span></div>
+                    <div class="accordion-title"><span>✍️</span> Тексты и копирайтинг</div>
                     <div>▼</div>
                 </div>
                 <div class="accordion-content">
@@ -896,7 +679,7 @@
 
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this)">
-                    <div class="accordion-title"><span>Дизайн и брендинг</span></div>
+                    <div class="accordion-title"><span>🎨</span> Дизайн и брендинг</div>
                     <div>▼</div>
                 </div>
                 <div class="accordion-content">
@@ -911,7 +694,7 @@
 
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this)">
-                    <div class="accordion-title"><span>Реклама и продвижение</span></div>
+                    <div class="accordion-title"><span>📈</span> Реклама и продвижение</div>
                     <div>▼</div>
                 </div>
                 <div class="accordion-content">
@@ -926,7 +709,7 @@
 
             <div class="accordion-item">
                 <div class="accordion-header" onclick="toggleAccordion(this)">
-                    <div class="accordion-title"><span>Автоматизация</span></div>
+                    <div class="accordion-title"><span>🤖</span> Автоматизация</div>
                     <div>▼</div>
                 </div>
                 <div class="accordion-content">
@@ -965,56 +748,15 @@
     <!-- Bottom Navigation -->
     <nav class="bottom-nav">
         <div class="nav-item active" onclick="switchTab('home')">
-            <span class="nav-icon">
-                <svg width="20" height="20" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                        <linearGradient id="navGoldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color:#B88A44;stop-opacity:1" />
-                            <stop offset="50%" style="stop-color:#FAD961;stop-opacity:1" />
-                            <stop offset="100%" style="stop-color:#B88A44;stop-opacity:1" />
-                        </linearGradient>
-                    </defs>
-                    <circle cx="32" cy="32" r="30" fill="url(#navGoldGradient)" opacity="0.9"/>
-                    <rect x="14" y="38" width="4" height="8" fill="#0F0F10" opacity="0.8"/>
-                    <rect x="20" y="34" width="4" height="12" fill="#0F0F10" opacity="0.8"/>
-                    <rect x="26" y="28" width="4" height="18" fill="#0F0F10" opacity="0.8"/>
-                    <rect x="32" y="22" width="4" height="24" fill="#0F0F10" opacity="0.8"/>
-                    <path d="M 18 42 Q 24 36, 30 30" stroke="#0F0F10" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.9"/>
-                    <path d="M 28 32 L 30 30 L 32 32" stroke="#0F0F10" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
-                </svg>
-            </span>
+            <span class="nav-icon">🏠</span>
             <span>Главная</span>
         </div>
         <div class="nav-item" onclick="switchTab('promotions')">
-            <span class="nav-icon">
-                <svg width="20" height="20" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                        <linearGradient id="navFlameGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color:#B88A44;stop-opacity:1" />
-                            <stop offset="50%" style="stop-color:#FAD961;stop-opacity:1" />
-                            <stop offset="100%" style="stop-color:#B88A44;stop-opacity:1" />
-                        </linearGradient>
-                    </defs>
-                    <path d="M 16 28 Q 12 24, 10 18 Q 8 12, 10 8 Q 12 4, 16 4 Q 20 4, 22 8 Q 24 12, 22 18 Q 20 24, 16 28 Z" fill="url(#navFlameGradient)" opacity="0.9"/>
-                </svg>
-            </span>
+            <span class="nav-icon">🔥</span>
             <span>Акции</span>
         </div>
         <div class="nav-item" onclick="switchTab('services')">
-            <span class="nav-icon">
-                <svg width="20" height="20" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                        <linearGradient id="navTargetGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color:#B88A44;stop-opacity:1" />
-                            <stop offset="50%" style="stop-color:#FAD961;stop-opacity:1" />
-                            <stop offset="100%" style="stop-color:#B88A44;stop-opacity:1" />
-                        </linearGradient>
-                    </defs>
-                    <circle cx="16" cy="16" r="12" fill="none" stroke="url(#navTargetGradient)" stroke-width="2" opacity="0.9"/>
-                    <circle cx="16" cy="16" r="8" fill="none" stroke="url(#navTargetGradient)" stroke-width="1.5" opacity="0.7"/>
-                    <circle cx="16" cy="16" r="4" fill="url(#navTargetGradient)" opacity="0.9"/>
-                </svg>
-            </span>
+            <span class="nav-icon">🎯</span>
             <span>Услуги</span>
         </div>
     </nav>
@@ -1359,23 +1101,12 @@
 
             if (items.length === 0) {
                 container.innerHTML = `
-                    <div class="glass-card promotion-card" style="text-align: center; padding: 40px 20px;">
-                        <svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="margin: 0 auto 20px; opacity: 0.6;">
-                            <defs>
-                                <linearGradient id="emptyGoldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#B88A44;stop-opacity:0.4" />
-                                    <stop offset="50%" style="stop-color:#FAD961;stop-opacity:0.5" />
-                                    <stop offset="100%" style="stop-color:#B88A44;stop-opacity:0.4" />
-                                </linearGradient>
-                            </defs>
-                            <rect x="20" y="30" width="60" height="50" rx="4" fill="url(#emptyGoldGradient)" stroke="url(#emptyGoldGradient)" stroke-width="2"/>
-                            <rect x="30" y="20" width="40" height="15" rx="2" fill="url(#emptyGoldGradient)" stroke="url(#emptyGoldGradient)" stroke-width="1.5"/>
-                            <circle cx="50" cy="55" r="8" fill="url(#emptyGoldGradient)"/>
-                        </svg>
-                        <div class="promotion-header" style="justify-content: center; margin-bottom: 12px;">
-                            <div class="promotion-title" style="font-size: 18px;">Готовим эксклюзивные предложения</div>
+                    <div class="glass-card promotion-card">
+                        <div class="promotion-header">
+                            <div class="promotion-title">Акций пока нет</div>
+                            <div class="status-badge">ПУСТО</div>
                         </div>
-                        <div class="promotion-desc" style="color: var(--text-secondary); font-size: 14px;">Новые акции появятся здесь в ближайшее время</div>
+                        <div class="promotion-desc">Сейчас нет активных акций. Загляните позже.</div>
                     </div>
                 `;
                 return;
@@ -1440,8 +1171,8 @@
                 // Кнопка со ссылкой (если есть)
                 const linkButtonHtml = link ? `
                     <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--glass-border);">
-                        <a href="${_escapeHtml(link)}" target="_blank" style="display: inline-block; padding: 8px 16px; background: rgba(184, 138, 68, 0.2); border: 1px solid var(--gold-light); border-radius: 8px; color: var(--gold-light); text-decoration: none; font-size: 14px; transition: all 0.3s; font-family: 'Inter', 'Roboto', sans-serif;">
-                            Перейти к материалам
+                        <a href="${_escapeHtml(link)}" target="_blank" style="display: inline-block; padding: 8px 16px; background: rgba(138, 43, 226, 0.3); border: 1px solid var(--primary-color); border-radius: 8px; color: white; text-decoration: none; font-size: 14px; transition: all 0.3s;">
+                            📎 Перейти к материалам
                         </a>
                     </div>
                 ` : '';
@@ -1456,7 +1187,7 @@
                     ${mediaHtml}
                     <div class="promotion-desc">${desc || 'Описание отсутствует'}</div>
                     <div class="promotion-footer">
-                        <div class="date-info" style="display: flex; align-items: center; gap: 4px;">${dateText}</div>
+                        <div class="date-info">📅 ${dateText}</div>
                     </div>
                     ${linkButtonHtml}
                 `;
@@ -1474,23 +1205,12 @@
 
             if (list.length === 0) {
                 container.innerHTML = `
-                    <div class="glass-card promotion-card" style="text-align: center; padding: 40px 20px;">
-                        <svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="margin: 0 auto 20px; opacity: 0.6;">
-                            <defs>
-                                <linearGradient id="emptyAllGoldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#B88A44;stop-opacity:0.4" />
-                                    <stop offset="50%" style="stop-color:#FAD961;stop-opacity:0.5" />
-                                    <stop offset="100%" style="stop-color:#B88A44;stop-opacity:0.4" />
-                                </linearGradient>
-                            </defs>
-                            <rect x="20" y="30" width="60" height="50" rx="4" fill="url(#emptyAllGoldGradient)" stroke="url(#emptyAllGoldGradient)" stroke-width="2"/>
-                            <rect x="30" y="20" width="40" height="15" rx="2" fill="url(#emptyAllGoldGradient)" stroke="url(#emptyAllGoldGradient)" stroke-width="1.5"/>
-                            <circle cx="50" cy="55" r="8" fill="url(#emptyAllGoldGradient)"/>
-                        </svg>
-                        <div class="promotion-header" style="justify-content: center; margin-bottom: 12px;">
-                            <div class="promotion-title" style="font-size: 18px;">Готовим эксклюзивные предложения</div>
+                    <div class="glass-card promotion-card">
+                        <div class="promotion-header">
+                            <div class="promotion-title">Акций пока нет</div>
+                            <div class="status-badge">ПУСТО</div>
                         </div>
-                        <div class="promotion-desc" style="color: var(--text-secondary); font-size: 14px;">Новые акции появятся здесь в ближайшее время</div>
+                        <div class="promotion-desc">Сейчас нет активных акций. Загляните позже.</div>
                     </div>
                 `;
                 return;
@@ -1553,8 +1273,8 @@
                 // Кнопка со ссылкой (если есть)
                 const linkButtonHtml = link ? `
                     <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--glass-border);">
-                        <a href="${_escapeHtml(link)}" target="_blank" style="display: inline-block; padding: 8px 16px; background: rgba(184, 138, 68, 0.2); border: 1px solid var(--gold-light); border-radius: 8px; color: var(--gold-light); text-decoration: none; font-size: 14px; transition: all 0.3s; font-family: 'Inter', 'Roboto', sans-serif;">
-                            Перейти к материалам
+                        <a href="${_escapeHtml(link)}" target="_blank" style="display: inline-block; padding: 8px 16px; background: rgba(138, 43, 226, 0.3); border: 1px solid var(--primary-color); border-radius: 8px; color: white; text-decoration: none; font-size: 14px; transition: all 0.3s;">
+                            📎 Перейти к материалам
                         </a>
                     </div>
                 ` : '';
@@ -1569,7 +1289,7 @@
                         <div class="accordion-title">${accordionTitle}</div>
                     </div>
                     <div class="accordion-content">
-                        <div class="glass-card promotion-card" style="background: rgba(30, 30, 30, 0.5);">
+                        <div class="glass-card promotion-card" style="background: rgba(255, 255, 255, 0.03);">
                             <div class="promotion-header">
                                 <div class="promotion-title">${title}</div>
                                 <div class="status-badge">${status ? _escapeHtml(status) : 'АКТИВНА'}</div>
@@ -1577,7 +1297,7 @@
                             ${mediaHtml}
                             <div class="promotion-desc">${desc || 'Описание отсутствует'}</div>
                             <div class="promotion-footer">
-                                <div class="date-info" style="display: flex; align-items: center; gap: 4px;">${dateText}</div>
+                                <div class="date-info">📅 ${dateText}</div>
                             </div>
                             ${linkButtonHtml}
                         </div>
