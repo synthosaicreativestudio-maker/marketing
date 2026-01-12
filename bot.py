@@ -79,31 +79,38 @@ def main() -> None:
         logger.error(f"Ошибка регистрации обработчиков: {e}")
         return
 
-    # --- Запуск мониторинга ответов ---
-    if response_monitor and appeals_service and appeals_service.is_available():
-        logger.info("Запуск мониторинга ответов специалистов...")
-        try:
-            # Запускаем мониторинг в фоновом режиме
-            import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.create_task(response_monitor.start_monitoring(interval_seconds=60))
-            logger.info("Мониторинг ответов запущен (проверка каждую минуту)")
-        except Exception as e:
-            logger.error(f"Ошибка запуска мониторинга ответов: {e}")
-
-    # --- Запуск мониторинга акций ---
-    logger.info("Запуск мониторинга новых акций...")
-    try:
-        # Запускаем мониторинг акций в фоновом режиме
+    # --- Настройка мониторинга через post_init callback ---
+    async def post_init(application: Application) -> None:
+        """Инициализация мониторинга после запуска приложения."""
         import asyncio
-        if 'loop' not in locals():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        loop.create_task(promotions_notifier.start_monitoring(interval_minutes=15))
-        logger.info("Мониторинг акций запущен (проверка каждые 15 минут)")
-    except Exception as e:
-        logger.error(f"Ошибка запуска мониторинга акций: {e}")
+        # Запуск мониторинга ответов специалистов
+        if response_monitor and appeals_service and appeals_service.is_available():
+            logger.info("Запуск мониторинга ответов специалистов...")
+            try:
+                asyncio.create_task(response_monitor.start_monitoring(interval_seconds=60))
+                logger.info("Мониторинг ответов запущен (проверка каждую минуту)")
+            except Exception as e:
+                logger.error(f"Ошибка запуска мониторинга ответов: {e}")
+        
+        # Запуск мониторинга акций
+        logger.info("Запуск мониторинга новых акций...")
+        try:
+            asyncio.create_task(promotions_notifier.start_monitoring(interval_minutes=15))
+            logger.info("Мониторинг акций запущен (проверка каждые 15 минут)")
+        except Exception as e:
+            logger.error(f"Ошибка запуска мониторинга акций: {e}")
+    
+    async def post_stop(application: Application) -> None:
+        """Остановка мониторинга при завершении работы бота."""
+        if response_monitor and appeals_service and appeals_service.is_available():
+            try:
+                await response_monitor.stop_monitoring()
+            except Exception as e:
+                logger.error(f"Ошибка остановки мониторинга: {e}")
+    
+    # Регистрация хуков
+    application.post_init = post_init
+    application.post_stop = post_stop
 
     # --- Запуск бота ---
     logger.info("Запуск бота...")
@@ -111,13 +118,6 @@ def main() -> None:
         application.run_polling()
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
-    finally:
-        # Останавливаем мониторинг при завершении работы бота
-        if response_monitor and appeals_service and appeals_service.is_available():
-            try:
-                loop.run_until_complete(response_monitor.stop_monitoring())
-            except Exception as e:
-                logger.error(f"Ошибка остановки мониторинга: {e}")
         
 
 if __name__ == "__main__":
