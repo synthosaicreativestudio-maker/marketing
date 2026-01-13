@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# Скрипт для обновления бота на Yandex VM с локального компьютера
+echo "🚀 Обновление MarketingBot на Yandex VM с локального компьютера..."
+
+VM_USER="ubuntu"
+VM_HOST="158.160.0.127"
+SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599}"
+REMOTE_DIR="/home/ubuntu/marketingbot"
+
+echo "==> Подключаюсь к ${VM_USER}@${VM_HOST} и обновляю проект..."
+
+ssh -i "$SSH_KEY" "${VM_USER}@${VM_HOST}" bash <<'EOF'
+set -e
+
+REMOTE_DIR="/home/ubuntu/marketingbot"
+
+if [ ! -d "${REMOTE_DIR}" ]; then
+  echo "❌ Каталог ${REMOTE_DIR} не найден"
+  exit 1
+fi
+
+cd "${REMOTE_DIR}"
+
+echo "📥 Обновление кода из GitHub..."
+git fetch origin
+git pull origin main
+
+echo "🔄 Перезапуск сервисов..."
+sudo systemctl restart marketingbot-bot.service
+sudo systemctl restart marketingbot-web.service
+
+echo "📊 Статус сервисов:"
+sudo systemctl status marketingbot-bot.service --no-pager -l | head -20
+sudo systemctl status marketingbot-web.service --no-pager -l | head -20
+
+echo "✅ Обновление завершено!"
+echo "📋 Для просмотра логов выполните:"
+echo "   sudo journalctl -u marketingbot-bot.service -f"
+echo "   sudo journalctl -u marketingbot-web.service -f"
+EOF
+
+echo "==> Обновление на сервере завершено."
