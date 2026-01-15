@@ -26,6 +26,7 @@ from response_monitor import ResponseMonitor  # noqa: E402
 from promotions_notifier import PromotionsNotifier  # noqa: E402
 from appeals_service import AppealsService  # noqa: E402
 from bot_health_monitor import BotHealthMonitor  # noqa: E402
+from sheets_gateway import AsyncGoogleSheetsGateway  # noqa: E402
 
 # Настройка логирования
 logging.basicConfig(
@@ -99,12 +100,18 @@ def main() -> None:
         logger.critical("TELEGRAM_TOKEN не найден в .env файле! Бот не может быть запущен.")
         sys.exit(1)
 
+    # --- Инициализация Gateway для каждого сервиса ---
+    logger.info("Инициализация AsyncGoogleSheetsGateway...")
+    auth_gateway = AsyncGoogleSheetsGateway(circuit_breaker_name='auth')
+    appeals_gateway = AsyncGoogleSheetsGateway(circuit_breaker_name='appeals')
+    promotions_gateway = AsyncGoogleSheetsGateway(circuit_breaker_name='promotions')
+    
     # --- Инициализация сервисов с защитой от ошибок ---
     logger.info("Инициализация сервисов...")
     
     try:
-        logger.info("Инициализация AuthService (sheets.py)...")
-        auth_service = AuthService()
+        logger.info("Инициализация AuthService с Gateway...")
+        auth_service = AuthService(gateway=auth_gateway)
         if not auth_service.worksheet:
             logger.critical("Не удалось инициализировать доступ к Google Sheets. Проверьте SHEET_ID/GCP_SA_JSON.")
             sys.exit(1)
@@ -124,8 +131,8 @@ def main() -> None:
 
     # Инициализация сервиса обращений (Google Sheets)
     try:
-        logger.info("Инициализация AppealsService (Google Sheets)...")
-        appeals_service = AppealsService()
+        logger.info("Инициализация AppealsService с Gateway...")
+        appeals_service = AppealsService(gateway=appeals_gateway)
         if not appeals_service.is_available():
             logger.warning("AppealsService отключен: лист 'обращения' недоступен")
     except Exception as e:
@@ -156,8 +163,8 @@ def main() -> None:
 
     # Инициализация уведомлений о акциях
     try:
-        logger.info("Инициализация PromotionsNotifier...")
-        promotions_notifier = PromotionsNotifier(application.bot, auth_service)
+        logger.info("Инициализация PromotionsNotifier с Gateway...")
+        promotions_notifier = PromotionsNotifier(application.bot, auth_service, gateway=promotions_gateway)
         promotions_notifier_instance = promotions_notifier
         logger.info("PromotionsNotifier готов к работе")
     except Exception as e:
@@ -282,8 +289,8 @@ def main() -> None:
             if restart_count < max_restart_attempts:
                 wait_time = min(30, 5 * restart_count)  # Экспоненциальная задержка до 30 сек
                 logger.info(f"Перезапуск бота через {wait_time} секунд...")
-                import time
-                time.sleep(wait_time)
+                # Задержка удалена - в асинхронной архитектуре не нужна
+                # Если нужна задержка, использовать await asyncio.sleep() в async контексте
                 
                 # Пересоздаем приложение
                 try:

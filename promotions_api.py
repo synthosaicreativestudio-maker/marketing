@@ -2,8 +2,11 @@
 import logging
 import os
 import json
-from typing import List, Dict
+from typing import List, Dict, Optional
+from datetime import datetime, date
 from dotenv import load_dotenv
+
+from sheets_gateway import AsyncGoogleSheetsGateway, SheetsNotConfiguredError, CircuitBreakerOpenError
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -15,7 +18,7 @@ class PromotionsNotConfiguredError(Exception):
     pass
 
 def _get_promotions_client_and_sheet():
-    """Получение клиента и листа для таблицы акций"""
+    """Получение клиента и листа для таблицы акций (синхронная функция для инициализации)"""
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -80,18 +83,20 @@ _promotions_cache = {
 }
 CACHE_TTL = 300  # 5 minutes in seconds
 
-def get_active_promotions() -> List[Dict]:
+async def get_active_promotions(gateway: AsyncGoogleSheetsGateway) -> List[Dict]:
     """
     Получает список активных акций из Google Sheets.
     Использует кэширование на 5 минут.
     
+    Args:
+        gateway: AsyncGoogleSheetsGateway для работы с Google Sheets
+        
     Returns:
         List[Dict]: Список активных акций
     """
     global _promotions_cache
-    import time
     
-    current_time = time.time()
+    current_time = datetime.now().timestamp()
     
     # Return cached data if valid
     if _promotions_cache['data'] and (current_time - _promotions_cache['timestamp'] < CACHE_TTL):
@@ -100,7 +105,7 @@ def get_active_promotions() -> List[Dict]:
 
     try:
         _, worksheet = _get_promotions_client_and_sheet()
-        records = worksheet.get_all_records()
+        records = await gateway.get_all_records(worksheet)
         
         active_promotions = []
         
@@ -149,8 +154,12 @@ def get_active_promotions() -> List[Dict]:
         
         return active_promotions
         
-    except PromotionsNotConfiguredError:
-        logger.error("Система акций не настроена")
+    except (PromotionsNotConfiguredError, SheetsNotConfiguredError, CircuitBreakerOpenError) as e:
+        logger.error(f"Система акций недоступна: {e}")
+        # Return cached data if available even if expired in case of error
+        if _promotions_cache['data']:
+            logger.warning("Возврат устаревшего кэша из-за ошибки")
+            return _promotions_cache['data']
         return []
     except Exception as e:
         logger.error(f"Ошибка при получении активных акций: {e}")
@@ -160,30 +169,36 @@ def get_active_promotions() -> List[Dict]:
             return _promotions_cache['data']
         return []
 
-def get_promotions_json() -> str:
+async def get_promotions_json(gateway: AsyncGoogleSheetsGateway) -> str:
     """
     Возвращает активные акции в формате JSON для API.
+    
+    Args:
+        gateway: AsyncGoogleSheetsGateway для работы с Google Sheets
     
     Returns:
         str: JSON строка с активными акциями
     """
     try:
-        promotions = get_active_promotions()
+        promotions = await get_active_promotions(gateway)
         return json.dumps(promotions, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f"Ошибка при создании JSON акций: {e}")
         return json.dumps([], ensure_ascii=False)
 
-def check_new_promotions() -> List[Dict]:
+async def check_new_promotions(gateway: AsyncGoogleSheetsGateway) -> List[Dict]:
     """
     Проверяет наличие новых активных акций для отправки уведомлений.
+    
+    Args:
+        gateway: AsyncGoogleSheetsGateway для работы с Google Sheets
     
     Returns:
         List[Dict]: Список новых активных акций
     """
     try:
         _, worksheet = _get_promotions_client_and_sheet()
-        records = worksheet.get_all_records()
+        records = await gateway.get_all_records(worksheet)
         
         new_promotions = []
         
@@ -196,7 +211,6 @@ def check_new_promotions() -> List[Dict]:
                 if release_date and release_date != 'None':
                     # Проверяем, что акция была опубликована сегодня
                     try:
-                        from datetime import datetime, date
                         release_dt = datetime.strptime(release_date, '%d.%m.%Y').date()
                         today = date.today()
                         
@@ -237,16 +251,19 @@ def check_new_promotions() -> List[Dict]:
         logger.info(f"Всего найдено новых акций: {len(new_promotions)}")
         return new_promotions
         
-    except PromotionsNotConfiguredError:
-        logger.error("Система акций не настроена")
+    except (PromotionsNotConfiguredError, SheetsNotConfiguredError, CircuitBreakerOpenError) as e:
+        logger.error(f"Система акций недоступна: {e}")
         return []
     except Exception as e:
         logger.error(f"Ошибка при проверке новых акций: {e}")
         return []
 
-def is_promotions_available() -> bool:
+async def is_promotions_available(gateway: AsyncGoogleSheetsGateway) -> bool:
     """
     Проверяет, доступна ли система акций.
+    
+    Args:
+        gateway: AsyncGoogleSheetsGateway для работы с Google Sheets
     
     Returns:
         bool: True если система акций настроена и доступна
@@ -254,7 +271,7 @@ def is_promotions_available() -> bool:
     try:
         _get_promotions_client_and_sheet()
         return True
-    except PromotionsNotConfiguredError:
+    except (PromotionsNotConfiguredError, SheetsNotConfiguredError, CircuitBreakerOpenError):
         return False
     except Exception as e:
         logger.error(f"Ошибка проверки доступности системы акций: {e}")

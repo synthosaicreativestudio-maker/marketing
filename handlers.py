@@ -243,7 +243,7 @@ def start_command_handler(auth_service: AuthService):
         logger.info(f"Пользователь {user.id} ({user.first_name}) запустил команду /start.")
 
         # Проверка статуса авторизации
-        auth_status = auth_service.get_user_auth_status(user.id)
+        auth_status = await auth_service.get_user_auth_status(user.id)
         logger.info(f"Статус авторизации для пользователя {user.id}: {auth_status}")
         if auth_status:
             # Показываем SPA меню для авторизованных пользователей
@@ -316,7 +316,7 @@ def web_app_data_handler(auth_service: AuthService):
             if data.get('action') == 'get_promotions':
                 logger.info(f"Запрос акций от пользователя {user.id}")
                 # Для запросов акций проверяем авторизацию
-                auth_status = auth_service.get_user_auth_status(user.id)
+                auth_status = await auth_service.get_user_auth_status(user.id)
                 if not auth_status:
                     logger.warning(f"Пользователь {user.id} не авторизован, но пытается получить акции")
                     await update.message.reply_text("Вы не авторизованы. Пожалуйста, сначала авторизуйтесь.")
@@ -330,12 +330,12 @@ def web_app_data_handler(auth_service: AuthService):
             logger.info(f"Код партнера: {partner_code}, Телефон: {partner_phone}")
 
             # Проверяем, не авторизован ли пользователь уже
-            current_auth_status = auth_service.get_user_auth_status(user.id)
+            current_auth_status = await auth_service.get_user_auth_status(user.id)
             logger.info(f"Текущий статус авторизации пользователя {user.id}: {current_auth_status}")
             
             # Логика авторизации
             logger.info("Запуск процесса авторизации...")
-            auth_result = auth_service.find_and_update_user(partner_code, partner_phone, user.id)
+            auth_result = await auth_service.find_and_update_user(partner_code, partner_phone, user.id)
             logger.info(f"Результат авторизации: {auth_result}")
             
             if auth_result:
@@ -369,12 +369,12 @@ def web_app_data_handler(auth_service: AuthService):
                 
                 # Дополнительная диагностика
                 try:
-                    from sheets import find_row_by_partner_and_phone, normalize_phone
+                    from sheets_gateway import normalize_phone
                     phone_norm = normalize_phone(partner_phone)
                     logger.info(f"Нормализованный телефон: {phone_norm}")
                     
-                    # Проверяем, есть ли пользователь с таким кодом
-                    row = find_row_by_partner_and_phone(partner_code, phone_norm)
+                    # Проверяем, есть ли пользователь с таким кодом (используем async метод из auth_service)
+                    # row = await auth_service._find_row_by_partner_and_phone(partner_code, phone_norm)  # Приватный метод, пропускаем диагностику
                     if row:
                         logger.error(f"ОШИБКА: Пользователь найден в строке {row}, но авторизация не удалась!")
                     else:
@@ -409,7 +409,7 @@ def appeals_command_handler(auth_service: AuthService, appeals_service: AppealsS
         logger.info(f"Команда /appeals от пользователя {user.id}")
 
         # Проверка авторизации
-        if not auth_service.get_user_auth_status(user.id):
+        if not await auth_service.get_user_auth_status(user.id):
             await update.message.reply_text(
                 "Для просмотра обращений требуется авторизация. Нажмите кнопку авторизации /start."
             )
@@ -423,7 +423,7 @@ def appeals_command_handler(auth_service: AuthService, appeals_service: AppealsS
             return
 
         try:
-            appeals = appeals_service.get_user_appeals(user.id)
+            appeals = await appeals_service.get_user_appeals(user.id)
             
             if not appeals:
                 await update.message.reply_text(
@@ -477,7 +477,7 @@ def promotions_command_handler(auth_service: AuthService):
         logger.info(f"Команда /promotions от пользователя {user.id}")
 
         # Проверка авторизации
-        if not auth_service.get_user_auth_status(user.id):
+        if not await auth_service.get_user_auth_status(user.id):
             await update.message.reply_text(
                 "Для просмотра акций требуется авторизация. Нажмите кнопку авторизации /start."
             )
@@ -535,15 +535,19 @@ async def handle_promotions_request(update: Update, context: ContextTypes.DEFAUL
     try:
         # Получаем JSON с акциями
         from promotions_api import get_promotions_json, is_promotions_available
+        from sheets_gateway import AsyncGoogleSheetsGateway
+        
+        # Создаем gateway для promotions
+        promotions_gateway = AsyncGoogleSheetsGateway(circuit_breaker_name='promotions')
         
         # Проверка доступности системы акций
-        if not is_promotions_available():
+        if not await is_promotions_available(promotions_gateway):
             await update.message.reply_text(
                 "Система акций временно недоступна. Повторите позже."
             )
             return
         
-        promotions_json = get_promotions_json()
+        promotions_json = await get_promotions_json(promotions_gateway)
         promotions_data = json.loads(promotions_json)
         
         if not promotions_data:
@@ -610,7 +614,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                 
                 if user_data:
                     logger.info(f"Найдены данные пользователя: {user_data}")
-                    result = appeals_service.create_appeal(
+                    result = await appeals_service.create_appeal(
                         code=user_data.get('Код партнера', ''),
                         phone=user_data.get('Телефон партнера', ''),
                         fio=user_data.get('ФИО партнера', ''),
@@ -640,7 +644,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
         # Если обращение находится у специалиста, переключаем в режим общения со специалистом
         if appeals_service and appeals_service.is_available():
             try:
-                current_status = appeals_service.get_appeal_status(user.id)
+                current_status = await appeals_service.get_appeal_status(user.id)
                 current_status = str(current_status or '').strip().lower()
                 logger.info(f"Текущий статус обращения пользователя {user.id}: {current_status}")
                 # Режим специалиста: любые варианты "в работе" или "передано ..." (без учета регистра)
@@ -659,7 +663,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
                         pass
                     # Зафиксируем статус 'В работе' для наглядности
                     try:
-                        appeals_service.set_status_in_work(user.id)
+                        await appeals_service.set_status_in_work(user.id)
                     except Exception:
                         pass
                     return
@@ -761,7 +765,7 @@ def callback_query_handler(auth_service: AuthService, appeals_service: AppealsSe
         logger.info(f"Callback query от пользователя {user.id}: {query.data}")
         
         # Проверка авторизации
-        if not auth_service.get_user_auth_status(user.id):
+        if not await auth_service.get_user_auth_status(user.id):
             await query.edit_message_text(
                 "Для использования этой функции требуется авторизация. Нажмите кнопку авторизации /start."
             )

@@ -5,9 +5,13 @@
 
 import logging
 import datetime
-import time
 from typing import Optional, List, Dict
-from sheets import _get_appeals_client_and_sheet, SheetsNotConfiguredError
+from sheets_gateway import (
+    _get_appeals_client_and_sheet,
+    SheetsNotConfiguredError,
+    AsyncGoogleSheetsGateway,
+    CircuitBreakerOpenError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +19,16 @@ logger = logging.getLogger(__name__)
 class AppealsService:
     """Сервис для работы с обращениями в листе 'обращения'."""
     
-    def __init__(self):
+    def __init__(self, gateway: Optional[AsyncGoogleSheetsGateway] = None):
         """Инициализация сервиса обращений."""
         self.worksheet = None
+        
+        # Инициализация Gateway
+        if gateway is None:
+            self.gateway = AsyncGoogleSheetsGateway(circuit_breaker_name='appeals')
+        else:
+            self.gateway = gateway
+        
         try:
             client, worksheet = _get_appeals_client_and_sheet()
             self.worksheet = worksheet
@@ -34,9 +45,9 @@ class AppealsService:
 
     def is_available(self) -> bool:
         """Проверяет доступность сервиса обращений."""
-        return self.worksheet is not None
+        return self.worksheet is not None and self.gateway is not None
 
-    def create_appeal(self, code: str, phone: str, fio: str, telegram_id: int, text: str) -> bool:
+    async def create_appeal(self, code: str, phone: str, fio: str, telegram_id: int, text: str) -> bool:
         """
         Создает или обновляет обращение в листе (накопление в одной ячейке).
         
@@ -57,7 +68,7 @@ class AppealsService:
         try:
             logger.info(f"Создание обращения для telegram_id={telegram_id}, code={code}, phone={phone}, fio={fio}")
             # Ищем существующую строку для этого telegram_id
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             logger.info(f"Получено {len(records)} записей из таблицы обращений")
             existing_row = None
             
@@ -75,7 +86,8 @@ class AppealsService:
             
             if existing_row:
                 # Обновляем существующую строку - накапливаем обращения в одной ячейке
-                current_appeals = self.worksheet.cell(existing_row, 5).value or ""  # колонка E
+                cell = await self.gateway.cell(self.worksheet, existing_row, 5)
+                current_appeals = cell.value or ""  # колонка E
                 
                 # Добавляем новое обращение сверху
                 if current_appeals.strip():
@@ -89,7 +101,7 @@ class AppealsService:
                 updated_appeals = self._truncate_to_gs_limit(updated_appeals)
                 
                 # Обновляем ячейку с обращениями и время обновления через batch_update
-                self.worksheet.batch_update([{
+                await self.gateway.batch_update(self.worksheet, [{
                     'range': f'E{existing_row}',
                     'values': [[updated_appeals]]
                 }, {
@@ -115,22 +127,19 @@ class AppealsService:
                 ]
                 
                 logger.info(f"Данные для записи: {row_data}")
-                self.worksheet.append_row(row_data)
-                
-                # Небольшая задержка для избежания конфликтов с API
-                time.sleep(0.1)
+                await self.gateway.append_row(self.worksheet, row_data)
                 
                 # Устанавливаем заливку #f3cccc (светло-красный) для статуса "Новое"
                 try:
                     logger.info(f"Попытка установить заливку #f3cccc для новой ячейки F{next_row}")
-                    format_result = self.worksheet.format(f'F{next_row}', {
-                    "backgroundColor": {
-                        "red": 0.95,    # #f3cccc
-                        "green": 0.8,
-                        "blue": 0.8
-                    }
-                })
-                    logger.info(f"Заливка успешно установлена для ячейки F{next_row}, результат: {format_result}")
+                    await self.gateway.format(self.worksheet, f'F{next_row}', {
+                        "backgroundColor": {
+                            "red": 0.95,    # #f3cccc
+                            "green": 0.8,
+                            "blue": 0.8
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{next_row}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{next_row}: {format_error}", exc_info=True)
                 
@@ -138,6 +147,9 @@ class AppealsService:
             
             return True
             
+        except CircuitBreakerOpenError as e:
+            logger.warning(f"Circuit Breaker открыт для Appeals Service: {e}")
+            return False
         except Exception as e:
             logger.error(f"Ошибка создания/обновления обращения: {e}")
             return False
@@ -203,7 +215,7 @@ class AppealsService:
         except Exception:
             return text[:limit]
 
-    def get_user_appeals(self, telegram_id: int) -> List[Dict]:
+    async def get_user_appeals(self, telegram_id: int) -> List[Dict]:
         """
         Получает все обращения пользователя.
         
@@ -218,7 +230,7 @@ class AppealsService:
             return []
 
         try:
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             user_appeals = []
             
             for record in records:
@@ -232,7 +244,7 @@ class AppealsService:
             logger.error(f"Ошибка получения обращений пользователя: {e}")
             return []
 
-    def update_appeal_status(self, telegram_id: int, appeal_text: str, status: str, specialist_answer: str = '') -> bool:
+    async def update_appeal_status(self, telegram_id: int, appeal_text: str, status: str, specialist_answer: str = '') -> bool:
         """
         Обновляет статус обращения.
         
@@ -250,7 +262,7 @@ class AppealsService:
             return False
 
         try:
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
@@ -258,10 +270,10 @@ class AppealsService:
                     record.get('текст_обращений', '') == appeal_text):
                     
                     # Обновляем статус и ответ специалиста
-                    self.worksheet.update(f'F{i}', status)  # статус
+                    await self.gateway.update(self.worksheet, f'F{i}', [[status]])  # статус
                     if specialist_answer:
-                        self.worksheet.update(f'G{i}', specialist_answer)  # специалист_ответ
-                    self.worksheet.update(f'H{i}', timestamp)  # время_обновления
+                        await self.gateway.update(self.worksheet, f'G{i}', [[specialist_answer]])  # специалист_ответ
+                    await self.gateway.update(self.worksheet, f'H{i}', [[timestamp]])  # время_обновления
                     
                     logger.info(f"Обновлен статус обращения для пользователя {telegram_id}")
                     return True
@@ -273,7 +285,7 @@ class AppealsService:
             logger.error(f"Ошибка обновления статуса обращения: {e}")
             return False
 
-    def get_all_appeals(self, status: Optional[str] = None) -> List[Dict]:
+    async def get_all_appeals(self, status: Optional[str] = None) -> List[Dict]:
         """
         Получает все обращения, опционально фильтруя по статусу.
         
@@ -288,7 +300,7 @@ class AppealsService:
             return []
 
         try:
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             
             if status:
                 filtered_records = [r for r in records if r.get('статус', '').lower() == status.lower()]
@@ -302,7 +314,7 @@ class AppealsService:
             logger.error(f"Ошибка получения всех обращений: {e}")
             return []
 
-    def check_for_responses(self) -> List[Dict]:
+    async def check_for_responses(self) -> List[Dict]:
         """
         Проверяет наличие новых ответов специалистов в колонке G.
         
@@ -314,7 +326,7 @@ class AppealsService:
             return []
 
         try:
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             responses_to_send = []
             
             for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
@@ -339,7 +351,7 @@ class AppealsService:
             logger.error(f"Ошибка проверки ответов: {e}")
             return []
 
-    def check_for_resolved_status(self) -> List[Dict]:
+    async def check_for_resolved_status(self) -> List[Dict]:
         """
         Проверяет наличие обращений со статусом 'Решено', о которых еще не уведомлен пользователь.
         Определяет это по отсутствию системного сообщения о решении в тексте обращений.
@@ -351,7 +363,7 @@ class AppealsService:
             return []
 
         try:
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             resolved_appeals = []
             
             for i, record in enumerate(records, start=2):
@@ -386,7 +398,7 @@ class AppealsService:
             logger.error(f"Ошибка проверки решенных статусов: {e}")
             return []
 
-    def clear_response(self, row: int) -> bool:
+    async def clear_response(self, row: int) -> bool:
         """
         Очищает ответ специалиста в указанной строке.
         
@@ -402,7 +414,7 @@ class AppealsService:
 
         try:
             # Очищаем колонку G (специалист_ответ) - используем batch_update
-            self.worksheet.batch_update([{
+            await self.gateway.batch_update(self.worksheet, [{
                 'range': f'G{row}',
                 'values': [['']]
             }])
@@ -413,7 +425,7 @@ class AppealsService:
             logger.error(f"Ошибка очистки ответа в строке {row}: {e}")
             return False
 
-    def has_records(self) -> bool:
+    async def has_records(self) -> bool:
         """
         Проверяет, есть ли записи в таблице.
         
@@ -424,13 +436,13 @@ class AppealsService:
             return False
 
         try:
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             return len(records) > 0
         except Exception as e:
             logger.error(f"Ошибка проверки наличия записей: {e}")
             return False
 
-    def add_specialist_response(self, telegram_id: int, response_text: str) -> bool:
+    async def add_specialist_response(self, telegram_id: int, response_text: str) -> bool:
         """
         Добавляет ответ специалиста к существующим обращениям пользователя.
         
@@ -447,7 +459,7 @@ class AppealsService:
 
         try:
             # Ищем существующую строку для этого telegram_id
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             existing_row = None
             
             for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
@@ -457,7 +469,8 @@ class AppealsService:
             
             if existing_row:
                 # Получаем текущие обращения
-                current_appeals = self.worksheet.cell(existing_row, 5).value or ""  # колонка E
+                cell = await self.gateway.cell(self.worksheet, existing_row, 5)
+                current_appeals = cell.value or ""  # колонка E
                 
                 # Добавляем ответ специалиста сверху
                 if current_appeals.strip():
@@ -468,7 +481,7 @@ class AppealsService:
                 updated_appeals = self._truncate_to_gs_limit(updated_appeals)
                 
                 # Обновляем ячейку с обращениями
-                self.worksheet.batch_update([{
+                await self.gateway.batch_update(self.worksheet, [{
                     'range': f'E{existing_row}',
                     'values': [[updated_appeals]]
                 }])
@@ -483,7 +496,7 @@ class AppealsService:
             logger.error(f"Ошибка добавления ответа специалиста: {e}")
             return False
 
-    def add_ai_response(self, telegram_id: int, response_text: str) -> bool:
+    async def add_ai_response(self, telegram_id: int, response_text: str) -> bool:
         """
         Добавляет ответ ИИ к существующим обращениям пользователя и устанавливает статус "Ответ ИИ".
         
@@ -500,7 +513,7 @@ class AppealsService:
 
         try:
             # Ищем существующую строку для этого telegram_id
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             existing_row = None
             
             for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
@@ -510,7 +523,8 @@ class AppealsService:
             
             if existing_row:
                 # Получаем текущие обращения
-                current_appeals = self.worksheet.cell(existing_row, 5).value or ""  # колонка E
+                cell = await self.gateway.cell(self.worksheet, existing_row, 5)
+                current_appeals = cell.value or ""  # колонка E
                 
                 # Добавляем ответ ИИ сверху с префиксом
                 ai_response = f"🤖 ИИ: {response_text}"
@@ -522,7 +536,7 @@ class AppealsService:
                 updated_appeals = self._truncate_to_gs_limit(updated_appeals)
                 
                 # Обновляем ячейку с обращениями и статус
-                self.worksheet.batch_update([{
+                await self.gateway.batch_update(self.worksheet, [{
                     'range': f'E{existing_row}',
                     'values': [[updated_appeals]]
                 }, {
@@ -532,20 +546,17 @@ class AppealsService:
                 
                 logger.info(f"Статус обновлен на 'Ответ ИИ' для строки {existing_row}")
                 
-                # Небольшая задержка для избежания конфликтов с API
-                time.sleep(0.1)
-                
                 # Устанавливаем заливку #ffffff (белый) для статуса "Ответ ИИ"
                 try:
                     logger.info(f"Попытка установить заливку для ячейки F{existing_row}")
-                    format_result = self.worksheet.format(f'F{existing_row}', {
-                    "backgroundColor": {
-                        "red": 1.0,    # #ffffff
-                        "green": 1.0,
-                        "blue": 1.0
-                    }
-                })
-                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
+                    await self.gateway.format(self.worksheet, f'F{existing_row}', {
+                        "backgroundColor": {
+                            "red": 1.0,    # #ffffff
+                            "green": 1.0,
+                            "blue": 1.0
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                     # Продолжаем выполнение, даже если форматирование не удалось
@@ -560,7 +571,7 @@ class AppealsService:
             logger.error(f"Ошибка добавления ответа ИИ: {e}")
             return False
 
-    def add_user_message(self, telegram_id: int, message_text: str) -> bool:
+    async def add_user_message(self, telegram_id: int, message_text: str) -> bool:
         """
         Гарантированно добавляет пользовательское сообщение в колонку E без изменения статуса.
         Используется как дополнительная страховка при режиме специалиста.
@@ -570,7 +581,7 @@ class AppealsService:
             return False
 
         try:
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             existing_row = None
             for i, record in enumerate(records, start=2):
                 if str(record.get('telegram_id', '')) == str(telegram_id):
@@ -578,13 +589,14 @@ class AppealsService:
                     break
 
             if existing_row:
-                current_appeals = self.worksheet.cell(existing_row, 5).value or ""
+                cell = await self.gateway.cell(self.worksheet, existing_row, 5)
+                current_appeals = cell.value or ""
                 timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 user_line = f"{timestamp}: Пользователь: {message_text}"
                 updated_appeals = f"{user_line}\n{current_appeals}" if current_appeals.strip() else user_line
                 # Усечение под лимит Google Sheets
                 updated_appeals = self._truncate_to_gs_limit(updated_appeals)
-                self.worksheet.batch_update([
+                await self.gateway.batch_update(self.worksheet, [
                     {'range': f'E{existing_row}', 'values': [[updated_appeals]]},
                     {'range': f'H{existing_row}', 'values': [[timestamp]]}
                 ])
@@ -597,7 +609,7 @@ class AppealsService:
             logger.error(f"Ошибка добавления пользовательского сообщения: {e}")
             return False
 
-    def set_status_escalated(self, telegram_id: int) -> bool:
+    async def set_status_escalated(self, telegram_id: int) -> bool:
         """
         Устанавливает статус обращения на 'Передано специалисту' с красной заливкой #f3cccc.
         
@@ -613,7 +625,7 @@ class AppealsService:
 
         try:
             # Ищем существующую строку для этого telegram_id
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             existing_row = None
             
             for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
@@ -623,27 +635,24 @@ class AppealsService:
             
             if existing_row:
                 # Устанавливаем статус "Передано специалисту" в колонке F (статус)
-                self.worksheet.batch_update([{
+                await self.gateway.batch_update(self.worksheet, [{
                     'range': f'F{existing_row}',
                     'values': [['Передано специалисту']]
                 }])
                 
                 logger.info(f"Статус обновлен на 'Передано специалисту' для строки {existing_row}")
                 
-                # Небольшая задержка для избежания конфликтов с API
-                time.sleep(0.1)
-                
                 # Устанавливаем заливку #f3cccc (светло-красный) для колонки F
                 try:
                     logger.info(f"Попытка установить заливку #f3cccc для ячейки F{existing_row}")
-                    format_result = self.worksheet.format(f'F{existing_row}', {
-                    "backgroundColor": {
-                        "red": 0.95,    # #f3cccc
-                        "green": 0.8,
-                        "blue": 0.8
-                    }
-                })
-                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
+                    await self.gateway.format(self.worksheet, f'F{existing_row}', {
+                        "backgroundColor": {
+                            "red": 0.95,    # #f3cccc
+                            "green": 0.8,
+                            "blue": 0.8
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                 
@@ -657,7 +666,7 @@ class AppealsService:
             logger.error(f"Ошибка установки статуса 'Передано специалисту': {e}")
             return False
 
-    def set_status_in_work(self, telegram_id: int) -> bool:
+    async def set_status_in_work(self, telegram_id: int) -> bool:
         """
         Устанавливает статус обращения на 'В работе' с заливкой #fff2cc.
         
@@ -673,7 +682,7 @@ class AppealsService:
 
         try:
             # Ищем существующую строку для этого telegram_id
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             existing_row = None
             
             for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
@@ -683,27 +692,24 @@ class AppealsService:
             
             if existing_row:
                 # Устанавливаем статус "В работе" в колонке F (статус)
-                self.worksheet.batch_update([{
+                await self.gateway.batch_update(self.worksheet, [{
                     'range': f'F{existing_row}',
                     'values': [['В работе']]
                 }])
                 
                 logger.info(f"Статус обновлен на 'В работе' для строки {existing_row}")
                 
-                # Небольшая задержка для избежания конфликтов с API
-                time.sleep(0.1)
-                
                 # Устанавливаем заливку #fff2cc (светло-желтый) для колонки F
                 try:
                     logger.info(f"Попытка установить заливку #fff2cc для ячейки F{existing_row}")
-                    format_result = self.worksheet.format(f'F{existing_row}', {
-                    "backgroundColor": {
-                        "red": 1.0,    # #fff2cc
-                        "green": 0.95,
-                        "blue": 0.8
-                    }
-                })
-                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
+                    await self.gateway.format(self.worksheet, f'F{existing_row}', {
+                        "backgroundColor": {
+                            "red": 1.0,    # #fff2cc
+                            "green": 0.95,
+                            "blue": 0.8
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                 
@@ -717,7 +723,7 @@ class AppealsService:
             logger.error(f"Ошибка при установке статуса 'В работе': {e}")
             return False
 
-    def set_status_resolved(self, telegram_id: int) -> bool:
+    async def set_status_resolved(self, telegram_id: int) -> bool:
         """
         Устанавливает статус обращения на 'Решено' с зелёной заливкой #d9ead3.
         
@@ -733,7 +739,7 @@ class AppealsService:
 
         try:
             # Ищем существующую строку для этого telegram_id
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             existing_row = None
             
             for i, record in enumerate(records, start=2):
@@ -743,27 +749,24 @@ class AppealsService:
             
             if existing_row:
                 # Устанавливаем статус "Решено" в колонке F (статус)
-                self.worksheet.batch_update([{
+                await self.gateway.batch_update(self.worksheet, [{
                     'range': f'F{existing_row}',
                     'values': [['Решено']]
                 }])
                 
                 logger.info(f"Статус обновлен на 'Решено' для строки {existing_row}")
                 
-                # Небольшая задержка для избежания конфликтов с API
-                time.sleep(0.1)
-                
                 # Зелёная заливка #d9ead3
                 try:
                     logger.info(f"Попытка установить заливку #d9ead3 для ячейки F{existing_row}")
-                    format_result = self.worksheet.format(f'F{existing_row}', {
-                    "backgroundColor": {
-                        "red": 0.85,
-                        "green": 0.92,
-                        "blue": 0.83
-                    }
-                })
-                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}, результат: {format_result}")
+                    await self.gateway.format(self.worksheet, f'F{existing_row}', {
+                        "backgroundColor": {
+                            "red": 0.85,
+                            "green": 0.92,
+                            "blue": 0.83
+                        }
+                    })
+                    logger.info(f"Заливка успешно установлена для ячейки F{existing_row}")
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                 
@@ -777,7 +780,7 @@ class AppealsService:
             logger.error(f"Ошибка при установке статуса 'Решено': {e}")
             return False
 
-    def get_appeal_status(self, telegram_id: int) -> str:
+    async def get_appeal_status(self, telegram_id: int) -> str:
         """
         Получает статус обращения пользователя.
         
@@ -793,7 +796,7 @@ class AppealsService:
 
         try:
             # Ищем существующую строку для этого telegram_id
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             
             for i, record in enumerate(records, start=2):
                 if str(record.get('telegram_id', '')) == str(telegram_id):
@@ -804,7 +807,7 @@ class AppealsService:
                         status_lower = str(status).strip().lower()
                         if status_lower == 'решено':
                             logger.info(f"Попытка установить заливку #d9ead3 для ячейки F{i} (статус: решено)")
-                            self.worksheet.format(f'F{i}', {
+                            await self.gateway.format(self.worksheet, f'F{i}', {
                                 "backgroundColor": {
                                     "red": 0.85,
                                     "green": 0.92,
@@ -814,7 +817,7 @@ class AppealsService:
                             logger.info(f"Заливка успешно установлена для ячейки F{i}")
                         elif status_lower == 'в работе':
                             logger.info(f"Попытка установить заливку #fff2cc для ячейки F{i} (статус: в работе)")
-                            self.worksheet.format(f'F{i}', {
+                            await self.gateway.format(self.worksheet, f'F{i}', {
                                 "backgroundColor": {
                                     "red": 1.0,
                                     "green": 0.95,

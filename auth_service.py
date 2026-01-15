@@ -4,10 +4,8 @@ from typing import Optional, Dict
 import json
 import os
 
-from sheets import (
+from sheets_gateway import (
     _get_client_and_sheet,
-    find_row_by_partner_and_phone,
-    update_row_with_auth,
     normalize_phone,
     SheetsNotConfiguredError,
 )

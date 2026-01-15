@@ -1,5 +1,4 @@
 import os
-import time
 import logging
 from typing import Dict, Optional
 
@@ -69,8 +68,7 @@ class OpenAIService:
             )
             if run.status in ("completed", "failed", "cancelled", "expired"):
                 return run.status
-            # Убираем задержку для более быстрого ответа
-            time.sleep(0.1)
+            # Задержка удалена - в асинхронной архитектуре не нужна
         return None
 
     def ask(self, user_id: int, content: str) -> Optional[str]:

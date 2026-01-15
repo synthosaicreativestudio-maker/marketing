@@ -5,26 +5,28 @@ from typing import List, Dict
 
 from promotions_api import check_new_promotions, is_promotions_available
 from auth_service import AuthService
+from sheets_gateway import AsyncGoogleSheetsGateway
 
 logger = logging.getLogger(__name__)
 
 class PromotionsNotifier:
     """Сервис для отправки уведомлений о новых акциях"""
     
-    def __init__(self, bot, auth_service: AuthService):
+    def __init__(self, bot, auth_service: AuthService, gateway: AsyncGoogleSheetsGateway):
         self.bot = bot
         self.auth_service = auth_service
+        self.gateway = gateway
         self.last_check_time = None
         self.sent_promotions = set()  # Множество ID уже отправленных акций
         
     async def check_and_send_notifications(self):
         """Проверяет новые акции и отправляет уведомления"""
-        if not is_promotions_available():
+        if not await is_promotions_available(self.gateway):
             logger.warning("Система акций недоступна, пропускаем проверку уведомлений")
             return
             
         try:
-            new_promotions = check_new_promotions()
+            new_promotions = await check_new_promotions(self.gateway)
             
             if not new_promotions:
                 logger.info("Новых акций не найдено")
@@ -52,7 +54,7 @@ class PromotionsNotifier:
             if not self.auth_service.worksheet:
                 return []
                 
-            records = self.auth_service.worksheet.get_all_records()
+            records = await self.auth_service.gateway.get_all_records(self.auth_service.worksheet)
             authorized_users = []
             
             for record in records:

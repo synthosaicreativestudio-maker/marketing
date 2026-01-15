@@ -63,7 +63,7 @@ class ResponseMonitor:
         while self.is_running:
             try:
                 # Проверяем только если есть записи в таблице
-                if self.appeals_service.has_records():
+                if await self.appeals_service.has_records():
                     await self._check_and_send_responses()
                 else:
                     logger.debug("Нет записей в таблице, пропускаем проверку")
@@ -81,7 +81,7 @@ class ResponseMonitor:
         """Проверяет и отправляет ответы специалистов."""
         try:
             # 1. Проверяем новые ответы в колонке G
-            responses = self.appeals_service.check_for_responses()
+            responses = await self.appeals_service.check_for_responses()
             
             for response_data in responses:
                 await self._send_response(response_data)
@@ -99,7 +99,7 @@ class ResponseMonitor:
     async def _check_and_process_resolved_status(self):
         """Обрабатывает обращения, переведенные в статус 'Решено' вручную."""
         try:
-            resolved_appeals = self.appeals_service.check_for_resolved_status()
+            resolved_appeals = await self.appeals_service.check_for_resolved_status()
             
             for appeal in resolved_appeals:
                 telegram_id = appeal['telegram_id']
@@ -193,7 +193,7 @@ class ResponseMonitor:
             logger.info(f"Обращение помечено как решенное по триггерным фразам для строки {response_data['row']}")
             
             # Очищаем ответ в таблице
-            self.appeals_service.clear_response(response_data['row'])
+            await self.appeals_service.clear_response(response_data['row'])
             
         except Exception as e:
             logger.error(f"Ошибка обработки решения для пользователя {response_data.get('telegram_id', 'unknown')}: {e}")
@@ -225,7 +225,7 @@ class ResponseMonitor:
             
             # Устанавливаем статус "В работе" при первом ответе специалиста
             try:
-                success = self.appeals_service.set_status_in_work(telegram_id)
+                success = await self.appeals_service.set_status_in_work(telegram_id)
                 if success:
                     logger.info(f"Статус установлен 'В работе' для пользователя {telegram_id}")
                 else:
@@ -251,7 +251,7 @@ class ResponseMonitor:
             logger.info(f"Ответ специалиста записан для строки {response_data['row']}, статус остается без изменений")
             
             # Очищаем ответ в таблице
-            self.appeals_service.clear_response(response_data['row'])
+            await self.appeals_service.clear_response(response_data['row'])
             
         except Exception as e:
             logger.error(f"Ошибка отправки ответа пользователю {response_data.get('telegram_id', 'unknown')}: {e}")

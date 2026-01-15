@@ -34,8 +34,16 @@ def after_request(response):
 def get_promotions_api():
     """API endpoint для получения списка акций"""
     try:
+        import asyncio
+        from sheets_gateway import AsyncGoogleSheetsGateway
+        
         logger.info("API Request: GET /api/promotions")
-        promotions_json = promotions_api.get_promotions_json()
+        
+        # Создаем gateway для promotions
+        promotions_gateway = AsyncGoogleSheetsGateway(circuit_breaker_name='promotions')
+        
+        # Используем asyncio.run для вызова async функции
+        promotions_json = asyncio.run(promotions_api.get_promotions_json(promotions_gateway))
         return promotions_json, 200, {'Content-Type': 'application/json'}
     except Exception as e:
         logger.error(f"API Error: {e}")

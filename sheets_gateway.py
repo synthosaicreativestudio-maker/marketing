@@ -4,6 +4,9 @@
 """
 import logging
 import asyncio
+import json
+import os
+from pathlib import Path
 from typing import List, Dict, Optional, Any, Callable
 import gspread
 from gspread.exceptions import APIError
@@ -16,6 +19,7 @@ from tenacity import (
     RetryError
 )
 from requests.exceptions import ConnectionError, ReadTimeout
+from dotenv import load_dotenv
 
 from sheets_utils import (
     get_auth_circuit_breaker,
@@ -24,7 +28,120 @@ from sheets_utils import (
     CircuitBreakerOpenError
 )
 
+# Загружаем переменные окружения
+load_dotenv()
+
 logger = logging.getLogger(__name__)
+
+
+class SheetsNotConfiguredError(Exception):
+    """Ошибка конфигурации Google Sheets"""
+    pass
+
+
+def normalize_phone(phone: str) -> str:
+    """Нормализация номера телефона к формату 8XXXXXXXXXX"""
+    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())
+    if len(digits) == 10:
+        return '8' + digits
+    elif len(digits) == 11 and digits.startswith('7'):
+        return '8' + digits[1:]
+    elif len(digits) == 11 and digits.startswith('8'):
+        return digits
+    else:
+        return digits
+
+
+def _load_service_account():
+    """Загрузка service account для Google Sheets"""
+    sa_json = os.environ.get('GCP_SA_JSON')
+    sa_file = os.environ.get('GCP_SA_FILE')
+    
+    if sa_json:
+        try:
+            return json.loads(sa_json)
+        except Exception as e:
+            raise ValueError('Invalid GCP_SA_JSON: ' + str(e)) from e
+    
+    if sa_file and Path(sa_file).exists():
+        with Path(sa_file).open(encoding='utf-8') as f:
+            return json.load(f)
+    
+    raise SheetsNotConfiguredError(
+        'Service account JSON not provided (GCP_SA_JSON or GCP_SA_FILE)'
+    )
+
+
+def _get_client_and_sheet():
+    """Получение клиента и листа Google Sheets (для инициализации)"""
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        
+        sa_info = _load_service_account()
+        scopes = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        
+        creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
+        client = gspread.authorize(creds)
+        
+        sheet_id = os.environ.get('SHEET_ID')
+        if not sheet_id:
+            raise SheetsNotConfiguredError('SHEET_ID not provided')
+        
+        spreadsheet = client.open_by_key(sheet_id)
+        sheet_name = os.environ.get('SHEET_NAME', 'Sheet1')
+        try:
+            worksheet = spreadsheet.worksheet(sheet_name)
+        except Exception as e:
+            logger.warning(f"Worksheet '{sheet_name}' not found ({e}). Falling back to first sheet.")
+            worksheet = spreadsheet.sheet1
+
+        return client, worksheet
+    
+    except ImportError as e:
+        raise SheetsNotConfiguredError(f'Import error: {e}')
+    except Exception as e:
+        logger.error(f"Failed to connect to Google Sheets: {e}")
+        raise SheetsNotConfiguredError(f'Google Sheets connection failed: {e}')
+
+
+def _get_appeals_client_and_sheet():
+    """Получение клиента и листа для таблицы обращений (для инициализации)"""
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        
+        sa_info = _load_service_account()
+        scopes = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        
+        creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
+        client = gspread.authorize(creds)
+        
+        sheet_id = os.environ.get('APPEALS_SHEET_ID')
+        if not sheet_id:
+            raise SheetsNotConfiguredError('APPEALS_SHEET_ID not provided')
+        
+        spreadsheet = client.open_by_key(sheet_id)
+        sheet_name = os.environ.get('APPEALS_SHEET_NAME', 'обращения')
+        try:
+            worksheet = spreadsheet.worksheet(sheet_name)
+        except Exception as e:
+            logger.warning(f"Appeals worksheet '{sheet_name}' not found ({e}). Falling back to first sheet.")
+            worksheet = spreadsheet.sheet1
+
+        return client, worksheet
+    
+    except ImportError as e:
+        raise SheetsNotConfiguredError(f'Import error: {e}')
+    except Exception as e:
+        logger.error(f"Failed to connect to Appeals Google Sheets: {e}")
+        raise SheetsNotConfiguredError(f'Appeals Google Sheets connection failed: {e}')
 
 
 def _is_retryable_error(exception: Exception) -> bool:
