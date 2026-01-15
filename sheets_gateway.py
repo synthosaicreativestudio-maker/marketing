@@ -428,3 +428,17 @@ class AsyncGoogleSheetsGateway:
             format_dict: Словарь с параметрами форматирования
         """
         await self._run_in_executor(worksheet.format, range_name, format_dict)
+
+    async def cell(self, worksheet: gspread.Worksheet, row: int, col: int) -> gspread.Cell:
+        """
+        Получает значение ячейки.
+        
+        Args:
+            worksheet: Worksheet объект из gspread
+            row: Номер строки (начиная с 1)
+            col: Номер колонки (начиная с 1)
+            
+        Returns:
+            Cell объект
+        """
+        return await self._run_in_executor(worksheet.cell, row, col)
