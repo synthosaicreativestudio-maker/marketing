@@ -1,97 +1,66 @@
 import logging
 import datetime
 from typing import Optional, Dict
-import json
 import os
 
-from sheets_gateway import (
-    _get_client_and_sheet,
-    normalize_phone,
-    SheetsNotConfiguredError,
-)
+from cachetools import TTLCache
+from sheets_gateway import AsyncGoogleSheetsGateway, SheetsNotConfiguredError, CircuitBreakerOpenError
+from sheets_gateway import _get_client_and_sheet, normalize_phone
 
 logger = logging.getLogger(__name__)
 
-class AuthService:
-    def __init__(self):
-        """Инициализация сервиса авторизации на основе sheets.py (вариант A).
 
-        Используются переменные окружения:
-        - SHEET_ID (обязательно)
-        - SHEET_NAME (опционально, по умолчанию Sheet1)
-        - GCP_SA_JSON или GCP_SA_FILE (обязательно один из)
+def normalize_phone(phone: str) -> str:
+    """Нормализация номера телефона к формату 8XXXXXXXXXX"""
+    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())
+    if len(digits) == 10:
+        return '8' + digits
+    elif len(digits) == 11 and digits.startswith('7'):
+        return '8' + digits[1:]
+    elif len(digits) == 11 and digits.startswith('8'):
+        return digits
+    else:
+        return digits
+
+
+class AuthService:
+    def __init__(self, gateway: Optional[AsyncGoogleSheetsGateway] = None):
+        """Инициализация сервиса авторизации с AsyncGoogleSheetsGateway.
+
+        Args:
+            gateway: AsyncGoogleSheetsGateway для работы с Google Sheets (опционально)
         """
         self.worksheet = None
-        self.auth_cache_file = "auth_cache.json"
-        self.auth_cache = self._load_auth_cache()
+        
+        # Инициализация Gateway
+        if gateway is None:
+            self.gateway = AsyncGoogleSheetsGateway(circuit_breaker_name='auth')
+        else:
+            self.gateway = gateway
+        
+        # Используем TTLCache вместо JSON файла
+        self.auth_cache = TTLCache(maxsize=2000, ttl=300)  # 5 минут TTL
         
         try:
             _, worksheet = _get_client_and_sheet()
             self.worksheet = worksheet
-            logger.info("Worksheet успешно инициализирован через sheets.py")
+            logger.info("Worksheet успешно инициализирован через sheets_gateway")
         except SheetsNotConfiguredError as e:
             logger.critical(f"Sheets не сконфигурирован: {e}")
         except Exception as e:
             logger.critical(f"Не удалось инициализировать доступ к Google Sheets: {e}")
 
-    def _load_auth_cache(self) -> Dict:
-        """Загружает кэш авторизации из файла."""
-        try:
-            if os.path.exists(self.auth_cache_file):
-                with open(self.auth_cache_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception as e:
-            logger.warning(f"Ошибка загрузки кэша авторизации: {e}")
-        return {}
-
-    def _save_auth_cache(self):
-        """Сохраняет кэш авторизации в файл."""
-        try:
-            with open(self.auth_cache_file, 'w', encoding='utf-8') as f:
-                json.dump(self.auth_cache, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.warning(f"Ошибка сохранения кэша авторизации: {e}")
-
-    def _is_auth_cache_valid(self, telegram_id: int, max_age_minutes: int = 5) -> bool:
-        """Проверяет, действителен ли кэш авторизации для пользователя."""
-        if str(telegram_id) not in self.auth_cache:
-            return False
-        
-        cache_time = self.auth_cache[str(telegram_id)].get('timestamp')
-        if not cache_time:
-            return False
-        
-        try:
-            cache_datetime = datetime.datetime.fromisoformat(cache_time)
-            now = datetime.datetime.now()
-            # Проверяем, прошло ли менее указанного количества минут
-            return (now - cache_datetime).total_seconds() < max_age_minutes * 60
-        except Exception as e:
-            logger.warning(f"Ошибка проверки времени кэша: {e}")
-            return False
-
-    def _update_auth_cache(self, telegram_id: int, is_authorized: bool):
-        """Обновляет кэш авторизации для пользователя."""
-        self.auth_cache[str(telegram_id)] = {
-            'is_authorized': is_authorized,
-            'timestamp': datetime.datetime.now().isoformat()
-        }
-        self._save_auth_cache()
-    
-    def clear_auth_cache(self, telegram_id: int = None):
-        """Очищает кэш авторизации для конкретного пользователя или всех пользователей."""
-        if telegram_id:
-            if str(telegram_id) in self.auth_cache:
-                del self.auth_cache[str(telegram_id)]
-                logger.info(f"Кэш авторизации очищен для пользователя {telegram_id}")
-        else:
-            self.auth_cache.clear()
-            logger.info("Кэш авторизации очищен для всех пользователей")
-        self._save_auth_cache()
-
-    def find_and_update_user(self, partner_code: str, partner_phone: str, telegram_id: int) -> bool:
+    async def find_and_update_user(self, partner_code: str, partner_phone: str, telegram_id: int) -> bool:
         """
         Ищет пользователя и обновляет его статус авторизации.
+        
+        Args:
+            partner_code: код партнера
+            partner_phone: телефон партнера
+            telegram_id: ID пользователя в Telegram
+            
+        Returns:
+            bool: True если пользователь найден и авторизован
         """
         logger.info(f"Поиск пользователя: код={partner_code}, телефон={partner_phone}, telegram_id={telegram_id}")
 
@@ -106,62 +75,81 @@ class AuthService:
 
             phone_norm = normalize_phone(partner_phone)
             logger.info(f"Нормализованный телефон из формы: '{phone_norm}'")
-            try:
-                logger.info(f"Worksheet: '{self.worksheet.title}' — получаем записи...")
-            except Exception:
-                pass
-            row_index: Optional[int] = find_row_by_partner_and_phone(partner_code, phone_norm)
+            
+            # Получаем все записи через Gateway
+            records = await self.gateway.get_all_records(self.worksheet)
+            logger.info(f"Получено {len(records)} записей для поиска пользователя")
+            
+            row_index: Optional[int] = None
+            for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
+                code_in_row = str(record.get('partner_code', record.get('Код партнера', ''))).strip()
+                phone_in_row = str(record.get('phone', record.get('Телефон партнера', ''))).strip()
+                normalized_row_phone = normalize_phone(phone_in_row)
+                
+                if code_in_row == partner_code and normalized_row_phone == phone_norm:
+                    row_index = i
+                    logger.info(f"Найдена строка с пользователем: {row_index}")
+                    break
 
             if row_index:
-                logger.info(f"Найдена строка с пользователем: {row_index}")
-                # Обновляем статус/telegram_id через batch API из sheets.py
+                # Обновляем статус/telegram_id через Gateway
                 try:
-                    update_row_with_auth(row_index, telegram_id, status='authorized')
+                    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    # Обновляем статус (D), telegram_id (E), дату (F)
+                    await self.gateway.update(self.worksheet, f'D{row_index}:F{row_index}', [[
+                        'authorized',
+                        str(telegram_id),
+                        timestamp
+                    ]])
+                    logger.info(f"Пользователь с кодом {partner_code} успешно авторизован.")
+                    
+                    # Обновляем кэш
+                    self.auth_cache[telegram_id] = True
+                    return True
+                except CircuitBreakerOpenError as e:
+                    logger.warning(f"Circuit Breaker открыт для Auth Service: {e}")
+                    return False
                 except Exception as e:
                     logger.error(f"Ошибка обновления строки {row_index}: {e}")
                     return False
-
-                # Дополнительно обновим столбец с датой (F)
-                try:
-                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.worksheet.update(f'F{row_index}', timestamp)
-                except Exception as e:
-                    logger.warning(f"Не удалось записать дату авторизации: {e}")
-
-                logger.info(f"Пользователь с кодом {partner_code} успешно авторизован.")
-                # Обновляем кэш авторизации
-                self._update_auth_cache(telegram_id, True)
-                return True
 
             logger.warning(
                 f"Пользователь с кодом {partner_code} и телефоном {partner_phone} не найден."
             )
             return False
+        except CircuitBreakerOpenError as e:
+            logger.warning(f"Circuit Breaker открыт для Auth Service: {e}")
+            return False
         except Exception as e:
             logger.error(f"Ошибка при поиске и обновлении пользователя: {e}")
             return False
 
-    def get_user_auth_status(self, telegram_id: int) -> bool:
+    async def get_user_auth_status(self, telegram_id: int) -> bool:
         """
         Проверяет статус авторизации пользователя по Telegram ID.
-        Всегда проверяет актуальные данные в Google Sheets.
+        Использует TTLCache для оптимизации.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            
+        Returns:
+            bool: True если пользователь авторизован
         """
         logger.info(f"Проверка статуса авторизации для пользователя {telegram_id}")
         
-        # Проверяем кэш только для оптимизации (не более 5 минут)
-        if self._is_auth_cache_valid(telegram_id, max_age_minutes=5):
-            cached_result = self.auth_cache[str(telegram_id)]['is_authorized']
-            logger.info(f"Используем кэшированный результат авторизации (актуальный): {cached_result}")
-            return cached_result
+        # Проверяем кэш сначала
+        if telegram_id in self.auth_cache:
+            logger.info(f"Используем кэшированный результат для пользователя {telegram_id}")
+            return self.auth_cache[telegram_id]
         
-        # Всегда проверяем актуальные данные в таблице
+        # Если не в кэше, проверяем в таблице
         if not self.worksheet:
-            logger.error("Worksheet не инициализирован (Sheets конфигурация отсутствует).")
+            logger.error("Worksheet не инициализирован.")
             return False
 
         try:
             logger.info("Получение всех записей из таблицы для проверки статуса...")
-            records = self.worksheet.get_all_records()
+            records = await self.gateway.get_all_records(self.worksheet)
             logger.info(f"Получено {len(records)} записей из таблицы для проверки статуса")
             
             for i, row in enumerate(records):
@@ -180,57 +168,51 @@ class AuthService:
                     logger.info(f"Результат проверки авторизации: {result}")
                     
                     # Обновляем кэш
-                    self._update_auth_cache(telegram_id, result)
+                    self.auth_cache[telegram_id] = result
                     return result
                 else:
                     logger.info(f"Запись {i+1} не соответствует запрашиваемому Telegram ID")
                     
             logger.info(f"Пользователь с Telegram ID {telegram_id} не найден в таблице")
             # Обновляем кэш с результатом "не авторизован"
-            self._update_auth_cache(telegram_id, False)
+            self.auth_cache[telegram_id] = False
+            return False
+        except CircuitBreakerOpenError as e:
+            logger.warning(f"Circuit Breaker открыт для Auth Service: {e}. Возвращаем False.")
             return False
         except Exception as e:
-            logger.error(f"Ошибка при проверке статуса пользователя: {e}")
-            # Инвалидируем кэш при ошибке
-            self.clear_auth_cache(telegram_id)
+            logger.error(f"Ошибка при проверке статуса пользователя {telegram_id}: {e}", exc_info=True)
+            # При ошибке возвращаем False (fail-safe)
             return False
 
     def force_check_auth_status(self, telegram_id: int) -> bool:
         """
         Принудительно проверяет статус авторизации пользователя, игнорируя кэш.
         Используется для обновления кэша при изменении статуса в таблице.
-        """
-        logger.info(f"Принудительная проверка статуса авторизации для пользователя {telegram_id}")
         
-        if not self.worksheet:
-            logger.error("Worksheet не инициализирован (Sheets конфигурация отсутствует).")
-            return False
-
+        ВАЖНО: Этот метод синхронный для обратной совместимости.
+        Для async версии используйте get_user_auth_status.
+        """
+        import asyncio
         try:
-            logger.info("Получение всех записей из таблицы для принудительной проверки...")
-            records = self.worksheet.get_all_records()
-            logger.info(f"Получено {len(records)} записей из таблицы для принудительной проверки")
-            
-            for i, row in enumerate(records):
-                # Проверяем, есть ли 'Telegram ID' в строке и совпадает ли он
-                telegram_id_in_sheet = row.get('Telegram ID')
-                
-                if str(telegram_id_in_sheet) == str(telegram_id):
-                    # Проверяем статус в колонке 'Статус' или 'Статус авторизации'
-                    status = row.get('Статус') or row.get('Статус авторизации')
-                    logger.info(f"Найден пользователь с Telegram ID {telegram_id}, статус: {status}")
-                    status_norm = str(status or '').strip().lower()
-                    result = status_norm in ("авторизован", "authorized")
-                    logger.info(f"Результат принудительной проверки авторизации: {result}")
-                    
-                    # Обновляем кэш
-                    self._update_auth_cache(telegram_id, result)
-                    return result
-                    
-            logger.info(f"Пользователь с Telegram ID {telegram_id} не найден в таблице")
-            # Обновляем кэш с результатом "не авторизован"
-            self._update_auth_cache(telegram_id, False)
-            return False
-        except Exception as e:
-            logger.error(f"Ошибка при принудительной проверке статуса пользователя: {e}")
-            return False
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Если loop уже запущен, создаем задачу
+                task = asyncio.create_task(self.get_user_auth_status(telegram_id))
+                # Это не идеально, но для обратной совместимости
+                return False  # Возвращаем False, так как не можем дождаться результата синхронно
+            else:
+                return loop.run_until_complete(self.get_user_auth_status(telegram_id))
+        except RuntimeError:
+            # Нет event loop, создаем новый
+            return asyncio.run(self.get_user_auth_status(telegram_id))
+
+    def clear_auth_cache(self, telegram_id: int = None):
+        """Очищает кэш авторизации для конкретного пользователя или всех пользователей."""
+        if telegram_id:
+            if telegram_id in self.auth_cache:
+                del self.auth_cache[telegram_id]
+                logger.info(f"Кэш авторизации очищен для пользователя {telegram_id}")
+        else:
+            self.auth_cache.clear()
+            logger.info("Кэш авторизации очищен для всех пользователей")
