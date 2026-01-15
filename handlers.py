@@ -697,7 +697,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             logger.info(f"Ответ ИИ для пользователя {user.id}: {reply[:200]}...")
                 
             # Записываем ответ ИИ в таблицу обращений
-            if appeals_service and await appeals_service.is_available():
+            if appeals_service and appeals_service.is_available():
                 try:
                     success = await appeals_service.add_ai_response(user.id, reply)
                     if success:
