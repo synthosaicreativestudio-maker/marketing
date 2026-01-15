@@ -199,9 +199,9 @@ class AppealsService:
             logger.error(f"Ошибка очистки старых обращений: {e}")
             return appeals_text
 
-    def _truncate_to_gs_limit(self, text: str, limit: int = 49000) -> str:
+    def _truncate_to_gs_limit(self, text: str, limit: int = 25000) -> str:
         """
-        Ограничивает длину текста для одной ячейки Google Sheets (лимит ~50k символов).
+        Ограничивает длину текста для одной ячейки Google Sheets (лимит 50% от максимума = 25k символов).
         Сохраняем последние сообщения, добавляя пометку об усечении.
         """
         try:
