@@ -588,7 +588,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
         logger.info(f"CHAT_HANDLER: Текстовое сообщение от {user.id}: {text}")
 
         # Проверка авторизации
-        auth_status = auth_service.get_user_auth_status(user.id)
+        auth_status = await auth_service.get_user_auth_status(user.id)
         logger.info(f"Статус авторизации для пользователя {user.id}: {auth_status}")
         
         if not auth_status:
