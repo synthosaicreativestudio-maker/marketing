@@ -69,7 +69,9 @@ class OpenAIService:
             )
             if run.status in ("completed", "failed", "cancelled", "expired"):
                 return run.status
-            # Задержка удалена - в асинхронной архитектуре не нужна
+            # ВАЖНО: Пауза, чтобы не сжечь CPU.
+            # Допустимо только потому, что метод вызывается в run_in_executor.
+            time.sleep(1)
         return None
 
     def ask(self, user_id: int, content: str) -> Optional[str]:
