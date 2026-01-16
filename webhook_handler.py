@@ -216,6 +216,7 @@ async def send_promotion_notification(promotion_data):
                 failed_count += 1
                 logger.error(f"❌ Ошибка отправки уведомления пользователю {user_id}: {e}")
         
+        status = promotion_data.get('status', 'неизвестно')
         logger.info(f"📊 Итого: уведомление о акции '{title}' (статус: {status}) отправлено {sent_count} пользователям, ошибок: {failed_count}")
         
     except Exception as e:

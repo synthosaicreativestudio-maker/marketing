@@ -374,7 +374,7 @@ def web_app_data_handler(auth_service: AuthService):
                     logger.info(f"Нормализованный телефон: {phone_norm}")
                     
                     # Проверяем, есть ли пользователь с таким кодом (используем async метод из auth_service)
-                    # row = await auth_service._find_row_by_partner_and_phone(partner_code, phone_norm)  # Приватный метод, пропускаем диагностику
+                    row = await auth_service._find_row_by_partner_and_phone(partner_code, phone_norm)
                     if row:
                         logger.error(f"ОШИБКА: Пользователь найден в строке {row}, но авторизация не удалась!")
                     else:
