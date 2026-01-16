@@ -7,7 +7,10 @@ This repository contains the source code for the MarketingBot, designed for high
 
 ## 📚 Documentation
 
+## 📚 Documentation / Документация
+
 **The Single Source of Truth for this project is [TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md).**
+**(Русская версия: [TECHNICAL_DOCUMENTATION_RU.md](docs/TECHNICAL_DOCUMENTATION_RU.md))**
 
 Please refer to it for:
 - Architecture Overview
@@ -15,9 +18,14 @@ Please refer to it for:
 - Business Logic
 - API & Integrations
 
+### Additional Resources
+- **TODO / Тех. Долг:** [docs/TODO.md](docs/TODO.md) ([RU](docs/TODO_RU.md))
+- **IDEAS / Идеи:** [docs/IDEAS.md](docs/IDEAS.md) ([RU](docs/IDEAS_RU.md))
+
 ## 📂 Project Structure
 
-- **`docs/TECHNICAL_DOCUMENTATION.md`** - Main technical reference.
+- **`docs/TECHNICAL_DOCUMENTATION.md`** - Main technical reference (EN).
+- **`docs/TECHNICAL_DOCUMENTATION_RU.md`** - Main technical reference (RU).
 - **`bot.py`** - Application entry point.
 - **`handlers.py`** - Telegram update handlers.
 - **`docs/CHANGELOG.md`** - Version history.

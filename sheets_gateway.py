@@ -441,3 +441,25 @@ class AsyncGoogleSheetsGateway:
             Cell объект
         """
         return await self._run_in_executor(worksheet.cell, row, col)
+
+    async def authorize_client(self) -> gspread.Client:
+        """Асинхронная авторизация клиента."""
+        def _auth():
+            from google.oauth2.service_account import Credentials
+            sa_info = _load_service_account()
+            scopes = [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
+            ]
+            creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
+            return gspread.authorize(creds)
+        
+        return await self._run_in_executor(_auth)
+
+    async def open_spreadsheet(self, client: gspread.Client, sheet_id: str) -> gspread.Spreadsheet:
+        """Асинхронное открытие таблицы."""
+        return await self._run_in_executor(client.open_by_key, sheet_id)
+
+    async def get_worksheet_async(self, spreadsheet: gspread.Spreadsheet, name: str) -> gspread.Worksheet:
+        """Асинхронное получение листа."""
+        return await self._run_in_executor(spreadsheet.worksheet, name)

@@ -104,7 +104,16 @@ async def get_active_promotions(gateway: AsyncGoogleSheetsGateway) -> List[Dict]
         return _promotions_cache['data']
 
     try:
-        _, worksheet = _get_promotions_client_and_sheet()
+        client = await gateway.authorize_client()
+        sheet_id = os.environ.get('PROMOTIONS_SHEET_ID')
+        if not sheet_id:
+            logger.error("PROMOTIONS_SHEET_ID не задан")
+            return []
+            
+        spreadsheet = await gateway.open_spreadsheet(client, sheet_id)
+        sheet_name = os.environ.get('PROMOTIONS_SHEET_NAME', 'Sheet1')
+        worksheet = await gateway.get_worksheet_async(spreadsheet, sheet_name)
+        
         records = await gateway.get_all_records(worksheet)
         
         active_promotions = []
@@ -197,7 +206,15 @@ async def check_new_promotions(gateway: AsyncGoogleSheetsGateway) -> List[Dict]:
         List[Dict]: Список новых активных акций
     """
     try:
-        _, worksheet = _get_promotions_client_and_sheet()
+        client = await gateway.authorize_client()
+        sheet_id = os.environ.get('PROMOTIONS_SHEET_ID')
+        if not sheet_id:
+            return []
+            
+        spreadsheet = await gateway.open_spreadsheet(client, sheet_id)
+        sheet_name = os.environ.get('PROMOTIONS_SHEET_NAME', 'Sheet1')
+        worksheet = await gateway.get_worksheet_async(spreadsheet, sheet_name)
+        
         records = await gateway.get_all_records(worksheet)
         
         new_promotions = []

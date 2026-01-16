@@ -253,13 +253,16 @@ def main() -> None:
     application.post_stop = post_stop
 
     # --- Глобальный обработчик ошибок для polling ---
-    def error_handler(update, context):
-        """Глобальный обработчик ошибок."""
+    async def error_handler(update: object, context: object) -> None:
+        """Глобальный асинхронный обработчик ошибок."""
         error = context.error
         
         # Логируем все ошибки
         if isinstance(error, TelegramError):
             logger.error(f"Ошибка Telegram API: {error}")
+            if "Conflict" in str(error):
+                logger.critical("⚠️ ОБНАРУЖЕН КОНФЛИКТ: Запущено несколько экземпляров бота! "
+                               "Проверьте активные процессы и systemd сервисы.")
         else:
             logger.error(f"Неожиданная ошибка: {error}", exc_info=True)
         

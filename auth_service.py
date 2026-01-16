@@ -1,10 +1,11 @@
 import logging
 import datetime
 from typing import Optional
+import os
 
 from cachetools import TTLCache
-from sheets_gateway import AsyncGoogleSheetsGateway, SheetsNotConfiguredError, CircuitBreakerOpenError
-from sheets_gateway import _get_client_and_sheet, normalize_phone
+from sheets_gateway import AsyncGoogleSheetsGateway, CircuitBreakerOpenError
+from sheets_gateway import normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -14,30 +15,30 @@ logger = logging.getLogger(__name__)
 
 class AuthService:
     def __init__(self, gateway: Optional[AsyncGoogleSheetsGateway] = None):
-        """Инициализация сервиса авторизации с AsyncGoogleSheetsGateway.
-
-        Args:
-            gateway: AsyncGoogleSheetsGateway для работы с Google Sheets (опционально)
-        """
+        """Инициализация сервиса авторизации."""
         self.worksheet = None
+        self.gateway = gateway or AsyncGoogleSheetsGateway(circuit_breaker_name='auth')
+        self.auth_cache = TTLCache(maxsize=2000, ttl=300)
         
-        # Инициализация Gateway
-        if gateway is None:
-            self.gateway = AsyncGoogleSheetsGateway(circuit_breaker_name='auth')
-        else:
-            self.gateway = gateway
-        
-        # Используем TTLCache вместо JSON файла
-        self.auth_cache = TTLCache(maxsize=2000, ttl=300)  # 5 минут TTL
-        
+        # Инициализация worksheet теперь должна вызываться через async метод initialize()
+        # Но для совместимости оставляем попытку синхронной инициализации в фоне (не блокируя)
+        import asyncio
+        asyncio.create_task(self.initialize())
+
+    async def initialize(self):
+        """Асинхронная инициализация доступа к Google Sheets."""
         try:
-            _, worksheet = _get_client_and_sheet()
-            self.worksheet = worksheet
-            logger.info("Worksheet успешно инициализирован через sheets_gateway")
-        except SheetsNotConfiguredError as e:
-            logger.critical(f"Sheets не сконфигурирован: {e}")
+            client = await self.gateway.authorize_client()
+            sheet_id = os.environ.get('SHEET_ID')
+            if not sheet_id:
+                logger.error("SHEET_ID не задан")
+                return
+            spreadsheet = await self.gateway.open_spreadsheet(client, sheet_id)
+            sheet_name = os.environ.get('SHEET_NAME', 'Sheet1')
+            self.worksheet = await self.gateway.get_worksheet_async(spreadsheet, sheet_name)
+            logger.info(f"AuthService успешно инициализирован асинхронно: {sheet_name}")
         except Exception as e:
-            logger.critical(f"Не удалось инициализировать доступ к Google Sheets: {e}")
+            logger.error(f"Ошибка асинхронной инициализации AuthService: {e}")
 
     async def find_and_update_user(self, partner_code: str, partner_phone: str, telegram_id: int) -> bool:
         """
@@ -176,25 +177,10 @@ class AuthService:
 
     def force_check_auth_status(self, telegram_id: int) -> bool:
         """
-        Принудительно проверяет статус авторизации пользователя, игнорируя кэш.
-        Используется для обновления кэша при изменении статуса в таблице.
-        
-        ВАЖНО: Этот метод синхронный для обратной совместимости.
-        Для async версии используйте get_user_auth_status.
+        СИНХРОННАЯ заглушка. Для реальной проверки используйте `await get_user_auth_status`.
         """
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Если loop уже запущен, создаем задачу
-                asyncio.create_task(self.get_user_auth_status(telegram_id))
-                # Это не идеально, но для обратной совместимости
-                return False  # Возвращаем False, так как не можем дождаться результата синхронно
-            else:
-                return loop.run_until_complete(self.get_user_auth_status(telegram_id))
-        except RuntimeError:
-            # Нет event loop, создаем новый
-            return asyncio.run(self.get_user_auth_status(telegram_id))
+        # Возвращаем текущее значение из кэша, если оно есть
+        return self.auth_cache.get(telegram_id, False)
 
     def clear_auth_cache(self, telegram_id: int = None):
         """Очищает кэш авторизации для конкретного пользователя или всех пользователей."""
