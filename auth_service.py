@@ -5,7 +5,7 @@ import os
 
 from cachetools import TTLCache
 from sheets_gateway import AsyncGoogleSheetsGateway, CircuitBreakerOpenError
-from sheets_gateway import normalize_phone
+from sheets_gateway import _get_client_and_sheet, normalize_phone
 
 logger = logging.getLogger(__name__)
 
