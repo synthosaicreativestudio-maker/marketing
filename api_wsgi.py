@@ -31,4 +31,4 @@ except ImportError:
     # Установите: pip3.10 install --user asgiref
     def application(environ, start_response):
         start_response('500 Internal Server Error', [('Content-Type', 'text/plain')])
-        return [f'Error: {str(e)}\nPlease install asgiref: pip3.10 install --user asgiref'.encode()]
+        return [b'Error: asgiref not installed\nPlease install asgiref: pip3.10 install --user asgiref']

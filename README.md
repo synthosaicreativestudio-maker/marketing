@@ -1,27 +1,37 @@
 # 🚀 MarketingBot — Профессиональный Telegram-бот
+# MarketingBot
 
-Профессиональный Telegram-бот для маркетинга с веб-авторизацией, ИИ-ассистентом и интеграцией с Google Sheets. Полнофункциональная система с модульной архитектурой и автоматическим развертыванием.
+> **Stable & Resilient Telegram Bot for Marketing Automation**
 
-## ✨ Основные возможности
+This repository contains the source code for the MarketingBot, designed for high availability and integration with Google Sheets and OpenAI.
 
-- **🤖 Telegram-бот** с полной функциональностью на Python.
-- **🌐 WebApp-интерфейс** для авторизации и личного кабинета.
-- **📊 Интеграция с Google Sheets** для управления данными.
-- **🔐 Безопасная авторизация** партнеров через WebApp.
-- **🧠 ИИ-ассистент** на базе OpenAI для ответов пользователям.
-- **📋 Система обращений** с автоматической обработкой.
-- **📊 Мониторинг ответов** и аналитика.
-- **🚀 Автоматический деплой** через GitHub Actions.
-- **🔧 Модульная архитектура** с четким разделением ответственности.
-### ✅ Подтверждено: Бот успешно запускается и функционирует
-### ✅ Подтверждено: WebApp (Mini App) работает корректно
-### ✅ Подтверждено: Интеграция с Google Sheets работает
+## 📚 Documentation
 
-## 📁 Структура проекта
+**The Single Source of Truth for this project is [TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md).**
 
+Please refer to it for:
+- Architecture Overview
+- Setup & Deployment
+- Business Logic
+- API & Integrations
+
+## 📂 Project Structure
+
+- **`docs/TECHNICAL_DOCUMENTATION.md`** - Main technical reference.
+- **`bot.py`** - Application entry point.
+- **`handlers.py`** - Telegram update handlers.
+- **`docs/CHANGELOG.md`** - Version history.
+- **`docs/archive/`** - Archived documentation.
+
+## 🚀 Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the bot
+python bot.py
 ```
-marketingbot/
-├── 🤖 bot.py                  # Основной файл бота
 ├── 🎯 handlers.py             # Обработчики команд и сообщений
 ├── 🔐 auth_service.py         # Сервис авторизации
 ├── 📊 sheets.py               # Интеграция с Google Sheets

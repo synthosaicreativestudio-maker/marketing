@@ -9,17 +9,7 @@ from sheets_gateway import _get_client_and_sheet, normalize_phone
 logger = logging.getLogger(__name__)
 
 
-def normalize_phone(phone: str) -> str:
-    """Нормализация номера телефона к формату 8XXXXXXXXXX"""
-    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())
-    if len(digits) == 10:
-        return '8' + digits
-    elif len(digits) == 11 and digits.startswith('7'):
-        return '8' + digits[1:]
-    elif len(digits) == 11 and digits.startswith('8'):
-        return digits
-    else:
-        return digits
+
 
 
 class AuthService:

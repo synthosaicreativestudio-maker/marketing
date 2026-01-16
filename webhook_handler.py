@@ -6,6 +6,7 @@ import os
 from flask import Flask, request, jsonify
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from auth_service import AuthService
+import promotions_api  # Импортируем API акций
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +20,7 @@ web_app_url = os.getenv('WEB_APP_URL', '')
 bot = Bot(token=bot_token)
 auth_service = AuthService()
 
-# Импортируем API акций
-import promotions_api
+
 
 @app.after_request
 def after_request(response):
@@ -152,6 +152,7 @@ async def send_promotion_notification(promotion_data):
         description = promotion_data.get('description', '')
         start_date = promotion_data.get('start_date', '')
         end_date = promotion_data.get('end_date', '')
+        status = promotion_data.get('status', 'неизвестно')
         
         # Формируем сообщение для акций со статусом "Активна"
         # Webhook теперь отправляется только для статуса "Активна"
