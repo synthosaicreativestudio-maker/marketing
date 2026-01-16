@@ -103,7 +103,7 @@ class ResponseMonitor:
             
             for appeal in resolved_appeals:
                 telegram_id = appeal['telegram_id']
-                row = appeal['row']
+                appeal['row']
                 
                 message = "✅ Ваше обращение отмечено как решенное специалистом."
                 
@@ -174,8 +174,6 @@ class ResponseMonitor:
         try:
             telegram_id = response_data['telegram_id']
             response_text = response_data['response']
-            telegram_id = response_data['telegram_id']
-            response_text = response_data['response']
             # fio and code are unused
             
             # Формируем сообщение о решении
@@ -208,8 +206,6 @@ class ResponseMonitor:
         try:
             telegram_id = response_data['telegram_id']
             response_text = response_data['response']
-            telegram_id = response_data['telegram_id']
-            response_text = response_data['response']
             # fio and code are unused
             
             # Формируем сообщение (без информации о пользователе)
@@ -238,10 +234,13 @@ class ResponseMonitor:
                 # Формируем ответ с выделением для специалиста
                 specialist_response = f"👨‍💼 СПЕЦИАЛИСТ: {response_text}"
                 
-                # Добавляем ответ специалиста к существующим обращениям
-                self.appeals_service.add_specialist_response(
-                    telegram_id=telegram_id,
-                    response_text=specialist_response
+                # Добавляем ответ специалиста к существующим обращениям (неблокирующий вызов)
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None,
+                    self.appeals_service.add_specialist_response,
+                    telegram_id,
+                    specialist_response
                 )
                 logger.info(f"Ответ специалиста записан в таблицу для пользователя {telegram_id}")
             except Exception as e:

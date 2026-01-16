@@ -109,7 +109,6 @@ def collect_project_code(output_file='full_project_code.txt'):
             
             level = root.replace('.', '').count(os.sep)
             indent = ' ' * 2 * level
-            rel_path = root if root != '.' else '.'
             outfile.write(f"{indent}{os.path.basename(root) or '.'}/\n")
             
             subindent = ' ' * 2 * (level + 1)
@@ -192,7 +191,7 @@ def collect_project_code(output_file='full_project_code.txt'):
             outfile.write("\nПроверьте эти файлы перед отправкой!\n")
     
     print(f"\n✅ Готово! Весь код собран в файл: {output_file}")
-    print(f"📊 Статистика:")
+    print("📊 Статистика:")
     print(f"   - Обработано файлов: {total_files}")
     print(f"   - Общий размер: {total_size / 1024 / 1024:.2f} MB")
     

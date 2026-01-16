@@ -18,6 +18,8 @@ class PromotionsNotifier:
         self.gateway = gateway
         self.last_check_time = None
         self.sent_promotions = set()  # Множество ID уже отправленных акций
+        self.is_running = False  # Флаг работы мониторинга
+        self._task = None  # Ссылка на задачу мониторинга
         
     async def check_and_send_notifications(self):
         """Проверяет новые акции и отправляет уведомления"""
@@ -190,12 +192,39 @@ class PromotionsNotifier:
     
     async def start_monitoring(self, interval_minutes: int = 15):
         """Запускает мониторинг новых акций"""
+        if self.is_running:
+            logger.warning("Мониторинг акций уже запущен")
+            return
+        
+        self.is_running = True
         logger.info(f"Запуск мониторинга акций (проверка каждые {interval_minutes} минут)")
         
-        while True:
+        self._task = asyncio.create_task(self._monitoring_loop(interval_minutes))
+    
+    async def stop_monitoring(self):
+        """Останавливает мониторинг акций"""
+        if not self.is_running:
+            return
+        
+        self.is_running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+        
+        logger.info("Мониторинг акций остановлен")
+    
+    async def _monitoring_loop(self, interval_minutes: int):
+        """Основной цикл мониторинга"""
+        while self.is_running:
             try:
                 await self.check_and_send_notifications()
                 await asyncio.sleep(interval_minutes * 60)
+            except asyncio.CancelledError:
+                logger.info("Мониторинг акций отменён")
+                break
             except Exception as e:
-                logger.error(f"Ошибка в мониторинге акций: {e}")
+                logger.error(f"Ошибка в мониторинге акций: {e}", exc_info=True)
                 await asyncio.sleep(60)  # Ждем минуту при ошибке

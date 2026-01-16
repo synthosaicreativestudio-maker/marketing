@@ -1,7 +1,6 @@
 import logging
 import datetime
-from typing import Optional, Dict
-import os
+from typing import Optional
 
 from cachetools import TTLCache
 from sheets_gateway import AsyncGoogleSheetsGateway, SheetsNotConfiguredError, CircuitBreakerOpenError
@@ -198,7 +197,7 @@ class AuthService:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 # Если loop уже запущен, создаем задачу
-                task = asyncio.create_task(self.get_user_auth_status(telegram_id))
+                asyncio.create_task(self.get_user_auth_status(telegram_id))
                 # Это не идеально, но для обратной совместимости
                 return False  # Возвращаем False, так как не можем дождаться результата синхронно
             else:

@@ -279,7 +279,7 @@ def get_authorized_users():
                     telegram_id = int(telegram_id_str)
                     authorized_users.append(telegram_id)
                     logger.debug(f"✅ Найден авторизованный пользователь: ID={telegram_id}, статус='{record.get('Статус авторизации', '')}'")
-                except (ValueError, TypeError) as e:
+                except (ValueError, TypeError):
                     logger.warning(f"⚠️ Не удалось преобразовать Telegram ID в число: '{telegram_id_str}' для записи: {record.get('ФИО партнера', 'N/A')}")
                     continue
             elif telegram_id_str:

@@ -26,7 +26,7 @@ try:
     # Обертываем FastAPI app в WSGI адаптер
     application = WsgiToAsgi(app)
     
-except ImportError as e:
+except ImportError:
     # Если адаптер не установлен, используем простой вариант
     # Установите: pip3.10 install --user asgiref
     def application(environ, start_response):

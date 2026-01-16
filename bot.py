@@ -240,6 +240,14 @@ def main() -> None:
             except Exception as e:
                 logger.error(f"Ошибка остановки мониторинга ответов: {e}")
 
+        # Остановка мониторинга акций
+        if promotions_notifier:
+            try:
+                await promotions_notifier.stop_monitoring()
+                logger.info("Мониторинг акций остановлен")
+            except Exception as e:
+                logger.error(f"Ошибка остановки мониторинга акций: {e}")
+
     # Регистрация хуков
     application.post_init = post_init
     application.post_stop = post_stop
