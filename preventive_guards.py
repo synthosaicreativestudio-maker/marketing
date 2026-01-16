@@ -6,7 +6,6 @@ import sys
 import psutil
 import logging
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +68,7 @@ class SingleInstanceGuard:
                 # Удаляем только если это наш PID
                 if current_pid == self.pid:
                     self.lockfile_path.unlink()
-                    logger.info(f"✅ SingleInstanceGuard деактивирован")
+                    logger.info("✅ SingleInstanceGuard деактивирован")
         except Exception as e:
             logger.error(f"Ошибка при удалении lock-файла: {e}")
 
@@ -198,9 +197,9 @@ def validate_environment() -> bool:
     
     if missing:
         logger.critical(
-            f"❌ КРИТИЧЕСКАЯ ОШИБКА: Отсутствуют переменные окружения:\n" +
+            "❌ КРИТИЧЕСКАЯ ОШИБКА: Отсутствуют переменные окружения:\n" +
             "\n".join(f"  - {var}" for var in missing) +
-            f"\n\nПроверьте файл .env!"
+            "\n\nПроверьте файл .env!"
         )
         return False
     
