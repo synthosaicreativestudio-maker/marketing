@@ -20,10 +20,13 @@ class AuthService:
         self.gateway = gateway or AsyncGoogleSheetsGateway(circuit_breaker_name='auth')
         self.auth_cache = TTLCache(maxsize=2000, ttl=300)
         
-        # Инициализация worksheet теперь должна вызываться через async метод initialize()
-        # Но для совместимости оставляем попытку синхронной инициализации в фоне (не блокируя)
-        import asyncio
-        asyncio.create_task(self.initialize())
+        # Синхронная инициализация для обратной совместимости
+        try:
+            _, worksheet = _get_client_and_sheet()
+            self.worksheet = worksheet
+            logger.info("Worksheet успешно инициализирован через sheets_gateway")
+        except Exception as e:
+            logger.error(f"Не удалось инициализировать worksheet: {e}")
 
     async def initialize(self):
         """Асинхронная инициализация доступа к Google Sheets."""

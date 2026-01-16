@@ -5,9 +5,9 @@
 
 import logging
 import datetime
-import os
 from typing import Optional, List, Dict
 from sheets_gateway import (
+    _get_appeals_client_and_sheet,
     AsyncGoogleSheetsGateway,
     CircuitBreakerOpenError
 )
@@ -23,24 +23,14 @@ class AppealsService:
         self.worksheet = None
         self.gateway = gateway or AsyncGoogleSheetsGateway(circuit_breaker_name='appeals')
         
-        # Асинхронная инициализация
-        import asyncio
-        asyncio.create_task(self.initialize())
-
-    async def initialize(self):
-        """Асинхронная инициализация доступа к Google Sheets."""
+        # Синхронная инициализация
         try:
-            client = await self.gateway.authorize_client()
-            sheet_id = os.environ.get('APPEALS_SHEET_ID')
-            if not sheet_id:
-                logger.error("APPEALS_SHEET_ID не задан")
-                return
-            spreadsheet = await self.gateway.open_spreadsheet(client, sheet_id)
-            sheet_name = os.environ.get('APPEALS_SHEET_NAME', 'обращения')
-            self.worksheet = await self.gateway.get_worksheet_async(spreadsheet, sheet_name)
-            logger.info(f"AppealsService успешно инициализирован асинхронно: {sheet_name}")
+            client, worksheet = _get_appeals_client_and_sheet()
+            self.worksheet = worksheet
+            if self.worksheet:
+                logger.info(f"Лист 'обращения' найден: {self.worksheet.title}")
         except Exception as e:
-            logger.error(f"Ошибка асинхронной инициализации AppealsService: {e}")
+            logger.error(f"Не удалось инициализировать лист 'обращения': {e}")
 
     def is_available(self) -> bool:
         """Проверяет доступность сервиса обращений."""
