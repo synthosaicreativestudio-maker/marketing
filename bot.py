@@ -28,6 +28,14 @@ from appeals_service import AppealsService  # noqa: E402
 from bot_health_monitor import BotHealthMonitor  # noqa: E402
 from sheets_gateway import AsyncGoogleSheetsGateway  # noqa: E402
 
+# Превентивные механизмы
+try:
+    from preventive_guards import SingleInstanceGuard, validate_environment  # noqa: E402
+    PREVENTIVE_GUARDS_AVAILABLE = True
+except ImportError:
+    logger.warning("Превентивные механизмы не доступны")
+    PREVENTIVE_GUARDS_AVAILABLE = False
+
 # Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -87,6 +95,25 @@ atexit.register(cleanup_on_exit)
 
 def main() -> None:
     """Основная функция для инициализации и запуска бота."""
+    global application_instance, response_monitor_instance
+    global promotions_notifier_instance, health_monitor_instance
+    
+    # Превентивные механизмы
+    if PREVENTIVE_GUARDS_AVAILABLE:
+        # Валидация окружения
+        if not validate_environment():
+            logger.critical("Некорректная конфигурация! Бот не может быть запущен.")
+            sys.exit(1)
+        
+        # Защита от дублирования процессов (409 Conflict)
+        with SingleInstanceGuard():
+            _run_bot_main()
+    else:
+        _run_bot_main()
+
+
+def _run_bot_main():
+    """Внутренняя функция запуска бота."""
     global application_instance, response_monitor_instance
     global promotions_notifier_instance, health_monitor_instance
     
