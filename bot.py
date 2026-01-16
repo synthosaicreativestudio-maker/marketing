@@ -277,7 +277,7 @@ def main() -> None:
             application.run_polling(
                 stop_signals=(signal.SIGINT, signal.SIGTERM),
                 allowed_updates=None,
-                drop_pending_updates=False,
+                drop_pending_updates=True,  # Сбрасываем конфликтующие сессии
                 close_loop=False  # Не закрываем loop при остановке
             )
             # Если polling завершился нормально, выходим
