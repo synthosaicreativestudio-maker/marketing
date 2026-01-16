@@ -61,6 +61,7 @@ logs/
 *.log
 *.tmp
 *.temp
+*.bak
 .cache/
 .pytest_cache/
 .coverage
