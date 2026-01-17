@@ -19,6 +19,13 @@ from telegram.error import TelegramError
 # Загружаем .env как можно раньше, до импортов, читающих переменные окружения
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 
+# Настройка логирования сразу после загрузки .env
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
 from auth_service import AuthService  # noqa: E402
 from handlers import setup_handlers  # noqa: E402
 from openai_service import OpenAIService  # noqa: E402
@@ -35,13 +42,6 @@ try:
 except ImportError:
     logger.warning("Превентивные механизмы не доступны")
     PREVENTIVE_GUARDS_AVAILABLE = False
-
-# Настройка логирования
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
 
 # Глобальные переменные для graceful shutdown
 application_instance = None
@@ -304,12 +304,16 @@ def _run_bot_main():
     
     while restart_count < max_restart_attempts:
         try:
+            logger.info("Начинается polling для получения обновлений от Telegram...")
             application.run_polling(
+                poll_interval=0.0,  # Немедленная обработка обновлений без задержки
+                timeout=10,  # Таймаут long polling запроса
                 stop_signals=(signal.SIGINT, signal.SIGTERM),
-                allowed_updates=None,
-                drop_pending_updates=True,  # Сбрасываем конфликтующие сессии
+                allowed_updates=None,  # Принимаем все типы обновлений
+                drop_pending_updates=True,  # Сбрасываем устаревшие обновления при старте
                 close_loop=False  # Не закрываем loop при остановке
             )
+            logger.info("Polling завершен нормально")
             # Если polling завершился нормально, выходим
             break
             
