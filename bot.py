@@ -205,9 +205,14 @@ def _run_bot_main():
     # Инициализация монитора здоровья
     try:
         logger.info("Инициализация BotHealthMonitor...")
-        health_monitor = BotHealthMonitor(application.bot, check_interval=300)
+        health_monitor = BotHealthMonitor(
+            application.bot, 
+            check_interval=300,
+            sheets_gateway=auth_gateway,
+            auth_service=auth_service
+        )
         health_monitor_instance = health_monitor
-        logger.info("BotHealthMonitor готов к работе")
+        logger.info("BotHealthMonitor готов к работе (с мониторингом Google Sheets)")
     except Exception as e:
         logger.error(f"Ошибка инициализации BotHealthMonitor: {e}", exc_info=True)
         health_monitor = None

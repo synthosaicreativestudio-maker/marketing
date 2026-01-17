@@ -14,13 +14,21 @@ logger = logging.getLogger(__name__)
 class BotHealthMonitor:
     """Мониторинг здоровья бота и автоматическое восстановление."""
     
-    def __init__(self, bot: Bot, check_interval: int = 300):
+    def __init__(
+        self, 
+        bot: Bot, 
+        check_interval: int = 300,
+        sheets_gateway=None,
+        auth_service=None
+    ):
         """
         Инициализация монитора здоровья.
         
         Args:
             bot: Экземпляр Telegram бота
             check_interval: Интервал проверки здоровья в секундах (по умолчанию 5 минут)
+            sheets_gateway: Gateway для Google Sheets (опционально)
+            auth_service: AuthService для переподключения (опционально)
         """
         self.bot = bot
         self.check_interval = check_interval
@@ -29,6 +37,12 @@ class BotHealthMonitor:
         self.last_successful_check = time.time()
         self.consecutive_failures = 0
         self.max_failures = 3
+        
+        # Для мониторинга Google Sheets
+        self.sheets_gateway = sheets_gateway
+        self.auth_service = auth_service
+        self.sheets_consecutive_failures = 0
+        self.last_sheets_reconnect = time.time()
         
     async def start_monitoring(self):
         """Запускает мониторинг здоровья."""
@@ -77,7 +91,10 @@ class BotHealthMonitor:
                             f"КРИТИЧЕСКОЕ: Бот не отвечает после {self.max_failures} попыток. "
                             f"Последняя успешная проверка: {time.time() - self.last_successful_check:.0f} сек назад"
                         )
-                        # Здесь можно добавить уведомление администратору
+                
+                # Проверяем Google Sheets (если настроено)
+                if self.auth_service:
+                    await self._check_and_reconnect_sheets()
                         
                 await asyncio.sleep(self.check_interval)
                 
@@ -108,4 +125,60 @@ class BotHealthMonitor:
             return False
         except Exception as e:
             logger.error(f"Неожиданная ошибка при проверке здоровья бота: {e}", exc_info=True)
+            return False
+    
+    async def _check_and_reconnect_sheets(self):
+        """
+        Проверяет доступность Google Sheets и автоматически переподключается при проблемах.
+        """
+        try:
+            # Проверяем, есть ли worksheet
+            if not self.auth_service.worksheet:
+                self.sheets_consecutive_failures += 1
+                logger.warning(
+                    f"⚠️  Google Sheets недоступен "
+                    f"(подряд ошибок: {self.sheets_consecutive_failures})"
+                )
+                
+                # Пытаемся переподключиться не чаще чем раз в 2 минуты
+                time_since_last_reconnect = time.time() - self.last_sheets_reconnect
+                if time_since_last_reconnect > 120:
+                    logger.info("🔄 Попытка переподключения к Google Sheets...")
+                    await self._reconnect_sheets()
+                    self.last_sheets_reconnect = time.time()
+                else:
+                    logger.debug(
+                        f"Пропуск переподключения (последнее было {time_since_last_reconnect:.0f} сек назад)"
+                    )
+            else:
+                # Sheets доступен
+                if self.sheets_consecutive_failures > 0:
+                    logger.info("✅ Google Sheets восстановлен")
+                self.sheets_consecutive_failures = 0
+                
+        except Exception as e:
+            logger.error(f"Ошибка при проверке Google Sheets: {e}", exc_info=True)
+    
+    async def _reconnect_sheets(self):
+        """
+        Попытка переподключения к Google Sheets.
+        """
+        try:
+            from sheets_gateway import _get_client_and_sheet
+            
+            # Пытаемся переподключиться синхронно
+            logger.info("Переподключение к Google Sheets...")
+            _, worksheet = _get_client_and_sheet()
+            
+            if worksheet:
+                self.auth_service.worksheet = worksheet
+                logger.info("✅ Google Sheets успешно переподключен")
+                self.sheets_consecutive_failures = 0
+                return True
+            else:
+                logger.warning("⚠️  Не удалось переподключить Google Sheets")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка переподключения к Google Sheets: {e}")
             return False
