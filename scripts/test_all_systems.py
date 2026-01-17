@@ -40,7 +40,7 @@ def test_sheets_connection():
     """Тест подключения к Google Sheets"""
     print("=== ТЕСТ 2: Google Sheets Connection ===")
     try:
-        from sheets_gateway import AsyncGoogleSheetsGateway, _get_client_and_sheet
+        from sheets_gateway import _get_client_and_sheet
         
         # Синхронная проверка
         try:
@@ -80,7 +80,7 @@ def test_services():
         try:
             auth = AuthService()
             if auth.worksheet:
-                print(f"✅ AuthService: worksheet готов")
+                print("✅ AuthService: worksheet готов")
             else:
                 print("⚠️  AuthService: worksheet не инициализирован")
         except Exception as e:
@@ -91,7 +91,7 @@ def test_services():
         try:
             appeals = AppealsService()
             if appeals.worksheet:
-                print(f"✅ AppealsService: worksheet готов")
+                print("✅ AppealsService: worksheet готов")
             else:
                 print("⚠️  AppealsService: worksheet не инициализирован")
         except Exception as e:
