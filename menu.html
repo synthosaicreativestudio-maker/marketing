@@ -897,7 +897,7 @@
                     
                     // Добавляем timeout только если поддерживается
                     if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
-                        fetchOptions.signal = AbortSignal.timeout(20000); // Увеличиваем до 20 секунд для GAS
+                        fetchOptions.signal = AbortSignal.timeout(40000); // Увеличен до 40 секунд для мобильных устройств
                     }
                     
                     let response;
