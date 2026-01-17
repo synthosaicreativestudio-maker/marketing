@@ -191,7 +191,7 @@ class AppealsService:
     def _truncate_to_gs_limit(self, text: str, limit: int = 25000) -> str:
         """
         Ограничивает длину текста для одной ячейки Google Sheets (лимит 50% от максимума = 25k символов).
-        Сохраняем последние сообщения, добавляя пометку об усечении.
+        Сохраняем новые сообщения (в начале текста), добавляя пометку об усечении в конце.
         """
         try:
             if text is None:
@@ -200,7 +200,8 @@ class AppealsService:
                 return text
             suffix = "\n[...] (усечено до лимита Google Sheets)"
             keep = max(0, limit - len(suffix))
-            return text[-keep:] + suffix
+            # Берем первые символы (новые записи сверху), а не последние
+            return text[:keep] + suffix
         except Exception:
             return text[:limit]
 
