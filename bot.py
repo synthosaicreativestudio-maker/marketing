@@ -140,11 +140,15 @@ def _run_bot_main():
         logger.info("Инициализация AuthService с Gateway...")
         auth_service = AuthService(gateway=auth_gateway)
         if not auth_service.worksheet:
-            logger.critical("Не удалось инициализировать доступ к Google Sheets. Проверьте SHEET_ID/GCP_SA_JSON.")
-            sys.exit(1)
+            logger.warning("⚠️  Google Sheets недоступен при инициализации AuthService.")
+            logger.warning("⚠️  Бот продолжит работу с ограниченной функциональностью.")
+            logger.warning("⚠️  Авторизация будет работать из кэша, если пользователь уже авторизован.")
+            # НЕ КРАШИМ БОТ! Продолжаем работу
     except Exception as e:
-        logger.critical(f"Критическая ошибка инициализации AuthService: {e}", exc_info=True)
-        sys.exit(1)
+        logger.error(f"Ошибка инициализации AuthService: {e}", exc_info=True)
+        logger.warning("⚠️  AuthService инициализирован с ограничениями. Бот продолжит работу.")
+        # Создаем заглушку с пустым gateway
+        auth_service = AuthService(gateway=auth_gateway)
 
     # Инициализация OpenAI (опционально)
     try:
