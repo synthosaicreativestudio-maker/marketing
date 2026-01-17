@@ -122,3 +122,7 @@ sheet_summary*.json
 db/*.db
 db/*.sqlite
 db/*.sqlite3
+# Audit files
+full_audit_dump.txt
+server_stats.txt
+audit_collector.py
