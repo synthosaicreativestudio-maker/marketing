@@ -126,3 +126,12 @@ db/*.sqlite3
 full_audit_dump.txt
 server_stats.txt
 audit_collector.py
+
+# Extended audit files
+extended_audit.zip
+TOTAL_DUMP.txt
+server_health.txt
+kill_test_results.txt
+total_audit.py
+EXTENDED_AUDIT_REPORT.md
+AUDIT_README.md
