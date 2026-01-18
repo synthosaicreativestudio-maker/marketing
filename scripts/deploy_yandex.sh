@@ -7,7 +7,7 @@
 set -e
 
 VM_USER="ubuntu"
-VM_HOST="158.160.0.127"
+VM_HOST="84.252.137.116"
 SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599}"
 REMOTE_DIR="/home/ubuntu/marketingbot"
 REPO_URL="https://github.com/synthosaicreativestudio-maker/marketing.git"

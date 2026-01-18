@@ -49,7 +49,7 @@ echo ""
 # 4. Деплой на сервер
 echo "4️⃣ Деплой на сервер Yandex Cloud..."
 SERVER_USER="ubuntu"
-SERVER_HOST="158.160.0.127"
+SERVER_HOST="84.252.137.116"
 SSH_KEY="$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599"
 
 ssh -i "$SSH_KEY" "${SERVER_USER}@${SERVER_HOST}" << 'ENDSSH'
