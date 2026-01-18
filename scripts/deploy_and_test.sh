@@ -56,6 +56,8 @@ ssh -i "$SSH_KEY" "${SERVER_USER}@${SERVER_HOST}" << 'ENDSSH'
 cd /home/ubuntu/marketingbot
 echo "Обновление кода..."
 git pull
+echo "Обновление зависимостей..."
+/home/ubuntu/marketingbot/.venv/bin/pip install -r requirements.txt
 echo "Перезапуск бота..."
 sudo systemctl restart marketingbot-bot.service
 echo "Ожидание запуска..."
