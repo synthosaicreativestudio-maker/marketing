@@ -167,10 +167,10 @@ class GeminiService:
                 ]
             )
             
-            # Отправляем запрос в Gemini
+            # Отправляем запрос в Gemini (ASYNC)
             logger.info(f"Sending request to Gemini for user {user_id} (tools active)")
             
-            response = self.client.models.generate_content(
+            response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=history,
                 config=config
@@ -209,8 +209,8 @@ class GeminiService:
                 function_content = types.Content(role="tool", parts=[function_response_part])
                 self.user_histories[user_id].append(function_content)
                 
-                # Повторный запрос с результатом
-                response = self.client.models.generate_content(
+                # Повторный запрос с результатом (ASYNC)
+                response = await self.client.aio.models.generate_content(
                     model=self.model_name,
                     contents=self.user_histories[user_id],
                     config=config
