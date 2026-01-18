@@ -711,20 +711,30 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
             
             # Очищаем текст от технического тега и лишнего Markdown
             clean_reply = reply.replace(escalation_tag, "").strip()
-            # Дополнительная очистка от Markdown артефактов
-            display_reply = clean_reply.replace('*', '').replace('_', '').replace('`', '')
+            # УБРАНА вредоносная очистка replace('_', '') которая ломала ссылки
             
             # Отправляем ответ ИИ пользователю
             try:
                 if is_escalation_triggered:
                     # Если сработал триггер - добавляем кнопку специалиста
-                    await update.message.reply_text(
-                        display_reply,
-                        reply_markup=create_specialist_button()
-                    )
+                    try:
+                        await update.message.reply_text(
+                            clean_reply,
+                            reply_markup=create_specialist_button(),
+                            parse_mode='Markdown'
+                        )
+                    except Exception:
+                        await update.message.reply_text(
+                            clean_reply,
+                            reply_markup=create_specialist_button(),
+                            parse_mode=None
+                        )
                     logger.info(f"Ответ ИИ отправлен с кнопкой эскалации для {user.id}")
                 else:
-                    await update.message.reply_text(display_reply)
+                    try:
+                        await update.message.reply_text(clean_reply, parse_mode='Markdown')
+                    except Exception:
+                        await update.message.reply_text(clean_reply, parse_mode=None)
                     logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
             except Exception as e:
                 logger.error(f"Ошибка отправки ответа ИИ: {e}")
