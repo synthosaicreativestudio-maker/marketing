@@ -89,7 +89,7 @@ class GeminiService:
         # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
         # В knowledge_base.py мы используем 'models/gemini-1.5-pro-001' (или flash).
         # Проверим, что используется.
-        self.model_name = "gemini-1.5-pro-001" 
+        self.model_name = "gemini-1.5-pro" 
         self.max_history_messages = 10  # Храним последние 10 сообщений + 2pinned
 
     async def initialize(self):
