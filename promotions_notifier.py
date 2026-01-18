@@ -166,9 +166,31 @@ class PromotionsNotifier:
                 return
                 
             for promotion in new_promotions:
-                if promotion['id'] not in self.sent_promotions:
-                    await self._send_promotion_notification(promotion, authorized_users)
-                    self.sent_promotions.add(promotion['id'])
+                # 1. Отправляем уведомления
+                await self._send_promotion_notification(promotion, authorized_users)
+                
+                # 2. Маркируем как SENT в таблице (Дедупликация)
+                row_index = promotion.get('row_index')
+                col_index = promotion.get('status_col_index')
+                
+                if row_index and col_index:
+                    try:
+                        # Получаем worksheet (для этого нам нужен spreadsheet_id и название из окружения)
+                        import os
+                        sheet_id = os.environ.get('PROMOTIONS_SHEET_ID')
+                        sheet_name = os.environ.get('PROMOTIONS_SHEET_NAME', 'Sheet1')
+                        
+                        client = await self.gateway.authorize_client()
+                        spreadsheet = await self.gateway.open_spreadsheet(client, sheet_id)
+                        worksheet = await self.gateway.get_worksheet_async(spreadsheet, sheet_name)
+                        
+                        await self.gateway.update_cell(worksheet, row_index, col_index, 'SENT')
+                        logger.info(f"Акция в строке {row_index} помечена как SENT")
+                    except Exception as e:
+                        logger.error(f"Не удалось обновить статус SENT в строке {row_index}: {e}")
+                
+                # 3. Добавляем в локальный кэш (на всякий случай)
+                self.sent_promotions.add(promotion['id'])
                     
         except Exception as e:
             logger.error(f"Ошибка при проверке уведомлений: {e}")

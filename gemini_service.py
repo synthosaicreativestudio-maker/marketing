@@ -21,9 +21,6 @@ class GeminiService:
 
     def __init__(self) -> None:
         api_key = os.getenv("GEMINI_API_KEY")
-        # Американский прокси для обхода GeoIP (ТЗ Блок А-3)
-        proxy_url = os.getenv("OPENAI_PROXY_URL") # Используем уже настроенный прокси
-        
         if not api_key:
             logger.warning("GeminiService disabled: missing GEMINI_API_KEY")
             self.client = None

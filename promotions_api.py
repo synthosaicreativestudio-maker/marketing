@@ -215,29 +215,49 @@ async def check_new_promotions(gateway: AsyncGoogleSheetsGateway) -> List[Dict]:
         sheet_name = os.environ.get('PROMOTIONS_SHEET_NAME', 'Sheet1')
         worksheet = await gateway.get_worksheet_async(spreadsheet, sheet_name)
         
+        # Получаем заголовки для определения индекса колонки статуса
+        headers = await gateway.row_values(worksheet, 1)
+        status_col_name = 'NOTIFICATION_STATUS'
+        
+        try:
+            status_col_index = headers.index(status_col_name) + 1
+        except ValueError:
+            # Если колонки нет, считаем, что это следующая за последней
+            status_col_index = len(headers) + 1
+            # Добавим заголовок, если его нет (чтобы get_all_records видел колонку)
+            await gateway.update_cell(worksheet, 1, status_col_index, status_col_name)
+            logger.info(f"Добавлена колонка {status_col_name} в таблицу акций (индекс {status_col_index})")
+        
         records = await gateway.get_all_records(worksheet)
         
         new_promotions = []
         
-        for record in records:
-            # Проверяем статус акции
+        # Используем enumerate для отслеживания индекса строки (row_index)
+        # Данные начинаются со 2-й строки
+        for i, record in enumerate(records, start=2):
+            # Шаг 1: Проверка статуса (Дедупликация)
+            notification_status = str(record.get(status_col_name, '')).strip()
+            if notification_status == 'SENT':
+                continue # Пропускаем, уже отправляли
+                
+            # Проверяем статус акции (Активна ли она вообще)
             status = str(record.get('Статус', '')).strip()
             if status.lower() == 'активна':
-                # Проверяем, есть ли дата релиза (когда акция стала активной)
+                # Проверяем дату релиза
                 release_date = str(record.get('Дата релиза', '')).strip()
                 if release_date and release_date != 'None':
-                    # Проверяем, что акция была опубликована сегодня
                     try:
                         release_dt = datetime.strptime(release_date, '%d.%m.%Y').date()
                         today = date.today()
                         
-                        if release_dt == today:
-                            # Используем ту же логику формирования ID, что и в get_active_promotions
+                        # Мы отправляем только сегодняшние или будущие, если они еще не SENT
+                        if release_dt <= today:
                             title = str(record.get('Название', '')).strip()
                             description = str(record.get('Описание', '')).strip()
                             start_date = str(record.get('Дата начала', ''))
                             end_date = str(record.get('Дата окончания', ''))
                             content = str(record.get('Контент', '')).strip()
+                            link = str(record.get('Ссылка', '')).strip()
                             
                             if not title or title == 'None' or title == '':
                                 title = f"Акция {description}" if description and description != 'None' else "Акция без названия"
@@ -251,21 +271,24 @@ async def check_new_promotions(gateway: AsyncGoogleSheetsGateway) -> List[Dict]:
                                 'status': status,
                                 'start_date': start_date,
                                 'end_date': end_date,
-                                'release_date': release_date
+                                'release_date': release_date,
+                                'link': link,
+                                'row_index': i, # Сохраняем индекс для последующей пометки SENT
+                                'status_col_index': status_col_index
                             }
                             
-                            # Добавляем контент, если он есть
+                            # Добавляем контент
                             if content and content != 'None' and content != '':
                                 promotion['content'] = content
                             
                             if promotion['title'] and promotion['title'] != 'None':
                                 new_promotions.append(promotion)
-                                logger.info(f"Найдена новая акция: {promotion['title']} (релиз: {release_date})")
+                                logger.info(f"Найдена новая акция для рассылки: {promotion['title']} (строка {i})")
                     except ValueError as e:
-                        logger.warning(f"Ошибка парсинга даты релиза '{release_date}': {e}")
+                        logger.warning(f"Ошибка парсинга даты релиза '{release_date}' в строке {i}: {e}")
                         continue
         
-        logger.info(f"Всего найдено новых акций: {len(new_promotions)}")
+        logger.info(f"Всего найдено новых акций для отправки: {len(new_promotions)}")
         return new_promotions
         
     except (PromotionsNotConfiguredError, SheetsNotConfiguredError, CircuitBreakerOpenError) as e:
