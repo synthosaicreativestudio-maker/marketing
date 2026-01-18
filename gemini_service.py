@@ -29,15 +29,11 @@ class GeminiService:
             self.client = None
         else:
             try:
-                # Инициализация клиента Google GenAI с поддержкой прокси (через http_options)
-                # ТЗ требование 3: Весь трафик через американский сервер
-                http_options = None
-                if proxy_url:
-                    http_options = {"proxy": proxy_url}
-                    logger.info("GeminiService: using proxy for network connectivity")
-                
-                self.client = genai.Client(api_key=api_key, http_options=http_options)
-                logger.info("GeminiService initialized successfully")
+                # В google-genai SDK прокси подхватывается автоматически из окружения (HTTP_PROXY/HTTPS_PROXY)
+                # Переменные уже прописаны в .env и подгружаются systemd.
+                # Явное указание в HttpOptions вызывало ошибку валидации.
+                self.client = genai.Client(api_key=api_key)
+                logger.info("GeminiService initialized successfully (proxy managed by env)")
             except Exception as e:
                 logger.error(f"Failed to initialize GeminiService: {e}", exc_info=True)
                 self.client = None
