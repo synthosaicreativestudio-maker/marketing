@@ -44,6 +44,13 @@ class GeminiService:
         system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
         self.system_instruction = None
         
+        # Инициализация Knowledge Base (RAG)
+        from drive_service import DriveService
+        from knowledge_base import KnowledgeBase
+        
+        self.drive_service = DriveService()
+        self.knowledge_base = KnowledgeBase(self.drive_service)
+        
         # Проверка существования файла промпта
         if os.path.exists(system_prompt_path):
             try:
@@ -79,8 +86,16 @@ class GeminiService:
         self.user_histories: Dict[int, List[types.Content]] = {}
         
         # Настройки модели
-        self.model_name = "gemini-3-pro-preview"
+        # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
+        # В knowledge_base.py мы используем 'models/gemini-1.5-pro-001' (или flash).
+        # Проверим, что используется.
+        self.model_name = "gemini-1.5-pro-001" 
         self.max_history_messages = 10  # Храним последние 10 сообщений + 2pinned
+
+    async def initialize(self):
+        """Async init for Knowledge Base."""
+        if self.knowledge_base:
+            await self.knowledge_base.initialize()
 
     def is_enabled(self) -> bool:
         """Проверяет, доступен ли сервис."""
@@ -156,30 +171,47 @@ class GeminiService:
                 )]
             )]
             
-            # Конфигурация генерации для Gemini 3 Pro
-            config = types.GenerateContentConfig(
-                temperature=1.0,
-                max_output_tokens=2000,
-                top_p=0.95,
-                top_k=40,
-                tools=tools,
-                safety_settings=[
+            # Проверяем наличие активного кэша
+            cache_name = await self.knowledge_base.get_cache_name()
+            
+            # Конфигурация генерации
+            config_params = {
+                'temperature': 0.7, # Чуть строже для RAG
+                'max_output_tokens': 2000,
+                'top_p': 0.95,
+                'top_k': 40,
+                'tools': tools,
+                'safety_settings': [
                     types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
                     types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
                     types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
                     types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
                     types.SafetySetting(category="HARM_CATEGORY_CIVIC_INTEGRITY", threshold="BLOCK_NONE"),
                 ]
-            )
+            }
+            
+            # Если кэша нет - используем System Instruction в конфиге
+            if not cache_name:
+                config_params['system_instruction'] = self.system_instruction
+                logger.info(f"Using Standard System Prompt (No Cache) for user {user_id}")
+            else:
+                logger.info(f"Using Cached Context {cache_name} for user {user_id}")
+                
+            config = types.GenerateContentConfig(**config_params)
             
             # Отправляем запрос в Gemini (ASYNC)
             logger.info(f"Sending request to Gemini for user {user_id} (tools active)")
             
-            response = await self.client.aio.models.generate_content(
-                model=self.model_name,
-                contents=history,
-                config=config
-            )
+            # Аргументы для generate_content
+            generate_kwargs = {
+                'model': self.model_name,
+                'contents': history,
+                'config': config
+            }
+            if cache_name:
+                generate_kwargs['cached_content'] = cache_name
+            
+            response = await self.client.aio.models.generate_content(**generate_kwargs)
             
             # Обработка Function Calls (цикл в случае цепочки вызовов)
             # Примечание: В текущем google-genai SDK 1.0+ response.candidates[0].content.parts
@@ -215,11 +247,9 @@ class GeminiService:
                 self.user_histories[user_id].append(function_content)
                 
                 # Повторный запрос с результатом (ASYNC)
-                response = await self.client.aio.models.generate_content(
-                    model=self.model_name,
-                    contents=self.user_histories[user_id],
-                    config=config
-                )
+                # Важно: Здесь тоже передаем cached_content если он есть!
+                # Иначе модель может "забыть" контекст кэша.
+                response = await self.client.aio.models.generate_content(**generate_kwargs)
                 candidate = response.candidates[0]
 
             # Финальный текст
@@ -229,14 +259,14 @@ class GeminiService:
                 # Добавляем ответ модели в историю
                 self._add_to_history(user_id, "model", reply_text)
                 
-                logger.info(f"Received final response from Gemini (history size: {len(self.user_histories[user_id])})")
+                logger.info(f"Received final response from Gemini (history size: {len(self.user_histories[user_id])}) for user {user_id}")
                 return reply_text
             else:
                 logger.warning(f"Empty response from Gemini for user {user_id}")
-                return None
+                return "Извините, я не смог сформировать ответ."
                 
         except Exception as e:
-            logger.error(f"Error calling Gemini API for user {user_id}: {e}", exc_info=True)
+            logger.error(f"Error interacting with Gemini: {e}", exc_info=True)
             return None
 
     def clear_history(self, user_id: int) -> None:

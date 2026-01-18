@@ -233,6 +233,15 @@ def _run_bot_main():
         """Инициализация мониторинга после запуска приложения."""
         import asyncio
         
+        # Initialize RAG (Knowledge Base) if using Gemini
+        # Используем глобальную переменную или из замыкания (ai_service доступен)
+        if ai_service.provider == "Gemini" and ai_service.service and hasattr(ai_service.service, 'initialize'):
+            try:
+                await ai_service.service.initialize()
+                logger.info("Knowledge Base initialization triggered")
+            except Exception as e:
+                logger.error(f"Failed to initialize Knowledge Base: {e}")
+        
         # Запуск мониторинга здоровья
         if health_monitor:
             try:
