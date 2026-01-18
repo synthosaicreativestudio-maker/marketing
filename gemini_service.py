@@ -21,14 +21,22 @@ class GeminiService:
 
     def __init__(self) -> None:
         api_key = os.getenv("GEMINI_API_KEY")
+        # Американский прокси для обхода GeoIP (ТЗ Блок А-3)
+        proxy_url = os.getenv("OPENAI_PROXY_URL") # Используем уже настроенный прокси
         
         if not api_key:
             logger.warning("GeminiService disabled: missing GEMINI_API_KEY")
             self.client = None
         else:
             try:
-                # Инициализация клиента Google GenAI
-                self.client = genai.Client(api_key=api_key)
+                # Инициализация клиента Google GenAI с поддержкой прокси (через http_options)
+                # ТЗ требование 3: Весь трафик через американский сервер
+                http_options = None
+                if proxy_url:
+                    http_options = {"proxy": proxy_url}
+                    logger.info("GeminiService: using proxy for network connectivity")
+                
+                self.client = genai.Client(api_key=api_key, http_options=http_options)
                 logger.info("GeminiService initialized successfully")
             except Exception as e:
                 logger.error(f"Failed to initialize GeminiService: {e}", exc_info=True)
@@ -54,7 +62,7 @@ class GeminiService:
         
         # Настройки модели
         self.model_name = "gemini-3-pro-preview"
-        self.max_history_messages = 10  # Храним только последние 10 сообщений
+        self.max_history_messages = 10  # Храним последние 10 сообщений + 2pinned
 
     def is_enabled(self) -> bool:
         """Проверяет, доступен ли сервис."""
@@ -63,32 +71,32 @@ class GeminiService:
     def _get_or_create_history(self, user_id: int) -> List[types.Content]:
         """Получает или создает историю для пользователя.
         
-        Для Gemini 3 первое сообщение - это системный промпт как 'user' роль.
+        Реализация Context Injection (ТЗ Блок А-1):
+        Вместо системного параметра вставляем 2 фейковых сообщения.
         """
         if user_id not in self.user_histories:
             self.user_histories[user_id] = []
-            # Добавляем системный промпт как первое сообщение
+            # Добавляем системный промпт как первое сообщение (Role: User)
             if self.system_instruction:
-                # Системный промпт от имени пользователя
                 self.user_histories[user_id].append(
                     types.Content(
                         role="user",
                         parts=[types.Part(text=self.system_instruction)]
                     )
                 )
-                # Подтверждение от модели
+                # Подтверждение от модели (Role: Model)
                 self.user_histories[user_id].append(
                     types.Content(
                         role="model",
-                        parts=[types.Part(text="Понял, я — ассистент компании «Этажи». Готов помогать согласно вашим инструкциям.")]
+                        parts=[types.Part(text="Принято. Я работаю в режиме маркетингового ассистента Этажей. Готов к вопросам.")]
                     )
                 )
-            logger.info(f"Created new chat history for user {user_id}")
+            logger.info(f"Created new chat history for user {user_id} with Fake History Injection")
         
         return self.user_histories[user_id]
 
     def _add_to_history(self, user_id: int, role: str, content: str) -> None:
-        """Добавляет сообщение в историю с ограничением размера."""
+        """Добавляет сообщение в историю с защитой Context Pinning (ТЗ Блок А-2)."""
         history = self._get_or_create_history(user_id)
         
         # Добавляем новое сообщение
@@ -99,14 +107,12 @@ class GeminiService:
             )
         )
         
-        # Ограничиваем размер истории
-        # Учитываем, что первые 2 сообщения — это системный контекст (Pinning)
-        # КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО удалять сообщения с индексами 0 и 1
+        # Ограничение размера истории с защитой индексов 0 и 1
+        # Новая история = [Msg0, Msg1] + [Последние 10 сообщений]
         if len(history) > self.max_history_messages + 2:
-            # Удаляем самое старое реальное сообщение (индекс 2)
-            # history[:2] (инструкции) + history[3:] (диалог)
+            # Удаляем самое старое сообщение послеPinned (индекс 2)
             history.pop(2)
-            logger.debug(f"Removed oldest диалог message (index 2) for user {user_id}, pinned context preserved")
+            logger.debug(f"History Pinning: removed message at index 2 for user {user_id}. Context preserved.")
 
     def ask(self, user_id: int, content: str) -> Optional[str]:
         """Отправляет запрос в Gemini и возвращает ответ.
