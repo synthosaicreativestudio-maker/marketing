@@ -152,8 +152,8 @@ def _run_bot_main():
 
     # Инициализация AI сервиса (OpenAI или Gemini)
     try:
-        logger.info("Инициализация AIService...")
-        ai_service = AIService()
+        logger.info("Инициализация AIService с поддержкой инструментов...")
+        ai_service = AIService(promotions_gateway=promotions_gateway)
         if not ai_service.is_enabled():
             logger.warning("AIService отключен: ни один провайдер не доступен")
         else:
@@ -349,6 +349,8 @@ def _run_bot_main():
                 try:
                     application = Application.builder().token(token).build()
                     application_instance = application
+                    # Переинициализируем AI сервис с актуальным gateway
+                    ai_service = AIService(promotions_gateway=promotions_gateway)
                     setup_handlers(application, auth_service, ai_service, appeals_service)
                     application.post_init = post_init
                     application.post_stop = post_stop

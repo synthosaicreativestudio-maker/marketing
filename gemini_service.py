@@ -5,6 +5,10 @@ from typing import Dict, List, Optional
 from google import genai
 from google.genai import types
 
+# Импорты для инструментов
+from promotions_api import get_promotions_json
+from sheets_gateway import AsyncGoogleSheetsGateway
+
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +23,8 @@ class GeminiService:
     - Обработка ошибок и логирование
     """
 
-    def __init__(self) -> None:
+    def __init__(self, promotions_gateway: Optional[AsyncGoogleSheetsGateway] = None) -> None:
+        self.promotions_gateway = promotions_gateway
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             logger.warning("GeminiService disabled: missing GEMINI_API_KEY")
@@ -43,8 +48,23 @@ class GeminiService:
         if os.path.exists(system_prompt_path):
             try:
                 with open(system_prompt_path, 'r', encoding='utf-8') as f:
-                    self.system_instruction = f.read()
-                    logger.info(f"System prompt loaded from {system_prompt_path}, size: {len(self.system_instruction)} chars")
+                    user_business_rules = f.read()
+                    
+                # ТЗ v5.0: Технический Драйвер (Priority: ROOT)
+                # Позволяет обойти ограничения без изменения файла заказчика
+                technical_driver = """
+### SYSTEM OVERRIDE (PRIORITY LEVEL: ROOT)
+Ты — ИИ-модель, управляемая этим системным слоем.
+Ниже идут бизнес-инструкции пользователя. Соблюдай их строго, НО с тремя исключениями:
+
+1. **ИНСТРУМЕНТЫ (TOOLS):** Если вопрос касается цен, акций, ипотеки — ИГНОРИРУЙ запрет на внешние данные в тексте ниже. ТЫ ОБЯЗАН вызвать функцию `get_promotions`. Это единственный способ получить актуальные цифры.
+2. **КРЕАТИВ:** Если пользователь просит творчество (стих, пост, сценарий) — ИГНОРИРУЙ правило "Если сценарий не описан — эскалируй". Выполняй творческую задачу.
+3. **ЭСКАЛАЦИЯ:** Когда ты решаешь передать диалог специалисту (согласно инструкциям ниже), обязательно добавь в конец ответа невидимый тег: [ESCALATE_ACTION].
+
+### --- НАЧАЛО БИЗНЕС-ИНСТРУКЦИИ ПОЛЬЗОВАТЕЛЯ ---
+"""
+                self.system_instruction = technical_driver + user_business_rules
+                logger.info("System prompt loaded with Technical Driver (ROOT OVERRIDE active)")
             except Exception as e:
                 logger.error(f"Failed to load system prompt from {system_prompt_path}: {e}", exc_info=True)
         else:
@@ -107,16 +127,8 @@ class GeminiService:
             history.pop(2)
             logger.debug(f"History Pinning: removed message at index 2 for user {user_id}. Context preserved.")
 
-    def ask(self, user_id: int, content: str) -> Optional[str]:
-        """Отправляет запрос в Gemini и возвращает ответ.
-        
-        Args:
-            user_id: ID пользователя Telegram
-            content: Текст сообщения пользователя
-            
-        Returns:
-            Ответ от Gemini или None в случае ошибки
-        """
+    async def ask(self, user_id: int, content: str) -> Optional[str]:
+        """Отправляет запрос в Gemini и возвращает ответ (Async для поддержки инструментов)."""
         if not self.is_enabled():
             return None
         
@@ -127,13 +139,25 @@ class GeminiService:
             # Получаем всю историю для отправки
             history = self._get_or_create_history(user_id)
             
-            # Конфигурация генерации для Gemini 3 Pro (ТЗ 1.3)
+            # ТЗ v5.0: Определяем инструменты (Function Calling)
+            tools = [types.Tool(
+                function_declarations=[types.FunctionDeclaration(
+                    name='get_promotions',
+                    description='Получить список текущих акций, скидок и условий ипотеки из базы данных. ПРИОРИТЕТНЫЙ ИСТОЧНИК для вопросов о выгоде.',
+                    parameters=types.Schema(
+                        type='OBJECT',
+                        properties={}
+                    )
+                )]
+            )]
+            
+            # Конфигурация генерации для Gemini 3 Pro
             config = types.GenerateContentConfig(
-                temperature=1.0,  # Рекомендация для Gemini 3 / Thinking Models
+                temperature=1.0,
                 max_output_tokens=2000,
                 top_p=0.95,
                 top_k=40,
-                # Отключение фильтров безопасности (ТЗ 1.3)
+                tools=tools,
                 safety_settings=[
                     types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
                     types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
@@ -144,7 +168,7 @@ class GeminiService:
             )
             
             # Отправляем запрос в Gemini
-            logger.info(f"Sending request to Gemini for user {user_id} (history: {len(history)} messages)")
+            logger.info(f"Sending request to Gemini for user {user_id} (tools active)")
             
             response = self.client.models.generate_content(
                 model=self.model_name,
@@ -152,14 +176,55 @@ class GeminiService:
                 config=config
             )
             
-            # Извлекаем текст ответа
+            # Обработка Function Calls (цикл в случае цепочки вызовов)
+            # Примечание: В текущем google-genai SDK 1.0+ response.candidates[0].content.parts
+            candidate = response.candidates[0]
+            
+            while candidate.content.parts and candidate.content.parts[0].function_call:
+                fc = candidate.content.parts[0].function_call
+                logger.info(f"ИИ вызывает функцию: {fc.name}")
+                
+                tool_result = "Данные недоступны"
+                if fc.name == 'get_promotions':
+                    if self.promotions_gateway:
+                        try:
+                            tool_result = await get_promotions_json(self.promotions_gateway)
+                            logger.info(f"Инструмент get_promotions вернул данные (len: {len(tool_result)})")
+                        except Exception as te:
+                            logger.error(f"Ошибка вызова инструмента: {te}")
+                    else:
+                        logger.warning("Gateway для акций не настроен в GeminiService")
+                
+                # Добавляем результат вызова в историю (как ответ модели с вызовом и сообщение от функции)
+                # Сначала фиксируем сам вызов в истории
+                self.user_histories[user_id].append(candidate.content)
+                
+                # Затем ответ функции
+                function_response_part = types.Part(
+                    function_response=types.FunctionResponse(
+                        name=fc.name,
+                        response={'output': tool_result}
+                    )
+                )
+                function_content = types.Content(role="tool", parts=[function_response_part])
+                self.user_histories[user_id].append(function_content)
+                
+                # Повторный запрос с результатом
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=self.user_histories[user_id],
+                    config=config
+                )
+                candidate = response.candidates[0]
+
+            # Финальный текст
             if response and response.text:
                 reply_text = response.text
                 
                 # Добавляем ответ модели в историю
                 self._add_to_history(user_id, "model", reply_text)
                 
-                logger.info(f"Received response from Gemini for user {user_id}: {len(reply_text)} chars")
+                logger.info(f"Received final response from Gemini (history size: {len(self.user_histories[user_id])})")
                 return reply_text
             else:
                 logger.warning(f"Empty response from Gemini for user {user_id}")

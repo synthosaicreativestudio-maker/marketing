@@ -8,14 +8,14 @@
 
 ## 1. Высокоуровневая Архитектура
 
-Проект представляет собой отказоустойчивый **Telegram-бот**, написанный на Python, разработанный для высокой доступности (24/7). Он работает как монолитное приложение с модульными сервисами, используя **Google Sheets** в качестве основной базы данных и **OpenAI Assistants API** для возможностей ИИ.
+Проект представляет собой отказоустойчивый **Telegram-бот**, написанный на Python, разработанный для высокой доступности (24/7). Он работает как монолитное приложение с модульными сервисами, используя **Google Sheets** в качестве основной базы данных и **Google Gemini 3 Pro** для возможностей ИИ.
 
 ### Технологический Стек
-*   **Язык:** Python 3.10+
+*   **Язык:** Python 3.12+
 *   **Фреймворк:** `python-telegram-bot` (v20+, Async)
 *   **База Данных:** Google Sheets (через `gspread` + `tenacity` для повторных попыток)
-*   **ИИ Движок:** OpenAI Assistants API (Threads)
-*   **Веб-интеграция:** Flask/FastAPI (для вебхуков и Mini Apps)
+*   **ИИ Движок:** Google Gemini 3 Pro (через `google-genai` SDK)
+*   **Сетевая связность:** Работа через US-прокси (для обхода региональных ограничений)
 *   **Развертывание:** Systemd Service (Linux/Ubuntu)
 
 ### Диаграмма Архитектуры (Логическая)
@@ -28,7 +28,8 @@ graph TD
     subgraph "Основные Сервисы"
         Bot --> AuthService[Сервис Авторизации]
         Bot --> AppealsService[Сервис Обращений]
-        Bot --> OpenAIService[Сервис OpenAI]
+        Bot --> AIService[Унифицированный AIService]
+        AIService <--> GeminiService[Gemini 3 Pro Service]
         Bot --> Notifier[Уведомления Акций]
     end
     
@@ -40,7 +41,7 @@ graph TD
     end
     
     subgraph "Внешние Интеграции"
-        OpenAIService <-->|Assistants API| OpenAI[Платформа OpenAI]
+        GeminiService <-->|US Proxy| Gemini[Google AI Platform]
     end
 ```
 

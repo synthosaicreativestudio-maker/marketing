@@ -1,7 +1,6 @@
 import logging
 import os
 import json
-import asyncio
 from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
@@ -684,9 +683,7 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
             pass
 
         try:
-            reply = await asyncio.get_event_loop().run_in_executor(
-                None, ai_service.ask, user.id, text
-            )
+            reply = await ai_service.ask(user.id, text)
 
             # Если ИИ не ответил, не отправляем локальное приветствие/сообщение — только логируем.
             if not reply:
@@ -708,42 +705,30 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
                 except Exception as e:
                     logger.error(f"Ошибка при записи ответа ИИ: {e}")
             
-            # Очищаем ответ от неправильного Markdown
-            clean_reply = reply.replace('*', '').replace('_', '').replace('[', '').replace(']', '').replace('`', '')
+            # ТЗ v5.0: Обработка эскалации и очистка тегов
+            escalation_tag = "[ESCALATE_ACTION]"
+            is_escalation_triggered = escalation_tag in reply or "Передаю ваш запрос специалисту" in reply
+            
+            # Очищаем текст от технического тега и лишнего Markdown
+            clean_reply = reply.replace(escalation_tag, "").strip()
+            # Дополнительная очистка от Markdown артефактов
+            display_reply = clean_reply.replace('*', '').replace('_', '').replace('`', '')
             
             # Отправляем ответ ИИ пользователю
             try:
-                await update.message.reply_text(
-                    clean_reply
-                )
-                logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
-            except Exception as e:
-                logger.error(f"Ошибка отправки ответа ИИ: {e}")
-                # Если все еще не работает, отправляем простой текст
-                await update.message.reply_text(
-                    "Получен ответ от ассистента, но произошла ошибка форматирования."
-                )
-            
-            # Показываем инлайн-кнопку "Обратиться к специалисту", если ИИ предлагает эскалацию
-            is_ai_asking = _is_ai_asking_for_escalation(reply)
-            is_confirmation = _is_escalation_confirmation(text)
-            
-            logger.info(f"Отладка кнопки для пользователя {user.id}:")
-            logger.info(f"  - is_ai_asking: {is_ai_asking}")
-            logger.info(f"  - is_confirmation: {is_confirmation}")
-            logger.info(f"  - text: '{text}'")
-            logger.info(f"  - reply: '{reply[:100] if reply else 'None'}...'")
-            
-            if is_ai_asking:
-                # Всегда предлагаем пользователю кнопку для эскалации, если ИИ говорит о передаче специалисту
-                try:
+                if is_escalation_triggered:
+                    # Если сработал триггер - добавляем кнопку специалиста
                     await update.message.reply_text(
-                        "Если вы хотите передать ваш запрос специалисту отдела маркетинга, нажмите кнопку ниже.",
+                        display_reply,
                         reply_markup=create_specialist_button()
                     )
-                    logger.info(f"Показана кнопка специалиста для пользователя {user.id} (ИИ предложил эскалацию)")
-                except Exception as e:
-                    logger.error(f"Ошибка отправки кнопки специалиста: {e}")
+                    logger.info(f"Ответ ИИ отправлен с кнопкой эскалации для {user.id}")
+                else:
+                    await update.message.reply_text(display_reply)
+                    logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
+            except Exception as e:
+                logger.error(f"Ошибка отправки ответа ИИ: {e}")
+                await update.message.reply_text("Получен ответ от ассистента, но возникла ошибка форматирования.")
         except Exception as e:
             logger.error(f"Ошибка при обращении к OpenAI: {e}")
             await update.message.reply_text(

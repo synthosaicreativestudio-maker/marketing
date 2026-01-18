@@ -3,7 +3,7 @@
 
 > **Stable & Resilient Telegram Bot for Marketing Automation**
 
-This repository contains the source code for the MarketingBot, designed for high availability and integration with Google Sheets and OpenAI.
+This repository contains the source code for the MarketingBot, designed for high availability and integration with Google Sheets and **Google Gemini 3 Pro API**.
 
 ## 📚 Documentation
 
@@ -13,10 +13,9 @@ This repository contains the source code for the MarketingBot, designed for high
 **(Русская версия: [TECHNICAL_DOCUMENTATION_RU.md](docs/TECHNICAL_DOCUMENTATION_RU.md))**
 
 Please refer to it for:
-- Architecture Overview
-- Setup & Deployment
-- Business Logic
-- API & Integrations
+- **Gemini 3 Pro** (вместо OpenAI)
+- **Дедупликация уведомлений** (SENT-флаг)
+- **Гибридный Медиа-Хэндлер** (Base64, Google Drive, URL)
 
 ### Additional Resources
 - **TODO / Тех. Долг:** [docs/TODO.md](docs/TODO.md) ([RU](docs/TODO_RU.md))
@@ -49,11 +48,13 @@ Please refer to it for:
 ```
 ├── 🎯 handlers.py             # Обработчики команд и сообщений
 ├── 🔐 auth_service.py         # Сервис авторизации
-├── 📊 sheets.py               # Интеграция с Google Sheets
+├── 📊 sheets_gateway.py       # Async Google Sheets Gateway (Retry + Circuit Breaker)
+├── 🤖 ai_service.py           # Унифицированный сервис ИИ
+├── 🤖 gemini_service.py       # Интеграция с Google Gemini 3 Pro
 ├── 🤖 appeals_service.py       # Сервис обращений
-├── 🧠 openai_service.py       # Интеграция с OpenAI
-├── 📊 response_monitor.py     # Мониторинг ответов
-├── 📊 promotions_api.py        # API для акций
+├── 📊 response_monitor.py     # Мониторинг ответов специалистов
+├── 📊 promotions_notifier.py  # Рассылка акций с дедупликацией
+├── 📊 promotions_api.py        # API для работы с таблицей акций
 ├── 🌐 index.html              # WebApp авторизации
 ├── 🌐 menu.html               # WebApp личного кабинета
 ├── 🌐 app.js                  # JavaScript для WebApp
