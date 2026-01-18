@@ -90,9 +90,18 @@ class OpenAIService:
             content=content,
         )
 
-        # Create run
+        # Create run with token optimization
         run = self.client.beta.threads.runs.create(
-            thread_id=thread_id, assistant_id=self.assistant_id
+            thread_id=thread_id,
+            assistant_id=self.assistant_id,
+            # Ограничение истории: только 10 последних сообщений
+            truncation_strategy={
+                "type": "last_messages",
+                "last_messages": 10
+            },
+            # Лимиты токенов для контроля расхода
+            max_prompt_tokens=8000,      # Макс токенов из истории
+            max_completion_tokens=1000   # Макс токенов в ответе
         )
 
         status = self._wait_for_run(thread_id, run.id)
