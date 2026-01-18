@@ -235,9 +235,9 @@ def _run_bot_main():
         
         # Initialize RAG (Knowledge Base) if using Gemini
         # Используем глобальную переменную или из замыкания (ai_service доступен)
-        if ai_service.provider == "Gemini" and ai_service.service and hasattr(ai_service.service, 'initialize'):
+        if ai_service.get_provider_name() == "Gemini" and ai_service.gemini_service and hasattr(ai_service.gemini_service, 'initialize'):
             try:
-                await ai_service.service.initialize()
+                await ai_service.gemini_service.initialize()
                 logger.info("Knowledge Base initialization triggered")
             except Exception as e:
                 logger.error(f"Failed to initialize Knowledge Base: {e}")
