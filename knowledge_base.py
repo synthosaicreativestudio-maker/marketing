@@ -181,7 +181,7 @@ class KnowledgeBase:
                 ttl_seconds = self.ttl_minutes * 60
                 
                 cached_content = self.client.caches.create(
-                    model='models/gemini-1.5-pro',
+                    model='models/gemini-3-pro-preview',
                     # WAIT. User is using `gemini-3-pro-preview`? 
                     # Gemini 3 doesn't exist. It's `gemini-1.5-pro`. 
                     # The user code in `gemini_service.py` says `gemini-3-pro-preview`. 
