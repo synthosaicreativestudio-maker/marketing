@@ -75,7 +75,7 @@ class KnowledgeBase:
             # 2. Download files locally
             local_files = []
             for f in files_meta:
-                 path = self.drive_service.download_file(f['id'], f['name'])
+                 path = self.drive_service.download_file(f['id'], f['name'], f['mimeType'])
                  if path:
                      local_files.append(path)
             
