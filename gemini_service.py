@@ -54,7 +54,7 @@ class GeminiService:
         self.user_histories: Dict[int, List[Dict]] = {}
         
         # Настройки модели
-        self.model_name = "gemini-3-flash-preview"
+        self.model_name = "gemini-3-pro-preview"
         self.max_history_messages = 10  # Храним только последние 10 сообщений
 
     def is_enabled(self) -> bool:
@@ -62,10 +62,25 @@ class GeminiService:
         return self.client is not None
 
     def _get_or_create_history(self, user_id: int) -> List[Dict]:
-        """Получает или создает историю диалога для пользователя."""
+        """Получает или создает историю для пользователя.
+        
+        Для Gemini 3 первое сообщение - это системный промпт как 'user' роль.
+        """
         if user_id not in self.user_histories:
             self.user_histories[user_id] = []
+            # Добавляем системный промпт как первое сообщение
+            if self.system_instruction:
+                self.user_histories[user_id].append({
+                    "role": "user",
+                    "parts": [self.system_instruction]
+                })
+                # Добавляем ответ модели (пустой), чтобы начать диалог
+                self.user_histories[user_id].append({
+                    "role": "model",
+                    "parts": ["Понял, готов помогать согласно инструкциям."]
+                })
             logger.info(f"Created new chat history for user {user_id}")
+        
         return self.user_histories[user_id]
 
     def _add_to_history(self, user_id: int, role: str, content: str) -> None:
@@ -103,13 +118,12 @@ class GeminiService:
             # Получаем всю историю для отправки
             history = self._get_or_create_history(user_id)
             
-            # Конфигурация генерации
+            # Конфигурация генерации для Gemini 3 Pro
             config = GenerateContentConfig(
-                temperature=0.7,  # Баланс между креативностью и точностью
-                max_output_tokens=1000,  # Максимум токенов в ответе
+                temperature=1.0,  # Рекомендация Gemini 3: оставить по умолчанию
+                max_output_tokens=2000,  # Увеличен лимит
                 top_p=0.95,
-                top_k=40,
-                system_instruction=self.system_instruction  # Системный промпт здесь
+                top_k=40
             )
             
             # Отправляем запрос в Gemini
