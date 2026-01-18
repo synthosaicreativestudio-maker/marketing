@@ -25,20 +25,44 @@ class GeminiService:
 
     def __init__(self, promotions_gateway: Optional[AsyncGoogleSheetsGateway] = None) -> None:
         self.promotions_gateway = promotions_gateway
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            logger.warning("GeminiService disabled: missing GEMINI_API_KEY")
-            self.client = None
-        else:
+        
+        # Проверка конфигурации ProxyAPI.ru (Вариант Б: прямая замена endpoint)
+        proxyapi_key = os.getenv("PROXYAPI_KEY")
+        proxyapi_base_url = os.getenv("PROXYAPI_BASE_URL")
+        
+        # Вариант Б: Использование ProxyAPI.ru
+        if proxyapi_key and proxyapi_base_url:
+            logger.info("ProxyAPI.ru detected - using custom endpoint for Gemini access")
             try:
-                # В google-genai SDK прокси подхватывается автоматически из окружения (HTTP_PROXY/HTTPS_PROXY)
-                # Переменные уже прописаны в .env и подгружаются systemd.
-                # Явное указание в HttpOptions вызывало ошибку валидации.
-                self.client = genai.Client(api_key=api_key)
-                logger.info("GeminiService initialized successfully (proxy managed by env)")
+                self.client = genai.Client(
+                    api_key=proxyapi_key,
+                    http_options={'api_endpoint': proxyapi_base_url}
+                )
+                logger.info("GeminiService initialized via ProxyAPI.ru (bypass regional restrictions)")
             except Exception as e:
-                logger.error(f"Failed to initialize GeminiService: {e}", exc_info=True)
+                logger.error(f"Failed to initialize GeminiService via ProxyAPI: {e}", exc_info=True)
                 self.client = None
+        
+        # Вариант А: Стандартный API (с поддержкой HTTP_PROXY из окружения)
+        else:
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                logger.warning("GeminiService disabled: missing GEMINI_API_KEY")
+                self.client = None
+            else:
+                try:
+                    # В google-genai SDK прокси подхватывается автоматически из окружения (HTTP_PROXY/HTTPS_PROXY)
+                    # Переменные уже прописаны в .env и подгружаются systemd.
+                    # Явное указание в HttpOptions вызывало ошибку валидации.
+                    self.client = genai.Client(api_key=api_key)
+                    http_proxy = os.getenv("HTTP_PROXY")
+                    if http_proxy:
+                        logger.info(f"GeminiService initialized with HTTP_PROXY: {http_proxy}")
+                    else:
+                        logger.info("GeminiService initialized (direct connection)")
+                except Exception as e:
+                    logger.error(f"Failed to initialize GeminiService: {e}", exc_info=True)
+                    self.client = None
         
         # Загрузка системного промпта
         system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
