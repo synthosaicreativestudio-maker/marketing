@@ -100,12 +100,13 @@ class GeminiService:
         )
         
         # Ограничиваем размер истории
-        # Учитываем, что первые 2 сообщения — это системный контекст
+        # Учитываем, что первые 2 сообщения — это системный контекст (Pinning)
+        # КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО удалять сообщения с индексами 0 и 1
         if len(history) > self.max_history_messages + 2:
-            # Удаляем самое старое реальное сообщение (после системного промпта)
-            if len(history) > 2:
-                history.pop(2)
-                logger.debug(f"Removed oldest message from history for user {user_id}")
+            # Удаляем самое старое реальное сообщение (индекс 2)
+            # history[:2] (инструкции) + history[3:] (диалог)
+            history.pop(2)
+            logger.debug(f"Removed oldest диалог message (index 2) for user {user_id}, pinned context preserved")
 
     def ask(self, user_id: int, content: str) -> Optional[str]:
         """Отправляет запрос в Gemini и возвращает ответ.
@@ -127,13 +128,13 @@ class GeminiService:
             # Получаем всю историю для отправки
             history = self._get_or_create_history(user_id)
             
-            # Конфигурация генерации для Gemini 3 Pro
+            # Конфигурация генерации для Gemini 3 Pro (ТЗ 1.3)
             config = types.GenerateContentConfig(
-                temperature=1.0,  # Рекомендация для Gemini 3
+                temperature=1.0,  # Рекомендация для Gemini 3 / Thinking Models
                 max_output_tokens=2000,
                 top_p=0.95,
                 top_k=40,
-                # Отключение фильтров безопасности для максимальной гибкости ответов
+                # Отключение фильтров безопасности (ТЗ 1.3)
                 safety_settings=[
                     types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
                     types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
