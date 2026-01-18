@@ -34,6 +34,21 @@ class GeminiService:
                 logger.error(f"Failed to initialize GeminiService: {e}", exc_info=True)
                 self.client = None
         
+        # Загрузка системного промпта
+        system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
+        self.system_instruction = None
+        
+        # Проверка существования файла промпта
+        if os.path.exists(system_prompt_path):
+            try:
+                with open(system_prompt_path, 'r', encoding='utf-8') as f:
+                    self.system_instruction = f.read()
+                    logger.info(f"System prompt loaded from {system_prompt_path}, size: {len(self.system_instruction)} chars")
+            except Exception as e:
+                logger.error(f"Failed to load system prompt from {system_prompt_path}: {e}", exc_info=True)
+        else:
+            logger.warning(f"System prompt file not found: {system_prompt_path}")
+        
         # Хранилище истории диалогов: user_id -> list of messages
         # Формат: [{"role": "user", "parts": [Part.from_text("текст")]}, ...]
         self.user_histories: Dict[int, List[Dict]] = {}
@@ -102,7 +117,8 @@ class GeminiService:
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=history,
-                config=config
+                config=config,
+                system_instruction=self.system_instruction  # Применяем системный промпт
             )
             
             # Извлекаем текст ответа
