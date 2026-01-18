@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 from auth_service import AuthService  # noqa: E402
 from handlers import setup_handlers  # noqa: E402
-from openai_service import OpenAIService  # noqa: E402
+from ai_service import AIService  # noqa: E402
 from response_monitor import ResponseMonitor  # noqa: E402
 from promotions_notifier import PromotionsNotifier  # noqa: E402
 from appeals_service import AppealsService  # noqa: E402
@@ -150,15 +150,17 @@ def _run_bot_main():
         # Создаем заглушку с пустым gateway
         auth_service = AuthService(gateway=auth_gateway)
 
-    # Инициализация OpenAI (опционально)
+    # Инициализация AI сервиса (OpenAI или Gemini)
     try:
-        logger.info("Инициализация OpenAIService (Assistants Threads)...")
-        openai_service = OpenAIService()
-        if not openai_service.is_enabled():
-            logger.warning("OpenAIService отключен: отсутствуют OPENAI_API_KEY/OPENAI_ASSISTANT_ID")
+        logger.info("Инициализация AIService...")
+        ai_service = AIService()
+        if not ai_service.is_enabled():
+            logger.warning("AIService отключен: ни один провайдер не доступен")
+        else:
+            logger.info(f"AIService активен с провайдером: {ai_service.get_provider_name()}")
     except Exception as e:
-        logger.error(f"Ошибка инициализации OpenAIService: {e}", exc_info=True)
-        openai_service = OpenAIService()  # Создаем с отключенным сервисом
+        logger.error(f"Ошибка инициализации AIService: {e}", exc_info=True)
+        ai_service = AIService()  # Создаем с отключенным сервисом
 
     # Инициализация сервиса обращений (Google Sheets)
     try:
@@ -220,7 +222,7 @@ def _run_bot_main():
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
     try:
-        setup_handlers(application, auth_service, openai_service, appeals_service)
+        setup_handlers(application, auth_service, ai_service, appeals_service)
         logger.info("Обработчики успешно зарегистрированы")
     except Exception as e:
         logger.error(f"Ошибка регистрации обработчиков: {e}", exc_info=True)
@@ -347,7 +349,7 @@ def _run_bot_main():
                 try:
                     application = Application.builder().token(token).build()
                     application_instance = application
-                    setup_handlers(application, auth_service, openai_service, appeals_service)
+                    setup_handlers(application, auth_service, ai_service, appeals_service)
                     application.post_init = post_init
                     application.post_stop = post_stop
                     application.add_error_handler(error_handler)

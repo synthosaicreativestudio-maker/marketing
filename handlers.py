@@ -6,7 +6,7 @@ from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, Re
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
 from auth_service import AuthService
-from openai_service import OpenAIService
+from ai_service import AIService
 from appeals_service import AppealsService
 from promotions_api import get_promotions_json, is_promotions_available
 
@@ -227,13 +227,13 @@ def _should_show_specialist_button(text: str) -> bool:
 
 
 
-def setup_handlers(application, auth_service: AuthService, openai_service: OpenAIService, appeals_service: AppealsService):
+def setup_handlers(application, auth_service: AuthService, ai_service: AIService, appeals_service: AppealsService):
     """Регистрирует все обработчики в приложении."""
     application.add_handler(CommandHandler("start", start_command_handler(auth_service)))
     application.add_handler(CommandHandler("appeals", appeals_command_handler(auth_service, appeals_service)))
     application.add_handler(CommandHandler("promotions", promotions_command_handler(auth_service)))
     application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data_handler(auth_service)))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.StatusUpdate.WEB_APP_DATA, chat_handler(auth_service, openai_service, appeals_service)))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.StatusUpdate.WEB_APP_DATA, chat_handler(auth_service, ai_service, appeals_service)))
     application.add_handler(CallbackQueryHandler(callback_query_handler(auth_service, appeals_service)))
 
 def start_command_handler(auth_service: AuthService):
@@ -577,10 +577,10 @@ async def handle_promotions_request(update: Update, context: ContextTypes.DEFAUL
         )
 
 
-def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appeals_service: AppealsService):
-    """Фабрика обработчика для свободного чата с ассистентом через Threads API.
+def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_service: AppealsService):
+    """Фабрика обработчика для свободного чата с ассистентом.
 
-    Доступно только авторизованным пользователям. При отключенном OpenAIService — вежливое сообщение.
+    Доступно только авторизованным пользователям. При отключенном AIService — вежливое сообщение.
     """
     async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
@@ -670,8 +670,8 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
             except Exception as e:
                 logger.warning(f"Не удалось проверить статус обращения: {e}")
 
-        # Проверка доступности OpenAI
-        if not openai_service or not openai_service.is_enabled():
+        # Проверка доступности AI
+        if not ai_service or not ai_service.is_enabled():
             await update.message.reply_text(
                 "Ассистент временно недоступен. Ваше обращение записано, специалист ответит позже."
             )
@@ -685,7 +685,7 @@ def chat_handler(auth_service: AuthService, openai_service: OpenAIService, appea
 
         try:
             reply = await asyncio.get_event_loop().run_in_executor(
-                None, openai_service.ask, user.id, text
+                None, ai_service.ask, user.id, text
             )
 
             # Если ИИ не ответил, не отправляем локальное приветствие/сообщение — только логируем.
