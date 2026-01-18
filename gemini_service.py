@@ -108,7 +108,8 @@ class GeminiService:
                 temperature=0.7,  # Баланс между креативностью и точностью
                 max_output_tokens=1000,  # Максимум токенов в ответе
                 top_p=0.95,
-                top_k=40
+                top_k=40,
+                system_instruction=self.system_instruction  # Системный промпт здесь
             )
             
             # Отправляем запрос в Gemini
@@ -117,8 +118,7 @@ class GeminiService:
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=history,
-                config=config,
-                system_instruction=self.system_instruction  # Применяем системный промпт
+                config=config
             )
             
             # Извлекаем текст ответа
