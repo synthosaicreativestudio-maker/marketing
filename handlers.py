@@ -371,15 +371,9 @@ def web_app_data_handler(auth_service: AuthService):
                     from sheets_gateway import normalize_phone
                     phone_norm = normalize_phone(partner_phone)
                     logger.info(f"Нормализованный телефон: {phone_norm}")
-                    
-                    # Проверяем, есть ли пользователь с таким кодом (используем async метод из auth_service)
-                    row = await auth_service._find_row_by_partner_and_phone(partner_code, phone_norm)
-                    if row:
-                        logger.error(f"ОШИБКА: Пользователь найден в строке {row}, но авторизация не удалась!")
-                    else:
-                        logger.info("Пользователь действительно не найден в таблице")
+                    logger.warning(f"Искали: код={partner_code}, телефон={phone_norm}")
                 except Exception as e:
-                    logger.error(f"Ошибка диагностики: {e}")
+                    logger.error(f"Ошибка нормализации телефона: {e}")
                 
                 keyboard_button = KeyboardButton(
                     text="Повторить авторизацию",
