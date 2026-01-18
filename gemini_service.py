@@ -54,7 +54,7 @@ class GeminiService:
         self.user_histories: Dict[int, List[Dict]] = {}
         
         # Настройки модели
-        self.model_name = "gemini-2.0-flash-exp"
+        self.model_name = "gemini-3-flash-preview"
         self.max_history_messages = 10  # Храним только последние 10 сообщений
 
     def is_enabled(self) -> bool:
