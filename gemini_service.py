@@ -3,7 +3,7 @@ import logging
 from typing import Dict, List, Optional
 
 from google import genai
-from google.genai.types import GenerateContentConfig, Part
+from google.genai.types import GenerateContentConfig
 
 
 logger = logging.getLogger(__name__)
@@ -72,10 +72,10 @@ class GeminiService:
         """Добавляет сообщение в историю с ограничением размера."""
         history = self._get_or_create_history(user_id)
         
-        # Добавляем новое сообщение
+        # Добавляем новое сообщение (используем просто строку, не Part)
         history.append({
             "role": role,
-            "parts": [Part.from_text(content)]
+            "parts": [content]  # Gemini SDK принимает строку напрямую
         })
         
         # Ограничиваем размер истории (оставляем только последние N сообщений)
