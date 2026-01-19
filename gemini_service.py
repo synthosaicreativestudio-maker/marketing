@@ -242,7 +242,6 @@ class GeminiService:
                 'max_output_tokens': 2000,
                 'top_p': 0.95,
                 'top_k': 40,
-                'tools': tools,
                 'safety_settings': [
                     types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
                     types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
@@ -255,7 +254,7 @@ class GeminiService:
             # Если кэша нет - используем System Instruction и Tools в конфиге
             if not cache_name:
                 config_params['system_instruction'] = self.system_instruction
-                config_params['tools'] = self.tools
+                config_params['tools'] = tools # Используем локально определенные инструменты
                 logger.info(f"Using Standard System Prompt & Tools (No Cache) for user {user_id}")
             else:
                 # ВАЖНО: Если есть кэш, то system_instruction и tools ЗАПРЕЩЕНО 
