@@ -110,7 +110,7 @@ class ResponseMonitor:
                 # ВАЖНО: Добавляем маркер ДО отправки уведомления, чтобы предотвратить повторную отправку
                 # Используем add_specialist_response для добавления в историю
                 try:
-                    self.appeals_service.add_specialist_response(
+                    await self.appeals_service.add_specialist_response(
                         telegram_id=telegram_id,
                         response_text=message
                     )
@@ -234,11 +234,8 @@ class ResponseMonitor:
                 # Формируем ответ с выделением для специалиста
                 specialist_response = f"👨‍💼 СПЕЦИАЛИСТ: {response_text}"
                 
-                # Добавляем ответ специалиста к существующим обращениям (неблокирующий вызов)
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(
-                    None,
-                    self.appeals_service.add_specialist_response,
+                # Добавляем ответ специалиста к существующим обращениям
+                await self.appeals_service.add_specialist_response(
                     telegram_id,
                     specialist_response
                 )
