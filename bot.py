@@ -226,8 +226,8 @@ def _run_bot_main():
     try:
         logger.info("Инициализация PollingWatchdog...")
         watchdog = PollingWatchdog(
-            max_silence_seconds=10,  # SMOKE TEST: Временно 10s вместо 120s
-            check_interval_seconds=5,  # SMOKE TEST: Проверка каждые 5 секунд
+            max_silence_seconds=120,  # 2 минуты без getUpdates = проблема
+            check_interval_seconds=30,  # Проверка каждые 30 секунд
             max_restart_attempts=3,  # Максимум 3 перезапуска
             restart_cooldown_hours=1  # За 1 час
         )
