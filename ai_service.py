@@ -42,6 +42,18 @@ class AIService:
         async for chunk in self.gemini_service.ask_stream(user_id, content):
             yield chunk
 
+    async def generate_image_prompt(self, text_context: str) -> Optional[str]:
+        """Прокси для генерации промпта изображения."""
+        if not self.is_enabled():
+            return None
+        return await self.gemini_service.generate_image_prompt(text_context)
+
+    async def generate_image(self, prompt: str) -> Optional[bytes]:
+        """Прокси для генерации изображения."""
+        if not self.is_enabled():
+            return None
+        return await self.gemini_service.generate_image(prompt)
+
     def get_provider_name(self) -> str:
         """Возвращает имя активного провайдера."""
         return "Gemini"

@@ -63,6 +63,49 @@ async def _safe_background_log(user_id: int, user_text: str, ai_reply: str, appe
         except Exception as e:
             logger.error(f"Ошибка фонового логирования в Sheets для {user_id}: {e}")
 
+async def _generate_and_send_image(user_id: int, text_reply: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE, ai_service: AIService):
+    """Фоновая генерация и отправка иллюстрации к ответу."""
+    try:
+        # Уведомляем пользователя (можно пропустить, чтобы не спамить, если генерация быстрая)
+        # Но для вау-эффекта лучше показать активность
+        status_msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text="🎨 _Рисую иллюстрацию к ответу..._",
+            parse_mode='Markdown'
+        )
+        
+        # 1. Арт-директор: создаем промпт
+        prompt = await ai_service.generate_image_prompt(text_reply)
+        if not prompt:
+            await status_msg.delete()
+            return
+
+        # 2. Художник: генерируем изображение
+        image_bytes = await ai_service.generate_image(prompt)
+        
+        if image_bytes:
+            # 3. Отправка
+            await context.bot.send_chat_action(chat_id=chat_id, action="upload_photo")
+            await context.bot.send_photo(
+                chat_id=chat_id, 
+                photo=image_bytes,
+                caption="✨ Сгенерировано AI специально для вас"
+            )
+            # Удаляем статусное сообщение
+            await status_msg.delete()
+        else:
+            # Если не вышло сгенерировать - тихо удаляем статус
+            await status_msg.delete()
+            
+    except Exception as e:
+        logger.error(f"Background image generation failed for {user_id}: {e}")
+        # Пытаемся удалить статусное сообщение при ошибке
+        try:
+            if 'status_msg' in locals():
+                await status_msg.delete()
+        except Exception:
+            pass
+
 def _is_user_escalation_request(text: str) -> bool:
     """
     Проверяет, содержит ли сообщение пользователя триггерные слова для эскалации.
@@ -750,6 +793,17 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
                 asyncio.create_task(_safe_background_log(user.id, text, clean_reply, appeals_service))
                 
                 logger.info(f"Стриминг завершен для {user.id}. Длина: {len(clean_reply)}")
+
+                # АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ ИЛЛЮСТРАЦИИ (Если ответ содержательный)
+                # Триггер: длина > 200 символов и нет эскалации
+                if len(clean_reply) > 200 and not is_escalation_triggered:
+                    asyncio.create_task(_generate_and_send_image(
+                        user_id=user.id, 
+                        text_reply=clean_reply, 
+                        chat_id=update.effective_chat.id, 
+                        context=context, 
+                        ai_service=ai_service
+                    ))
             else:
                 await status_message.edit_text("Извините, я не смог сформировать ответ.")
 

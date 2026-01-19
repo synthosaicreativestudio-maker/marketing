@@ -264,9 +264,18 @@ class GeminiService:
             logger.info(f"Starting stream for user {user_id}")
             
             full_reply_parts = []
-            
+            grounding_sources = {} # uri -> title
+
             async for response in await self.client.aio.models.generate_content_stream(**generate_kwargs):
-                # Проверка на Function Call в первом чанке (или любом чанке до текста)
+                # Сбор Grounding Metadata для источников
+                if response.candidates and response.candidates[0].grounding_metadata:
+                    gm = response.candidates[0].grounding_metadata
+                    if gm.grounding_chunks:
+                        for chunk in gm.grounding_chunks:
+                            if chunk.web and chunk.web.uri and chunk.web.title:
+                                grounding_sources[chunk.web.uri] = chunk.web.title
+
+                # Проверка на Function Call в первом чанке
                 if response.candidates and response.candidates[0].content.parts:
                     part = response.candidates[0].content.parts[0]
                     
@@ -274,7 +283,7 @@ class GeminiService:
                         fc = part.function_call
                         logger.info(f"ИИ вызывает функцию (STREAM): {fc.name}")
                         
-                        # Особый токен-сигнал для хендлера, чтобы показать статус поиска
+                        # Особый токен-сигнал для хендлера
                         yield f"__TOOL_CALL__:{fc.name}"
                         
                         tool_result = "Данные недоступны"
@@ -317,11 +326,20 @@ class GeminiService:
                         full_reply_parts.append(text_chunk)
                         yield text_chunk
 
+            # Формирование блока источников (Grounding)
+            if grounding_sources:
+                sources_text = "\n\n📚 **Источники:**\n"
+                for i, (uri, title) in enumerate(grounding_sources.items(), 1):
+                    sources_text += f"{i}. [{title}]({uri})\n"
+                
+                yield sources_text
+                full_reply_parts.append(sources_text)
+
             # После завершения стрима сохраняем финальный ответ в историю
             if full_reply_parts:
                 full_reply = "".join(full_reply_parts)
                 self._add_to_history(user_id, "model", full_reply)
-                logger.info(f"Stream finished for user {user_id}, history updated")
+                logger.info(f"Stream finished for user {user_id}, history updated. Sources: {len(grounding_sources)}")
                 
         except Exception as e:
             logger.error(f"Error in ask_stream for user {user_id}: {e}", exc_info=True)
@@ -341,3 +359,66 @@ class GeminiService:
         if user_id in self.user_histories:
             del self.user_histories[user_id]
             logger.info(f"Cleared chat history for user {user_id}")
+    async def generate_image_prompt(self, text_context: str) -> Optional[str]:
+        """Генерирует промпт для изображения на основе текста ответа (Арт-директор)."""
+        if not self.is_enabled():
+            return None
+            
+        try:
+            # Используем быструю модель-лайт для создания промпта
+            model = "gemini-2.0-flash-lite-preview-02-05"
+            prompt = (
+                f"Analyze this text and write ONE detailed, cinematic English prompt "
+                f"for high-end photorealistic image generation (8k, highly detailed) "
+                f"that perfectly illustrates the context. Return ONLY the prompt.\n\n"
+                f"Context: {text_context[:1000]}"
+            )
+            
+            response = await self.client.aio.models.generate_content(
+                model=model,
+                contents=prompt
+            )
+            
+            if response.text:
+                logger.info(f"Image prompt generated: {response.text[:50]}...")
+                return response.text.strip()
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error generating image prompt: {e}")
+            return None
+
+    async def generate_image(self, prompt: str) -> Optional[bytes]:
+        """Генерирует изображение по промпту (Художник)."""
+        if not self.is_enabled():
+            return None
+            
+        try:
+            # Используем Gemini 3 Pro Image (Preview)
+            model = "gemini-3-pro-image-preview" # ТЕКУЩИЙ ID ИЗ ТЗ
+            
+            # Конфигурация для генерации
+            config = types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="16:9",
+                person_generation="allow_adult", # Разрешаем людей (бизнес-контекст)
+                safety_filter_level="block_only_high"
+            )
+            
+            response = await self.client.aio.models.generate_images(
+                model=model,
+                prompt=prompt,
+                config=config
+            )
+            
+            if response.generated_images:
+                image = response.generated_images[0]
+                logger.info("Image generated successfully")
+                return image.image_bytes
+            
+            logger.warning("Models returned no images")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error generating image: {e}")
+            return None
