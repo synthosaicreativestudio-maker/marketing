@@ -745,6 +745,30 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
         except Exception:
             pass
 
+        # Управление приветствиями (Contextual Greetings)
+        now = time.time()
+        last_interaction = context.user_data.get('last_interaction_timestamp', 0)
+        delta_hours = (now - last_interaction) / 3600
+        
+        # Обновляем время последнего взаимодействия
+        context.user_data['last_interaction_timestamp'] = now
+        
+        greeting_instruction = ""
+        if delta_hours < 8:
+            greeting_instruction = (
+                "\n\n[SYSTEM CONTEXT: Это продолжение активного диалога (прошло мало времени). "
+                "НЕ используй приветствия (Здравствуйте, Привет и т.д.), отвечай сразу по сути вопроса. "
+                "ИСКЛЮЧЕНИЕ: если пользователь сам явно поздоровался в текущем сообщении — тогда ответь вежливо.]"
+            )
+        else:
+            greeting_instruction = (
+                "\n\n[SYSTEM CONTEXT: Это новая сессия (прошло >8 часов). "
+                "Начни ответ с вежливого приветствия.]"
+            )
+            
+        # Добавляем инструкцию к тексту запроса (скрыто от пользователя, видимо для LLM)
+        text_with_context = text + greeting_instruction
+
         # Переменные для стриминга
         status_message = None
         current_message_buffer = ""
@@ -756,8 +780,8 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
             # Сразу отправляем заглушку
             status_message = await update.message.reply_text("⏳ *Синта печатает...*", parse_mode='Markdown')
             
-            # Начинаем стриминг от Gemini
-            async for chunk in ai_service.ask_stream(user.id, text):
+            # Начинаем стриминг от Gemini (с контекстом)
+            async for chunk in ai_service.ask_stream(user.id, text_with_context):
                 # Проверка на вызов инструмента
                 if chunk.startswith("__TOOL_CALL__"):
                     tool_name = chunk.split(":")[1]
