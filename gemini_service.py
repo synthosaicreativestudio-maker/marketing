@@ -135,10 +135,8 @@ class GeminiService:
         
         # Настройки модели
         # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
-        # В knowledge_base.py мы используем 'models/gemini-1.5-pro-001' (или flash).
-        # Проверим, что используется.
         self.model_name = "gemini-3-flash-preview" 
-        self.max_history_messages = 10  # Храним последние 10 сообщений + 2pinned
+        self.max_history_messages = 14  # Увеличим историю для более сложных диалогов
 
     async def initialize(self):
         """Async init for Knowledge Base with Rules and Tools."""
@@ -325,7 +323,25 @@ class GeminiService:
                 logger.info(f"Received final response from Gemini (history size: {len(self.user_histories[user_id])}) for user {user_id}")
                 return reply_text
             else:
-                logger.warning(f"Empty response from Gemini for user {user_id}")
+                # Расширенная диагностика при пустом ответе
+                finish_reason = "UNKNOWN"
+                safety_ratings = "NONE"
+                try:
+                    if response.candidates:
+                        cand = response.candidates[0]
+                        finish_reason = cand.finish_reason
+                        safety_ratings = cand.safety_ratings
+                        logger.warning(f"Empty response details for user {user_id}: FinishReason={finish_reason}, Safety={safety_ratings}")
+                except Exception:
+                    pass
+                
+                logger.warning(f"Empty response from Gemini for user {user_id}. Raw response: {response}")
+                
+                if finish_reason == "SAFETY":
+                    return "Извините, запрос отклонен фильтрами безопасности ИИ."
+                elif finish_reason == "RECURSION_LIMIT" or finish_reason == "OTHER":
+                    return "Произошла техническая ошибка при генерации ответа. Попробуйте перефразировать вопрос."
+                
                 return "Извините, я не смог сформировать ответ."
                 
         except Exception as e:
