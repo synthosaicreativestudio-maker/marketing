@@ -251,6 +251,23 @@ def _run_bot_main():
         """Инициализация мониторинга после запуска приложения."""
         import asyncio
         
+        # Добавляем middleware для обновления Watchdog heartbeat
+        if watchdog:
+            async def watchdog_heartbeat_middleware(update, context):
+                """Обновляет heartbeat Watchdog при каждом полученном update."""
+                try:
+                    watchdog.heartbeat()
+                except Exception as e:
+                    logger.error(f"Ошибка обновления watchdog heartbeat: {e}")
+            
+            # Регистрируем middleware с наивысшим приоритетом
+            from telegram.ext import TypeHandler, Update
+            application.add_handler(
+                TypeHandler(Update, watchdog_heartbeat_middleware),
+                group=-1  # Самый высокий приоритет - выполняется первым
+            )
+            logger.info("Watchdog heartbeat middleware зарегистрирован")
+        
         # Initialize RAG (Knowledge Base) if using Gemini
         # Используем глобальную переменную или из замыкания (ai_service доступен)
         if ai_service.get_provider_name() == "Gemini" and ai_service.gemini_service and hasattr(ai_service.gemini_service, 'initialize'):
