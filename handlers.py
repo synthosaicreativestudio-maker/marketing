@@ -877,7 +877,7 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
             if status_message:
                 try:
                     # Показываем то, что успели напечатать + маркер ошибки
-                    final_text = full_response if full_response else "Произошла ошибка при обработке."
+                    final_text = full_response_log if full_response_log else "Произошла ошибка при обработке."
                     await status_message.edit_text(f"{final_text}\n\n... [⚠️ Связь прервалась]")
                 except Exception:
                     pass
