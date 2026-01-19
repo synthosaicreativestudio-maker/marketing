@@ -394,8 +394,9 @@ class GeminiService:
             return None
             
         try:
-            # Используем Imagen 3 (Stable)
-            model = "imagen-3.0-generate-001"
+            # Используем Gemini 3 Pro Image (Preview) по требованию пользователя
+            # ID из списка моделей: models/gemini-3-pro-image-preview
+            model = "models/gemini-3-pro-image-preview"
             
             # Конфигурация для генерации
             config = types.GenerateImagesConfig(
