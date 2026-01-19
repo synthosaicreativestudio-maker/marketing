@@ -1,7 +1,8 @@
 import os
 import logging
 import asyncio
-from typing import Dict, List, Optional
+import time
+from typing import Dict, List, Optional, AsyncGenerator
 
 from google import genai
 from google.genai import types
@@ -136,7 +137,12 @@ class GeminiService:
         # Настройки модели
         # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
         self.model_name = "gemini-3-flash-preview" 
-        self.max_history_messages = 14  # Увеличим историю для более сложных диалогов
+        self.max_history_messages = 12  # Оптимально для быстрого скользящего окна (6 пар)
+        
+        # Кэш для акций (Simple TTL Cache)
+        self._promotions_cache = None
+        self._promotions_cache_time = 0
+        self._promotions_cache_ttl = 600  # 10 минут
 
     async def initialize(self):
         """Async init for Knowledge Base with Rules and Tools."""
@@ -198,11 +204,12 @@ class GeminiService:
             history.pop(2)
             logger.debug(f"History Pinning: removed message at index 2 for user {user_id}. Context preserved.")
 
-    async def ask(self, user_id: int, content: str) -> Optional[str]:
-        """Отправляет запрос в Gemini и возвращает ответ (Async для поддержки инструментов)."""
+    async def ask_stream(self, user_id: int, content: str) -> AsyncGenerator[str, None]:
+        """Отправляет запрос в Gemini и возвращает генератор для стриминга (Async)."""
         if not self.is_enabled():
-            return None
-        
+            yield "Сервис ИИ временно недоступен."
+            return
+
         try:
             # Добавляем сообщение пользователя в историю
             self._add_to_history(user_id, "user", content)
@@ -210,33 +217,25 @@ class GeminiService:
             # Получаем всю историю для отправки
             history = self._get_or_create_history(user_id)
             
-            # ТЗ v5.0: Определяем инструменты (Function Calling + Search Grounding)
+            # Конфигурация инструментов (всегда актуальная)
             tools = [
                 types.Tool(
                     function_declarations=[types.FunctionDeclaration(
                         name='get_promotions',
                         description='Получить список текущих акций, скидок и условий ипотеки из базы данных. ПРИОРИТЕТНЫЙ ИСТОЧНИК для вопросов о выгоде.',
-                        parameters=types.Schema(
-                            type='OBJECT',
-                            properties={}
-                        )
+                        parameters=types.Schema(type='OBJECT', properties={})
                     )]
                 ),
                 types.Tool(
                     google_search_retrieval=types.GoogleSearchRetrieval(
-                        dynamic_retrieval_config=types.DynamicRetrievalConfig(
-                            dynamic_threshold=0.3 # Активируем поиск для всех умеренно-фактических запросов
-                        )
+                        dynamic_retrieval_config=types.DynamicRetrievalConfig(dynamic_threshold=0.6)
                     )
                 )
             ]
-            
-            # Проверяем наличие активного кэша
+
             cache_name = await self.knowledge_base.get_cache_name()
-            
-            # Конфигурация генерации
             config_params = {
-                'temperature': 0.7, # Чуть строже для RAG
+                'temperature': 0.7,
                 'max_output_tokens': 2000,
                 'top_p': 0.95,
                 'top_k': 40,
@@ -249,104 +248,94 @@ class GeminiService:
                 ]
             }
             
-            # Если кэша нет - используем System Instruction и Tools в конфиге
             if not cache_name:
                 config_params['system_instruction'] = self.system_instruction
-                config_params['tools'] = tools # Используем локально определенные инструменты
-                logger.info(f"Using Standard System Prompt & Tools (No Cache) for user {user_id}")
+                config_params['tools'] = tools
             else:
-                # ВАЖНО: Если есть кэш, то system_instruction и tools ЗАПРЕЩЕНО 
-                # передавать в generate_content (они уже в кэше).
                 config_params['cached_content'] = cache_name
-                logger.info(f"Using Cached Context {cache_name} for user {user_id}. Instruction/Tools embedded.")
-                
+            
             config = types.GenerateContentConfig(**config_params)
-            
-            # Отправляем запрос в Gemini (ASYNC)
-            logger.info(f"Sending request to Gemini for user {user_id} (tools active)")
-            
-            # Аргументы для generate_content
             generate_kwargs = {
                 'model': self.model_name,
                 'contents': history,
                 'config': config
             }
-            
-            response = await self.client.aio.models.generate_content(**generate_kwargs)
-            
-            # Обработка Function Calls (цикл в случае цепочки вызовов)
-            # Примечание: В текущем google-genai SDK 1.0+ response.candidates[0].content.parts
-            candidate = response.candidates[0]
-            
-            while candidate.content.parts and candidate.content.parts[0].function_call:
-                fc = candidate.content.parts[0].function_call
-                logger.info(f"ИИ вызывает функцию: {fc.name}")
-                
-                tool_result = "Данные недоступны"
-                if fc.name == 'get_promotions':
-                    if self.promotions_gateway:
-                        try:
-                            tool_result = await get_promotions_json(self.promotions_gateway)
-                            logger.info(f"Инструмент get_promotions вернул данные (len: {len(tool_result)})")
-                        except Exception as te:
-                            logger.error(f"Ошибка вызова инструмента: {te}")
-                    else:
-                        logger.warning("Gateway для акций не настроен в GeminiService")
-                
-                # Добавляем результат вызова в историю (как ответ модели с вызовом и сообщение от функции)
-                # Сначала фиксируем сам вызов в истории
-                self.user_histories[user_id].append(candidate.content)
-                
-                # Затем ответ функции
-                function_response_part = types.Part(
-                    function_response=types.FunctionResponse(
-                        name=fc.name,
-                        response={'output': tool_result}
-                    )
-                )
-                function_content = types.Content(role="tool", parts=[function_response_part])
-                self.user_histories[user_id].append(function_content)
-                
-                # Повторный запрос с результатом (ASYNC)
-                # Важно: Здесь тоже передаем cached_content если он есть!
-                # Иначе модель может "забыть" контекст кэша.
-                response = await self.client.aio.models.generate_content(**generate_kwargs)
-                candidate = response.candidates[0]
 
-            # Финальный текст
-            if response and response.text:
-                reply_text = response.text
-                
-                # Добавляем ответ модели в историю
-                self._add_to_history(user_id, "model", reply_text)
-                
-                logger.info(f"Received final response from Gemini (history size: {len(self.user_histories[user_id])}) for user {user_id}")
-                return reply_text
-            else:
-                # Расширенная диагностика при пустом ответе
-                finish_reason = "UNKNOWN"
-                safety_ratings = "NONE"
-                try:
-                    if response.candidates:
-                        cand = response.candidates[0]
-                        finish_reason = cand.finish_reason
-                        safety_ratings = cand.safety_ratings
-                        logger.warning(f"Empty response details for user {user_id}: FinishReason={finish_reason}, Safety={safety_ratings}")
-                except Exception:
-                    pass
-                
-                logger.warning(f"Empty response from Gemini for user {user_id}. Raw response: {response}")
-                
-                if finish_reason == "SAFETY":
-                    return "Извините, запрос отклонен фильтрами безопасности ИИ."
-                elif finish_reason == "RECURSION_LIMIT" or finish_reason == "OTHER":
-                    return "Произошла техническая ошибка при генерации ответа. Попробуйте перефразировать вопрос."
-                
-                return "Извините, я не смог сформировать ответ."
+            # Стриминг через aio.models.generate_content_stream
+            logger.info(f"Starting stream for user {user_id}")
+            
+            full_reply_parts = []
+            
+            async for response in self.client.aio.models.generate_content_stream(**generate_kwargs):
+                # Проверка на Function Call в первом чанке (или любом чанке до текста)
+                if response.candidates and response.candidates[0].content.parts:
+                    part = response.candidates[0].content.parts[0]
+                    
+                    if part.function_call:
+                        fc = part.function_call
+                        logger.info(f"ИИ вызывает функцию (STREAM): {fc.name}")
+                        
+                        # Особый токен-сигнал для хендлера, чтобы показать статус поиска
+                        yield f"__TOOL_CALL__:{fc.name}"
+                        
+                        tool_result = "Данные недоступны"
+                        if fc.name == 'get_promotions':
+                            # Проверяем кэш
+                            now = time.time()
+                            if self._promotions_cache and (now - self._promotions_cache_time < self._promotions_cache_ttl):
+                                tool_result = self._promotions_cache
+                                logger.info("Using TTLCache for promotions")
+                            else:
+                                if self.promotions_gateway:
+                                    try:
+                                        tool_result = await get_promotions_json(self.promotions_gateway)
+                                        self._promotions_cache = tool_result
+                                        self._promotions_cache_time = now
+                                        logger.info(f"Promotions cache updated (len: {len(tool_result)})")
+                                    except Exception as te:
+                                        logger.error(f"Error calling promotion tool in stream: {te}")
+                                
+                        # Добавляем в историю и перезапускаем стрим (упрощенно для одного вызова)
+                        self.user_histories[user_id].append(response.candidates[0].content)
+                        function_response_part = types.Part(
+                            function_response=types.FunctionResponse(
+                                name=fc.name,
+                                response={'output': tool_result}
+                            )
+                        )
+                        self.user_histories[user_id].append(types.Content(role="tool", parts=[function_response_part]))
+                        
+                        # Рекурсивно перезапускаем стрим с накопленным контекстом
+                        async for sub_part in self.ask_stream(user_id, ""): # Пустой контент, так как он уже в истории
+                            # Фильтруем пустой контент в начале рекурсии если нужно
+                            if sub_part:
+                                yield sub_part
+                        return # Выходим из текущего генератора так как он заменен рекурсией
+
+                    # Если это обычный текст
+                    if response.text:
+                        text_chunk = response.text
+                        full_reply_parts.append(text_chunk)
+                        yield text_chunk
+
+            # После завершения стрима сохраняем финальный ответ в историю
+            if full_reply_parts:
+                full_reply = "".join(full_reply_parts)
+                self._add_to_history(user_id, "model", full_reply)
+                logger.info(f"Stream finished for user {user_id}, history updated")
                 
         except Exception as e:
-            logger.error(f"Error interacting with Gemini: {e}", exc_info=True)
-            return None
+            logger.error(f"Error in ask_stream for user {user_id}: {e}", exc_info=True)
+            yield f"\n[⚠️ Ошибка при генерации ответа: {str(e)[:50]}...]"
+
+    async def ask(self, user_id: int, content: str) -> Optional[str]:
+        """Отправляет запрос в Gemini и возвращает полный ответ (через стриминг)."""
+        full_reply = []
+        async for chunk in self.ask_stream(user_id, content):
+            if not chunk.startswith("__TOOL_CALL__"):
+                full_reply.append(chunk)
+        
+        return "".join(full_reply) if full_reply else None
 
     def clear_history(self, user_id: int) -> None:
         """Очищает историю диалога для пользователя."""

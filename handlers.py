@@ -2,6 +2,7 @@ import logging
 import os
 import json
 import asyncio
+import time
 from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
@@ -29,11 +30,38 @@ def get_spa_menu_url() -> str:
     return f"{base_url}menu.html?{cache_bust}"
 
 def create_specialist_button() -> InlineKeyboardMarkup:
-    """
-    Создает инлайн-кнопку для обращения к специалисту.
-    """
+    """Создает инлайн-кнопку для обращения к специалисту."""
     keyboard = [[InlineKeyboardButton("👨‍💼 Обратиться к специалисту", callback_data="contact_specialist")]]
     return InlineKeyboardMarkup(keyboard)
+
+async def _safe_background_log(user_id: int, user_text: str, ai_reply: str, appeals_service: AppealsService):
+    """Фоновое логирование в Google Sheets и локальный JSONL."""
+    timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+    log_entry = {
+        "timestamp": timestamp,
+        "user_id": user_id,
+        "question": user_text,
+        "answer": ai_reply
+    }
+    
+    # 1. Локальный JSONL бэкап (мгновенно)
+    try:
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/chat_history.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.error(f"Ошибка локального логирования: {e}")
+
+    # 2. Google Sheets (асинхронно, не блокируя основной поток)
+    if appeals_service and appeals_service.is_available():
+        try:
+            # Сначала записываем вопрос (если еще не записан)
+            await appeals_service.add_user_message(user_id, user_text)
+            # Затем ответ
+            await appeals_service.add_ai_response(user_id, ai_reply)
+            logger.info(f"Фоновое логирование завершено для {user_id}")
+        except Exception as e:
+            logger.error(f"Ошибка фонового логирования в Sheets для {user_id}: {e}")
 
 def _is_user_escalation_request(text: str) -> bool:
     """
@@ -674,101 +702,76 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
         except Exception:
             pass
 
-        # Мониторинг времени выполнения обработчика
-        import time
-        handler_start_time = time.time()
-
+        # Переменные для стриминга
+        status_message = None
+        full_response = ""
+        last_update_time = 0
+        update_interval = 1.5 # Троттлинг 1.5 сек
+        
         try:
-            # Устанавливаем таймаут для AI запроса (60 секунд)
-            # Это дает Gemini достаточно времени для генерации длинных ответов и работы с инструментами
-            try:
-                reply = await asyncio.wait_for(
-                    ai_service.ask(user.id, text),
-                    timeout=60.0
-                )
-            except asyncio.TimeoutError:
-                handler_duration = time.time() - handler_start_time
-                logger.warning(
-                    f"⏱ AI запрос превысил таймаут (60s) для user {user.id}. "
-                    f"Общее время обработчика: {handler_duration:.1f}s"
-                )
-                # ВАЖНО: НЕ меняем статус автоматически!
-                # Статус должен меняться только при нажатии кнопки пользователем.
-                # Просто информируем о задержке и предлагаем обратиться к специалисту.
-                await update.message.reply_text(
-                    "⏱ Запрос обрабатывается дольше обычного. "
-                    "Ваше обращение передано специалисту, который ответит в ближайшее время.",
+            # Сразу отправляем заглушку
+            status_message = await update.message.reply_text("⏳ *Синта печатает...*", parse_mode='Markdown')
+            
+            # Начинаем стриминг от Gemini
+            async for chunk in ai_service.ask_stream(user.id, text):
+                # Проверка на вызов инструмента
+                if chunk.startswith("__TOOL_CALL__"):
+                    tool_name = chunk.split(":")[1]
+                    if tool_name == 'get_promotions':
+                        await status_message.edit_text("🔍 *Проверяю актуальные акции...*", parse_mode='Markdown')
+                    continue
+                
+                full_response += chunk
+                
+                # Троттлинг обновлений в Telegram
+                now = time.time()
+                if (now - last_update_time >= update_interval) and full_response.strip():
+                    try:
+                        await status_message.edit_text(full_response + " ▌", parse_mode='Markdown')
+                        last_update_time = now
+                    except Exception as e:
+                        if "Message is not modified" not in str(e):
+                            logger.debug(f"Streaming update error for user {user.id}: {e}")
+            
+            # Финальное обновление сообщения
+            if full_response.strip():
+                escalation_tag = "[ESCALATE_ACTION]"
+                is_escalation_triggered = escalation_tag in full_response or "Передаю ваш запрос специалисту" in full_response
+                clean_reply = full_response.replace(escalation_tag, "").strip()
+                
+                markup = create_specialist_button() if is_escalation_triggered else None
+                
+                try:
+                    await status_message.edit_text(clean_reply, reply_markup=markup, parse_mode='Markdown')
+                except Exception:
+                    await status_message.edit_text(clean_reply, reply_markup=markup, parse_mode=None)
+                
+                # ФОНОВОЕ ЛОГИРОВАНИЕ (Fire-and-Forget)
+                asyncio.create_task(_safe_background_log(user.id, text, clean_reply, appeals_service))
+                
+                logger.info(f"Стриминг завершен для {user.id}. Длина: {len(clean_reply)}")
+            else:
+                await status_message.edit_text("Извините, я не смог сформировать ответ.")
+
+        except asyncio.TimeoutError:
+            if status_message:
+                await status_message.edit_text(
+                    "⏱ Запрос обрабатывается дольше обычного. Передаю специалисту.",
                     reply_markup=create_specialist_button()
                 )
-                return
-
-
-            # Если ИИ не ответил, не отправляем локальное приветствие/сообщение — только логируем.
-            if not reply:
-                logger.warning(f"Пустой ответ ИИ для пользователя {user.id}")
-                return
-
-            # Логируем ответ ИИ для отладки
-            logger.info(f"Ответ ИИ для пользователя {user.id}: {reply[:200]}...")
-                
-            # Записываем ответ ИИ в таблицу обращений
-            if appeals_service and appeals_service.is_available():
-                try:
-                    success = await appeals_service.add_ai_response(user.id, reply)
-                    if success:
-                        logger.info(f"Ответ ИИ записан для пользователя {user.id}")
-                        # Если ранее было 'Решено' специалистом и диалог возвращён к ИИ — оставляем белую заливку
-                    else:
-                        logger.warning(f"Не удалось записать ответ ИИ для пользователя {user.id}")
-                except Exception as e:
-                    logger.error(f"Ошибка при записи ответа ИИ: {e}")
-            
-            # ТЗ v5.0: Обработка эскалации и очистка тегов
-            escalation_tag = "[ESCALATE_ACTION]"
-            is_escalation_triggered = escalation_tag in reply or "Передаю ваш запрос специалисту" in reply
-            
-            # Очищаем текст от технического тега и лишнего Markdown
-            clean_reply = reply.replace(escalation_tag, "").strip()
-            # УБРАНА вредоносная очистка replace('_', '') которая ломала ссылки
-            
-            # Отправляем ответ ИИ пользователю
-            try:
-                if is_escalation_triggered:
-                    # Если сработал триггер - добавляем кнопку специалиста
-                    try:
-                        await update.message.reply_text(
-                            clean_reply,
-                            reply_markup=create_specialist_button(),
-                            parse_mode='Markdown'
-                        )
-                    except Exception:
-                        await update.message.reply_text(
-                            clean_reply,
-                            reply_markup=create_specialist_button(),
-                            parse_mode=None
-                        )
-                    logger.info(f"Ответ ИИ отправлен с кнопкой эскалации для {user.id}")
-                else:
-                    try:
-                        await update.message.reply_text(clean_reply, parse_mode='Markdown')
-                    except Exception:
-                        await update.message.reply_text(clean_reply, parse_mode=None)
-                    logger.info(f"Ответ ИИ отправлен пользователю {user.id}")
-            except Exception as e:
-                logger.error(f"Ошибка отправки ответа ИИ: {e}")
-                await update.message.reply_text("Получен ответ от ассистента, но возникла ошибка форматирования.")
         except Exception as e:
-            logger.error(f"Ошибка при обращении к AI: {e}")
-            await update.message.reply_text(
-                "Произошла ошибка при обращении к ассистенту. Попробуйте позже."
-            )
-        finally:
-            # Мониторинг общего времени выполнения обработчика
-            handler_duration = time.time() - handler_start_time
-            if handler_duration > 5.0:
-                logger.warning(
-                    f"⚠️ Медленный обработчик chat_handler: {handler_duration:.1f}s для user {user.id}"
-                )
+            logger.error(f"Критическая ошибка в chat_handler: {e}", exc_info=True)
+            if status_message:
+                try:
+                    # Показываем то, что успели напечатать + маркер ошибки
+                    final_text = full_response if full_response else "Произошла ошибка при обработке."
+                    await status_message.edit_text(f"{final_text}\n\n... [⚠️ Связь прервалась]")
+                except Exception:
+                    pass
+            else:
+                await update.message.reply_text("Произошла ошибка при обработке сообщения.")
+
+        return
 
 
     return handle_chat
