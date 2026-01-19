@@ -12,9 +12,7 @@ from telegram.error import (
     RetryAfter,
     Conflict,
     BadRequest,
-    Unauthorized,
     Forbidden,
-    ChatNotFound,
     InvalidToken
 )
 
@@ -69,7 +67,7 @@ def safe_telegram_call(max_retries: int = 3, retry_delay: float = 1.0):
                     logger.error(f"Конфликт Telegram API: {e}. Возможно, запущен другой экземпляр бота.")
                     raise
                     
-                except (Unauthorized, InvalidToken) as e:
+                except InvalidToken as e:
                     # Критические ошибки авторизации - не повторяем
                     logger.critical(f"Ошибка авторизации Telegram: {e}")
                     raise
@@ -126,7 +124,7 @@ def safe_handler(handler_func: Callable) -> Callable:
         except (NetworkError, TimedOut) as e:
             logger.warning(f"Сетевая ошибка в обработчике {handler_func.__name__}: {e}")
             # Не пробрасываем - бот продолжает работу
-        except (Unauthorized, Forbidden, ChatNotFound) as e:
+        except Forbidden as e:
             logger.warning(f"Ошибка доступа в обработчике {handler_func.__name__}: {e}")
             # Не пробрасываем - бот продолжает работу
         except TelegramError as e:
