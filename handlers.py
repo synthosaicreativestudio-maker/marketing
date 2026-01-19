@@ -830,13 +830,15 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
 
                 # АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ ИЛЛЮСТРАЦИИ (Если ответ содержательный)
                 if len(clean_full_log) > 200 and not is_escalation_triggered:
-                    asyncio.create_task(_generate_and_send_image(
-                        user_id=user.id, 
-                        text_reply=clean_full_log, 
-                        chat_id=update.effective_chat.id, 
-                        context=context, 
-                        ai_service=ai_service
-                    ))
+                    # FEATURE DISABLED "FOR NOW" (User Request)
+                    # asyncio.create_task(_generate_and_send_image(
+                    #     user_id=user.id, 
+                    #     text_reply=clean_full_log, 
+                    #     chat_id=update.effective_chat.id, 
+                    #     context=context, 
+                    #     ai_service=ai_service
+                    # ))
+                    pass
             else:
                 await status_message.edit_text("Извините, я не смог сформировать ответ.")
 
