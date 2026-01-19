@@ -91,7 +91,7 @@ class GeminiService:
 Ниже идут бизнес-инструкции пользователя. Соблюдай их строго, НО с учетом технических правил:
 
 1. **ИНСТРУМЕНТЫ (TOOLS):** Если вопрос касается цен, акций, ипотеки — ИГНОРИРУЙ запрет на внешние данные. ТЫ ОБЯЗАН вызвать функцию `get_promotions`.
-2. **POISK (WEB SEARCH):** Для вопросов о недвижимости, услугах, аналитике рынка, стратегиях, контент-планах, трендах маркетинга и ипотеке — ОБЯЗАТЕЛЬНО используй поиск в интернете (Google Search). Обязательный контекст: Россия, Тюмень, специфика недвижимости.
+# 2. **POISK (WEB SEARCH):** (Временно отключено для стабильности)
 3. **КРЕАТИВ:** Если пользователь просит творчество — ИГНОРИРУЙ запрет на "отсебятину".
 4. **ЭСКАЛАЦИЯ:** Для вызова специалиста добавляй тег: [ESCALATE_ACTION].
 5. **ЗАЩИТА ССЫЛОК (КРИТИЧНО):**
@@ -109,7 +109,7 @@ class GeminiService:
         else:
             logger.warning(f"System prompt file not found: {system_prompt_path}")
         
-        # Инструменты (Function Calling + Search Grounding)
+        # Инструменты (Function Calling)
         self.tools = [
             types.Tool(
                 function_declarations=[types.FunctionDeclaration(
@@ -120,13 +120,6 @@ class GeminiService:
                         properties={}
                     )
                 )]
-            ),
-            types.Tool(
-                google_search_retrieval=types.GoogleSearchRetrieval(
-                    dynamic_retrieval_config=types.DynamicRetrievalConfig(
-                        dynamic_threshold=0.3
-                    )
-                )
             )
         ]
         
@@ -227,11 +220,6 @@ class GeminiService:
                     description='Получить список текущих акций, скидок и условий ипотеки из базы данных. ПРИОРИТЕТНЫЙ ИСТОЧНИК для вопросов о выгоде.',
                     parameters=types.Schema(type='OBJECT', properties={})
                 )]
-            ),
-            types.Tool(
-                google_search_retrieval=types.GoogleSearchRetrieval(
-                    dynamic_retrieval_config=types.DynamicRetrievalConfig(dynamic_threshold=0.6)
-                )
             )
         ]
 
@@ -358,11 +346,14 @@ class GeminiService:
                     yield f"\n[⚠️ Обрыв соединения: {str(e)[:50]}]"
                     return # Прерываем стрим
                 
-                # Обнаружение ошибки истекшего кэша
+                # Обнаружение ошибки истекшего кэша или устаревшего API
                 is_cache_error = False
                 error_str = str(e)
-                if 'CachedContent' in error_str and ('403' in error_str or 'PERMISSION_DENIED' in error_str):
-                    logger.warning(f"❌ Cache expired or invalid: {e}")
+                # Проверка на ошибки кэша: истекший, невалидный, или устаревший API
+                if ('CachedContent' in error_str and ('403' in error_str or 'PERMISSION_DENIED' in error_str)) or \
+                   'google_search_retrieval' in error_str or \
+                   'not supported' in error_str.lower():
+                    logger.warning(f"❌ Cache error or outdated API: {e}")
                     is_cache_error = True
                     # Инвалидировать кэш в Knowledge Base
                     await self.knowledge_base.invalidate_cache()
