@@ -92,14 +92,19 @@ class KnowledgeBase:
             gemini_files = []
             for path in local_files:
                 try:
+                    import mimetypes
+                    mime_type, _ = mimetypes.guess_type(path)
+                    
                     # Upload file
-                    logger.info(f"Uploading {path} to Gemini...")
+                    logger.info(f"Uploading {path} (type: {mime_type}) to Gemini...")
                     # google-genai SDK 1.0 upload usage
-                    # We open the file and pass the file object
                     with open(path, 'rb') as f:
                         file_upload = self.client.files.upload(
                             file=f,
-                            config={'display_name': os.path.basename(path)} # Optional config
+                            config={
+                                'display_name': os.path.basename(path),
+                                'mime_type': mime_type
+                            }
                         )
                     
                     # Wait for processing
@@ -181,7 +186,7 @@ class KnowledgeBase:
                 ttl_seconds = self.ttl_minutes * 60
                 
                 cached_content = self.client.caches.create(
-                    model='models/gemini-3-pro-preview',
+                    model='models/gemini-3-flash-preview',
                     # WAIT. User is using `gemini-3-pro-preview`? 
                     # Gemini 3 doesn't exist. It's `gemini-1.5-pro`. 
                     # The user code in `gemini_service.py` says `gemini-3-pro-preview`. 
