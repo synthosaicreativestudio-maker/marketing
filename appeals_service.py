@@ -11,6 +11,7 @@ from sheets_gateway import (
     AsyncGoogleSheetsGateway,
     CircuitBreakerOpenError
 )
+from utils import mask_phone, mask_telegram_id, mask_fio
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class AppealsService:
             return False
 
         try:
-            logger.info(f"Создание обращения для telegram_id={telegram_id}, code={code}, phone={phone}, fio={fio}")
+            logger.info(f"Создание обращения для telegram_id={mask_telegram_id(telegram_id)}, code={code}, phone={mask_phone(phone)}, fio={mask_fio(fio)}")
             # Ищем существующую строку для этого telegram_id
             records = await self.gateway.get_all_records(self.worksheet)
             logger.info(f"Получено {len(records)} записей из таблицы обращений")
@@ -64,10 +65,10 @@ class AppealsService:
             for i, record in enumerate(records, start=2):  # start=2 потому что строка 1 - заголовки
                 # Ищем telegram_id в колонке D (индекс 3 в массиве)
                 record_telegram_id = str(record.get('telegram_id', ''))
-                logger.info(f"Проверка записи {i}: telegram_id='{record_telegram_id}' vs '{telegram_id}'")
+                logger.info(f"Проверка записи {i}: telegram_id='{mask_telegram_id(record_telegram_id)}' vs '{mask_telegram_id(telegram_id)}'")
                 if record_telegram_id == str(telegram_id):
                     existing_row = i
-                    logger.info(f"Найдена существующая строка {i} для telegram_id {telegram_id}")
+                    logger.info(f"Найдена существующая строка {i} для telegram_id {mask_telegram_id(telegram_id)}")
                     break
             
             timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -98,11 +99,11 @@ class AppealsService:
                     'values': [[timestamp]]
                 }])
                 
-                logger.info(f"Обновлено обращение для пользователя {telegram_id} (строка {existing_row})")
+                logger.info(f"Обновлено обращение для пользователя {mask_telegram_id(telegram_id)} (строка {existing_row})")
             else:
                 # Создаем новую строку
                 next_row = len(records) + 2  # +2 потому что records не включает заголовок
-                logger.info(f"Создание новой строки {next_row} для telegram_id {telegram_id}")
+                logger.info(f"Создание новой строки {next_row} для telegram_id {mask_telegram_id(telegram_id)}")
                 
                 row_data = [
                     code,
@@ -132,7 +133,7 @@ class AppealsService:
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{next_row}: {format_error}", exc_info=True)
                 
-                logger.info(f"Создано новое обращение для пользователя {telegram_id} (строка {next_row})")
+                logger.info(f"Создано новое обращение для пользователя {mask_telegram_id(telegram_id)} (строка {next_row})")
             
             return True
             
@@ -227,7 +228,7 @@ class AppealsService:
                 if str(record.get('telegram_id', '')) == str(telegram_id):
                     user_appeals.append(record)
             
-            logger.info(f"Найдено {len(user_appeals)} обращений для пользователя {telegram_id}")
+            logger.info(f"Найдено {len(user_appeals)} обращений для пользователя {mask_telegram_id(telegram_id)}")
             return user_appeals
             
         except Exception as e:
@@ -265,10 +266,10 @@ class AppealsService:
                         await self.gateway.update(self.worksheet, f'G{i}', [[specialist_answer]])  # специалист_ответ
                     await self.gateway.update(self.worksheet, f'H{i}', [[timestamp]])  # время_обновления
                     
-                    logger.info(f"Обновлен статус обращения для пользователя {telegram_id}")
+                    logger.info(f"Обновлен статус обращения для пользователя {mask_telegram_id(telegram_id)}")
                     return True
             
-            logger.warning(f"Обращение не найдено для пользователя {telegram_id}")
+            logger.warning(f"Обращение не найдено для пользователя {mask_telegram_id(telegram_id)}")
             return False
             
         except Exception as e:
@@ -476,10 +477,10 @@ class AppealsService:
                     'values': [[updated_appeals]]
                 }])
                 
-                logger.info(f"Ответ специалиста добавлен для пользователя {telegram_id} (строка {existing_row})")
+                logger.info(f"Ответ специалиста добавлен для пользователя {mask_telegram_id(telegram_id)} (строка {existing_row})")
                 return True
             else:
-                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                logger.warning(f"Не найдена строка для пользователя {mask_telegram_id(telegram_id)}")
                 return False
                 
         except Exception as e:
@@ -551,10 +552,10 @@ class AppealsService:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                     # Продолжаем выполнение, даже если форматирование не удалось
                 
-                logger.info(f"Ответ ИИ добавлен для пользователя {telegram_id} (строка {existing_row})")
+                logger.info(f"Ответ ИИ добавлен для пользователя {mask_telegram_id(telegram_id)} (строка {existing_row})")
                 return True
             else:
-                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                logger.warning(f"Не найдена строка для пользователя {mask_telegram_id(telegram_id)}")
                 return False
                 
         except Exception as e:
@@ -590,10 +591,10 @@ class AppealsService:
                     {'range': f'E{existing_row}', 'values': [[updated_appeals]]},
                     {'range': f'H{existing_row}', 'values': [[timestamp]]}
                 ])
-                logger.info(f"Сообщение пользователя добавлено (страховка) для {telegram_id} (строка {existing_row})")
+                logger.info(f"Сообщение пользователя добавлено (страховка) для {mask_telegram_id(telegram_id)} (строка {existing_row})")
                 return True
             else:
-                logger.warning(f"Строка пользователя не найдена для добавления сообщения (telegram_id={telegram_id})")
+                logger.warning(f"Строка пользователя не найдена для добавления сообщения (telegram_id={mask_telegram_id(telegram_id)})")
                 return False
         except Exception as e:
             logger.error(f"Ошибка добавления пользовательского сообщения: {e}")
@@ -646,10 +647,10 @@ class AppealsService:
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                 
-                logger.info(f"Статус установлен 'Передано специалисту' для пользователя {telegram_id} (строка {existing_row})")
+                logger.info(f"Статус установлен 'Передано специалисту' для пользователя {mask_telegram_id(telegram_id)} (строка {existing_row})")
                 return True
             else:
-                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                logger.warning(f"Не найдена строка для пользователя {mask_telegram_id(telegram_id)}")
                 return False
                 
         except Exception as e:
@@ -703,10 +704,10 @@ class AppealsService:
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                 
-                logger.info(f"Статус установлен 'В работе' для пользователя {telegram_id} (строка {existing_row})")
+                logger.info(f"Статус установлен 'В работе' для пользователя {mask_telegram_id(telegram_id)} (строка {existing_row})")
                 return True
             else:
-                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                logger.warning(f"Не найдена строка для пользователя {mask_telegram_id(telegram_id)}")
                 return False
                 
         except Exception as e:
@@ -760,10 +761,10 @@ class AppealsService:
                 except Exception as format_error:
                     logger.error(f"Ошибка при установке заливки для ячейки F{existing_row}: {format_error}", exc_info=True)
                 
-                logger.info(f"Статус установлен 'Решено' для пользователя {telegram_id} (строка {existing_row})")
+                logger.info(f"Статус установлен 'Решено' для пользователя {mask_telegram_id(telegram_id)} (строка {existing_row})")
                 return True
             else:
-                logger.warning(f"Не найдена строка для пользователя {telegram_id}")
+                logger.warning(f"Не найдена строка для пользователя {mask_telegram_id(telegram_id)}")
                 return False
                 
         except Exception as e:
@@ -791,7 +792,7 @@ class AppealsService:
             for i, record in enumerate(records, start=2):
                 if str(record.get('telegram_id', '')) == str(telegram_id):
                     status = record.get('статус', 'новое')
-                    logger.info(f"Найден статус для пользователя {telegram_id}: {status}")
+                    logger.info(f"Найден статус для пользователя {mask_telegram_id(telegram_id)}: {status}")
                     # Авто-форматирование: применяем заливку в зависимости от статуса
                     try:
                         status_lower = str(status).strip().lower()
@@ -819,7 +820,7 @@ class AppealsService:
                         logger.error(f"Не удалось применить форматирование для строки {i}: {e}", exc_info=True)
                     return status
             
-            logger.info(f"Статус для пользователя {telegram_id} не найден, возвращаем 'новое'")
+            logger.info(f"Статус для пользователя {mask_telegram_id(telegram_id)} не найден, возвращаем 'новое'")
             return 'новое'
                 
         except Exception as e:

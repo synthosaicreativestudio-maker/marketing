@@ -10,31 +10,32 @@ from sheets_gateway import AsyncGoogleSheetsGateway
 
 logger = logging.getLogger(__name__)
 
-def register_promotions_handlers(application, auth_service: AuthService):
+def register_promotions_handlers(application, auth_service: AuthService, promotions_gateway=None):
     """Регистрация обработчиков акций."""
-    application.add_handler(CommandHandler("promotions", promotions_command_handler(auth_service)))
+    application.add_handler(CommandHandler("promotions", promotions_command_handler(auth_service, promotions_gateway)))
 
-def promotions_command_handler(auth_service: AuthService):
+def promotions_command_handler(auth_service: AuthService, promotions_gateway=None):
     """Фабрика для команды /promotions."""
     @safe_handler
     async def handle_promotions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
-        
+
         if not await auth_service.get_user_auth_status(user.id):
             await update.message.reply_text("Для просмотра акций требуется авторизация.")
             return
 
-        if not is_promotions_available():
+        gateway = promotions_gateway or AsyncGoogleSheetsGateway(circuit_breaker_name='promotions')
+        if not await is_promotions_available(gateway):
             await update.message.reply_text("Система акций временно недоступна.")
             return
 
         try:
-            promotions_json = get_promotions_json()
+            promotions_json = await get_promotions_json(gateway)
             await _send_promotions(update, promotions_json)
         except Exception as e:
             logger.error(f"Ошибка акций: {e}")
             await update.message.reply_text("Ошибка при получении акций.")
-            
+
     return handle_promotions
 
 async def handle_promotions_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

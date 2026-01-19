@@ -160,14 +160,13 @@ class BotHealthMonitor:
         except Exception as e:
             logger.error(f"Ошибка при проверке Google Sheets: {e}", exc_info=True)
     
-    async def _reconnect_sheets(self):
+    def _reconnect_sheets(self):
         """
-        Попытка переподключения к Google Sheets.
+        Попытка переподключения к Google Sheets (синхронная, выполняется в to_thread).
         """
         try:
             from sheets_gateway import _get_client_and_sheet
-            
-            # Пытаемся переподключиться синхронно
+
             logger.info("Переподключение к Google Sheets...")
             _, worksheet = _get_client_and_sheet()
             

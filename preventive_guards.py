@@ -180,28 +180,49 @@ class CircuitBreakerMonitor:
 
 def validate_environment() -> bool:
     """
-    Валидация окружения перед запуском бота.
-    Предотвращает запуск с некорректной конфигурацией.
+    Валидация окружения перед запуском бота (наличие, формат, существование файлов).
     """
-    required_vars = [
-        'TELEGRAM_TOKEN',
-        'SHEET_ID',
-        'APPEALS_SHEET_ID',
-        'GCP_SA_FILE'
-    ]
-    
-    missing = []
-    for var in required_vars:
-        if not os.getenv(var):
-            missing.append(var)
-    
-    if missing:
-        logger.critical(
-            "❌ КРИТИЧЕСКАЯ ОШИБКА: Отсутствуют переменные окружения:\n" +
-            "\n".join(f"  - {var}" for var in missing) +
-            "\n\nПроверьте файл .env!"
-        )
+    import json
+
+    errors = []
+
+    # TELEGRAM_TOKEN
+    token = os.getenv('TELEGRAM_TOKEN')
+    if not token:
+        errors.append("TELEGRAM_TOKEN не задан")
+    elif ':' not in token or len(token.split(':')) != 2:
+        errors.append("TELEGRAM_TOKEN имеет неверный формат (ожидается: '123456:ABC-DEF...')")
+
+    # SHEET_ID
+    sheet_id = os.getenv('SHEET_ID')
+    if not sheet_id:
+        errors.append("SHEET_ID не задан")
+    elif len(sheet_id) < 10:
+        errors.append("SHEET_ID имеет неверный формат (слишком короткий)")
+
+    # APPEALS_SHEET_ID
+    appeals_sheet_id = os.getenv('APPEALS_SHEET_ID')
+    if not appeals_sheet_id:
+        errors.append("APPEALS_SHEET_ID не задан")
+    elif len(appeals_sheet_id) < 10:
+        errors.append("APPEALS_SHEET_ID имеет неверный формат (слишком короткий)")
+
+    # GCP_SA_FILE
+    sa_file = os.getenv('GCP_SA_FILE')
+    if not sa_file:
+        errors.append("GCP_SA_FILE не задан")
+    elif not Path(sa_file).exists():
+        errors.append(f"GCP_SA_FILE не существует: {sa_file}")
+    else:
+        try:
+            with Path(sa_file).open(encoding='utf-8') as f:
+                json.load(f)
+        except json.JSONDecodeError as e:
+            errors.append(f"GCP_SA_FILE содержит невалидный JSON: {e}")
+
+    if errors:
+        logger.critical("❌ Ошибки конфигурации:\n" + "\n".join(f"  - {e}" for e in errors))
         return False
-    
+
     logger.info("✅ Все переменные окружения настроены корректно")
     return True

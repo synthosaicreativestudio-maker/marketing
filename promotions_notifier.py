@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class PromotionsNotifier:
     """Сервис для отправки уведомлений о новых акциях"""
-    
+
     def __init__(self, bot, auth_service: AuthService, gateway: AsyncGoogleSheetsGateway):
         self.bot = bot
         self.auth_service = auth_service
@@ -23,17 +23,24 @@ class PromotionsNotifier:
         self.sent_promotions = set()  # Множество ID уже отправленных акций
         self.is_running = False  # Флаг работы мониторинга
         self._task = None  # Ссылка на задачу мониторинга
-        
+        self._http_session: Optional[aiohttp.ClientSession] = None  # Singleton для HTTP
+
+    async def _get_http_session(self) -> aiohttp.ClientSession:
+        """Возвращает или создаёт общую HTTP-сессию (Singleton)."""
+        if self._http_session is None or self._http_session.closed:
+            self._http_session = aiohttp.ClientSession()
+        return self._http_session
+
     async def _prepare_media(self, content_url: str) -> Optional[io.BytesIO]:
         """Подготавливает медиа-файл в памяти (BytesIO).
-        
+
         ТЗ 2.1: Поддержка Base64, Google Drive и прямых ссылок с кешированием.
         """
         if not content_url or content_url == 'None' or not content_url.strip():
             return None
 
         content_url = content_url.strip()
-        
+
         try:
             # Сценарий А: Base64
             if content_url.startswith('data:image'):
@@ -42,50 +49,43 @@ class PromotionsNotifier:
                 data = base64.b64decode(encoded)
                 return io.BytesIO(data)
 
-            # Создаем или используем aiohttp сессию
-            async with aiohttp.ClientSession() as session:
-                # Сценарий Б: Google Drive
-                if 'drive.google.com' in content_url:
-                    logger.debug(f"Detected Google Drive link: {content_url}")
-                    file_id = None
-                    if '/file/d/' in content_url:
-                        file_id = content_url.split('/file/d/')[1].split('/')[0]
-                    elif 'id=' in content_url:
-                        parsed_url = urlparse(content_url)
-                        file_id = parse_qs(parsed_url.query).get('id', [None])[0]
-                    
-                    if file_id:
-                        # Конвертируем в формат скачивания (ТЗ 2.1.Б)
-                        download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                        logger.info(f"Downloading from Google Drive: {download_url}")
-                        
-                        # Используем таймаут 15 сек и маршрут через US
-                        async with session.get(download_url, timeout=aiohttp.ClientTimeout(total=15)) as response:
-                            response.raise_for_status()
-                            content = await response.read()
-                        
-                            # Проверка размера (ТГ лимит ~10МБ для фото, но ТЗ допускает до 20МБ)
-                            if len(content) > 20 * 1024 * 1024:
-                                logger.warning(f"File from Drive is too large: {len(content)} bytes")
-                                return None
-                                
-                            return io.BytesIO(content)
+            # Сценарии Б и В: используем общую HTTP-сессию
+            session = await self._get_http_session()
 
-                # Сценарий В: Прямая ссылка
-                if content_url.startswith('http'):
-                    logger.debug(f"Detected direct URL: {content_url}")
-                    async with session.get(content_url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+            # Сценарий Б: Google Drive
+            if 'drive.google.com' in content_url:
+                logger.debug(f"Detected Google Drive link: {content_url}")
+                file_id = None
+                if '/file/d/' in content_url:
+                    file_id = content_url.split('/file/d/')[1].split('/')[0]
+                elif 'id=' in content_url:
+                    parsed_url = urlparse(content_url)
+                    file_id = parse_qs(parsed_url.query).get('id', [None])[0]
+
+                if file_id:
+                    download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                    logger.info(f"Downloading from Google Drive: {download_url}")
+                    async with session.get(download_url, timeout=aiohttp.ClientTimeout(total=15)) as response:
                         response.raise_for_status()
                         content = await response.read()
-                        
-                        if len(content) > 20 * 1024 * 1024:
-                            logger.warning(f"File from URL is too large: {len(content)} bytes")
-                            return None
-                        
-                        return io.BytesIO(content)
+                    if len(content) > 20 * 1024 * 1024:
+                        logger.warning(f"File from Drive is too large: {len(content)} bytes")
+                        return None
+                    return io.BytesIO(content)
+
+            # Сценарий В: Прямая ссылка
+            if content_url.startswith('http'):
+                logger.debug(f"Detected direct URL: {content_url}")
+                async with session.get(content_url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                    response.raise_for_status()
+                    content = await response.read()
+                if len(content) > 20 * 1024 * 1024:
+                    logger.warning(f"File from URL is too large: {len(content)} bytes")
+                    return None
+                return io.BytesIO(content)
 
             return None
-            
+
         except Exception as e:
             logger.error(f"Failed to prepare media from {content_url[:50]}...: {e}")
             return None
@@ -231,7 +231,7 @@ class PromotionsNotifier:
         self._task = asyncio.create_task(self._monitoring_loop(interval_minutes))
     
     async def stop_monitoring(self):
-        """Останавливает мониторинг акций"""
+        """Останавливает мониторинг акций и закрывает HTTP-сессию."""
         if not self.is_running:
             return
         self.is_running = False
@@ -241,6 +241,9 @@ class PromotionsNotifier:
                 await self._task
             except asyncio.CancelledError:
                 pass
+        if self._http_session and not self._http_session.closed:
+            await self._http_session.close()
+            self._http_session = None
     
     async def _monitoring_loop(self, interval_minutes: int):
         """Основной цикл мониторинга"""

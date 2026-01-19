@@ -7,6 +7,7 @@ import asyncio
 from telegram import Bot
 from appeals_service import AppealsService
 from typing import Union
+from utils import mask_telegram_id
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +104,7 @@ class ResponseMonitor:
             
             for appeal in resolved_appeals:
                 telegram_id = appeal['telegram_id']
-                appeal['row']
-                
+
                 message = "✅ Ваше обращение отмечено как решенное специалистом."
                 
                 # ВАЖНО: Добавляем маркер ДО отправки уведомления, чтобы предотвратить повторную отправку
@@ -114,9 +114,9 @@ class ResponseMonitor:
                         telegram_id=telegram_id,
                         response_text=message
                     )
-                    logger.info(f"Маркер 'решено' добавлен в историю для пользователя {telegram_id}")
+                    logger.info(f"Маркер 'решено' добавлен в историю для пользователя {mask_telegram_id(telegram_id)}")
                 except Exception as e:
-                    logger.error(f"Ошибка добавления маркера для пользователя {telegram_id}: {e}")
+                    logger.error(f"Ошибка добавления маркера для пользователя {mask_telegram_id(telegram_id)}: {e}")
                     # Продолжаем выполнение даже если не удалось добавить маркер
                 
                 # Отправляем уведомление
@@ -125,9 +125,9 @@ class ResponseMonitor:
                         chat_id=telegram_id,
                         text=message
                     )
-                    logger.info(f"Уведомление о ручном решении отправлено пользователю {telegram_id}")
+                    logger.info(f"Уведомление о ручном решении отправлено пользователю {mask_telegram_id(telegram_id)}")
                 except Exception as e:
-                    logger.error(f"Ошибка отправки уведомления пользователю {telegram_id}: {e}")
+                    logger.error(f"Ошибка отправки уведомления пользователю {mask_telegram_id(telegram_id)}: {e}")
                 
         except Exception as e:
             logger.error(f"Ошибка обработки ручных решений: {e}")
@@ -185,7 +185,7 @@ class ResponseMonitor:
                 text=message
             )
             
-            logger.info(f"Отправлено уведомление о решении пользователю {telegram_id}")
+            logger.info(f"Отправлено уведомление о решении пользователю {mask_telegram_id(telegram_id)}")
             
             # Статус меняется на "решено" только при явном указании триггерных фраз
             logger.info(f"Обращение помечено как решенное по триггерным фразам для строки {response_data['row']}")
@@ -194,7 +194,7 @@ class ResponseMonitor:
             await self.appeals_service.clear_response(response_data['row'])
             
         except Exception as e:
-            logger.error(f"Ошибка обработки решения для пользователя {response_data.get('telegram_id', 'unknown')}: {e}")
+            logger.error(f"Ошибка обработки решения для пользователя {mask_telegram_id(response_data.get('telegram_id'))}: {e}")
 
     async def _send_response(self, response_data: dict):
         """
@@ -217,15 +217,15 @@ class ResponseMonitor:
                 text=message
             )
             
-            logger.info(f"Отправлен ответ пользователю {telegram_id}")
+            logger.info(f"Отправлен ответ пользователю {mask_telegram_id(telegram_id)}")
             
             # Устанавливаем статус "В работе" при первом ответе специалиста
             try:
                 success = await self.appeals_service.set_status_in_work(telegram_id)
                 if success:
-                    logger.info(f"Статус установлен 'В работе' для пользователя {telegram_id}")
+                    logger.info(f"Статус установлен 'В работе' для пользователя {mask_telegram_id(telegram_id)}")
                 else:
-                    logger.warning(f"Не удалось установить статус 'В работе' для пользователя {telegram_id}")
+                    logger.warning(f"Не удалось установить статус 'В работе' для пользователя {mask_telegram_id(telegram_id)}")
             except Exception as e:
                 logger.error(f"Ошибка при установке статуса 'В работе': {e}")
             
@@ -239,7 +239,7 @@ class ResponseMonitor:
                     telegram_id,
                     specialist_response
                 )
-                logger.info(f"Ответ специалиста записан в таблицу для пользователя {telegram_id}")
+                logger.info(f"Ответ специалиста записан в таблицу для пользователя {mask_telegram_id(telegram_id)}")
             except Exception as e:
                 logger.error(f"Ошибка записи ответа специалиста в таблицу: {e}")
             
@@ -250,7 +250,7 @@ class ResponseMonitor:
             await self.appeals_service.clear_response(response_data['row'])
             
         except Exception as e:
-            logger.error(f"Ошибка отправки ответа пользователю {response_data.get('telegram_id', 'unknown')}: {e}")
+            logger.error(f"Ошибка отправки ответа пользователю {mask_telegram_id(response_data.get('telegram_id'))}: {e}")
 
     async def send_test_response(self, telegram_id: int, test_message: str = "Тестовое сообщение от монитора ответов"):
         """
@@ -265,6 +265,6 @@ class ResponseMonitor:
                 chat_id=telegram_id,
                 text=f"🧪 {test_message}"
             )
-            logger.info(f"Отправлено тестовое сообщение пользователю {telegram_id}")
+            logger.info(f"Отправлено тестовое сообщение пользователю {mask_telegram_id(telegram_id)}")
         except Exception as e:
             logger.error(f"Ошибка отправки тестового сообщения: {e}")

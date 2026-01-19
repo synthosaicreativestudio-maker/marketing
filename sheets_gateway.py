@@ -206,13 +206,14 @@ class AsyncGoogleSheetsGateway:
     def __init__(self, circuit_breaker_name: str = 'auth'):
         """
         Инициализация Gateway.
-        
+
         Args:
             circuit_breaker_name: Имя Circuit Breaker ('auth', 'appeals', 'promotions')
         """
         self.circuit_breaker_name = circuit_breaker_name
         self._get_circuit_breaker()
         self._loop = None
+        self._write_lock = asyncio.Lock()  # Защита от race conditions при записи
     
     def _get_circuit_breaker(self):
         """Получает соответствующий Circuit Breaker."""
@@ -310,35 +311,23 @@ class AsyncGoogleSheetsGateway:
     async def append_row(self, worksheet: gspread.Worksheet, values: List[Any]) -> None:
         """
         Добавляет строку в worksheet.
-        
-        Args:
-            worksheet: Worksheet объект из gspread
-            values: Список значений для строки
         """
-        await self._run_in_executor(worksheet.append_row, values)
-    
+        async with self._write_lock:
+            await self._run_in_executor(worksheet.append_row, values)
+
     async def update(self, worksheet: gspread.Worksheet, range_name: str, values: List[List[Any]]) -> None:
         """
         Обновляет диапазон ячеек в worksheet.
-        
-        Args:
-            worksheet: Worksheet объект из gspread
-            range_name: Имя диапазона (например, 'A1:B2')
-            values: Двумерный список значений
         """
-        await self._run_in_executor(worksheet.update, range_name, values)
-    
+        async with self._write_lock:
+            await self._run_in_executor(worksheet.update, range_name, values)
+
     async def update_cell(self, worksheet: gspread.Worksheet, row: int, col: int, value: Any) -> None:
         """
         Обновляет одну ячейку в worksheet.
-        
-        Args:
-            worksheet: Worksheet объект из gspread
-            row: Номер строки (начиная с 1)
-            col: Номер колонки (начиная с 1)
-            value: Значение для ячейки
         """
-        await self._run_in_executor(worksheet.update_cell, row, col, value)
+        async with self._write_lock:
+            await self._run_in_executor(worksheet.update_cell, row, col, value)
     
     async def find(self, worksheet: gspread.Worksheet, query: str, in_row: Optional[int] = None, in_column: Optional[int] = None) -> Optional[gspread.Cell]:
         """
@@ -410,23 +399,16 @@ class AsyncGoogleSheetsGateway:
     async def batch_update(self, worksheet: gspread.Worksheet, data: List[Dict]) -> None:
         """
         Пакетное обновление ячеек.
-        
-        Args:
-            worksheet: Worksheet объект из gspread
-            data: Список словарей с данными для обновления
         """
-        await self._run_in_executor(worksheet.batch_update, data)
-    
+        async with self._write_lock:
+            await self._run_in_executor(worksheet.batch_update, data)
+
     async def format(self, worksheet: gspread.Worksheet, range_name: str, format_dict: Dict) -> None:
         """
         Форматирует диапазон ячеек.
-        
-        Args:
-            worksheet: Worksheet объект из gspread
-            range_name: Имя диапазона
-            format_dict: Словарь с параметрами форматирования
         """
-        await self._run_in_executor(worksheet.format, range_name, format_dict)
+        async with self._write_lock:
+            await self._run_in_executor(worksheet.format, range_name, format_dict)
 
     async def cell(self, worksheet: gspread.Worksheet, row: int, col: int) -> gspread.Cell:
         """

@@ -8,7 +8,7 @@ from handlers.callback import register_callback_handlers
 
 logger = logging.getLogger(__name__)
 
-def setup_handlers(application, auth_service, ai_service, appeals_service):
+def setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway=None):
     """
     Централизованная регистрация всех обработчиков.
     Модули включаются/выключаются на основе config.settings.
@@ -30,7 +30,7 @@ def setup_handlers(application, auth_service, ai_service, appeals_service):
 
     # 4. Акции
     if settings.ENABLE_PROMOTIONS:
-        register_promotions_handlers(application, auth_service)
+        register_promotions_handlers(application, auth_service, promotions_gateway)
         logger.info("Модуль Promotions подключен")
 
     # 5. Callback-кнопки

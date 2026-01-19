@@ -192,7 +192,7 @@ class GeminiService:
         # Ограничение размера истории с защитой индексов 0 и 1
         # Новая история = [Msg0, Msg1] + [Последние 10 сообщений]
         if len(history) > self.max_history_messages + 2:
-            # Удаляем самое старое сообщение послеPinned (индекс 2)
+            # Удаляем самое старое сообщение после закреплённых (индекс 2)
             history.pop(2)
             logger.debug(f"History Pinning: removed message at index 2 for user {user_id}. Context preserved.")
 

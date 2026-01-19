@@ -65,7 +65,7 @@ async def _create_appeal_entry(user, text, auth_service, appeals_service):
     """Фоновое создание записи в таблице обращений."""
     try:
         # Упрощенное получение данных (для Phase 2 можно оптимизировать кешированием)
-        records = auth_service.worksheet.get_all_records()
+        records = await auth_service.gateway.get_all_records(auth_service.worksheet)
         user_data = next((r for r in records if str(r.get('Telegram ID')) == str(user.id)), None)
         
         if user_data:
@@ -87,7 +87,8 @@ async def _is_specialist_mode(user_id, appeals_service):
         status = await appeals_service.get_appeal_status(user_id)
         status = str(status or '').lower()
         return "в работе" in status or "передано" in status
-    except Exception:
+    except Exception as e:
+        logger.debug(f"_is_specialist_mode: {e}", exc_info=True)
         return False
 
 async def _process_ai_response(update, context, ai_service, appeals_service, text):
@@ -116,15 +117,32 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
                 try:
                     await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode='Markdown')
                     last_update = time.time()
-                except Exception:
-                    pass
+                except Exception as e:
+                    # При ошибке парсинга Markdown пробуем без форматирования
+                    if "Can't parse entities" in str(e) or "parse" in str(e).lower():
+                        try:
+                            await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode=None)
+                            last_update = time.time()
+                        except Exception as inner:
+                            logger.debug(f"Fallback edit_text (parse_mode=None): {inner}", exc_info=True)
+                    else:
+                        logger.debug(f"edit_text during stream: {e}", exc_info=True)
         
         # Финализация
         is_esc = "[ESCALATE_ACTION]" in full_response
         clean_response = full_response.replace("[ESCALATE_ACTION]", "").strip()
         markup = create_specialist_button() if is_esc else None
         
-        await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode='Markdown')
+        # Пытаемся отправить с Markdown, при ошибке парсинга - без форматирования
+        try:
+            await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode='Markdown')
+        except Exception as parse_error:
+            if "Can't parse entities" in str(parse_error) or "parse" in str(parse_error).lower():
+                logger.warning(f"Markdown parsing error, sending as plain text: {parse_error}")
+                # Отправляем без Markdown форматирования
+                await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode=None)
+            else:
+                raise
         
         # Фоновое логирование
         if settings.LOG_TO_SHEETS:
@@ -142,13 +160,13 @@ async def _safe_background_log(user_id, text, reply, appeals_service):
             os.makedirs("logs", exist_ok=True)
             with open("logs/chat_history.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps({"uid": user_id, "q": text, "a": reply}, ensure_ascii=False) + "\n")
-        except Exception:
-            pass
-        
+        except Exception as e:
+            logger.debug(f"_safe_background_log (local file): {e}", exc_info=True)
+
     # В таблицу
     if appeals_service and appeals_service.is_available():
         try:
             await appeals_service.add_user_message(user_id, text)
             await appeals_service.add_ai_response(user_id, reply)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"_safe_background_log (Sheets): {e}", exc_info=True)

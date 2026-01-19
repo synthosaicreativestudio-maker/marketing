@@ -5,6 +5,41 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 logger = logging.getLogger(__name__)
 
+
+def mask_phone(phone: str) -> str:
+    """Маскирует номер телефона: 89123456789 -> 8*******89."""
+    if not phone or not str(phone).strip():
+        return "****"
+    s = str(phone).strip()
+    if len(s) < 4:
+        return "****"
+    return s[:1] + "*" * (len(s) - 3) + s[-2:]
+
+
+def mask_telegram_id(tid) -> str:
+    """Маскирует Telegram ID: 123456789 -> 123***789."""
+    if tid is None:
+        return "***"
+    s = str(tid)
+    if len(s) < 6:
+        return "***"
+    return s[:3] + "***" + s[-3:]
+
+
+def mask_fio(fio: str) -> str:
+    """Маскирует ФИО: Иванов Иван Иванович -> И***в И***н И***ч."""
+    if not fio or not str(fio).strip():
+        return "***"
+    parts = str(fio).strip().split()
+    masked = []
+    for part in parts:
+        if len(part) < 3:
+            masked.append("***")
+        else:
+            masked.append(part[0] + "*" * (len(part) - 2) + part[-1])
+    return " ".join(masked)
+
+
 def _validate_url(url: str) -> bool:
     """Проверяет, является ли строка валидным URL."""
     if not url:

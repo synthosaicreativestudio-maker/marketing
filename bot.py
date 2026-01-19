@@ -242,7 +242,7 @@ def _run_bot_main():
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
     try:
-        setup_handlers(application, auth_service, ai_service, appeals_service)
+        setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway)
         logger.info("Обработчики успешно зарегистрированы")
     except Exception as e:
         logger.error(f"Ошибка регистрации обработчиков: {e}", exc_info=True)
@@ -451,7 +451,7 @@ def _run_bot_main():
                     application_instance = application
                     # Переинициализируем AI сервис с актуальным gateway
                     ai_service = AIService(promotions_gateway=promotions_gateway)
-                    setup_handlers(application, auth_service, ai_service, appeals_service)
+                    setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway)
                     application.post_init = post_init
                     application.post_stop = post_stop
                     application.add_error_handler(error_handler)

@@ -6,6 +6,7 @@ import os
 from cachetools import TTLCache
 from sheets_gateway import AsyncGoogleSheetsGateway, CircuitBreakerOpenError
 from sheets_gateway import _get_client_and_sheet, normalize_phone
+from utils import mask_phone, mask_telegram_id
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class AuthService:
         Returns:
             bool: True если пользователь найден и авторизован
         """
-        logger.info(f"Поиск пользователя: код={partner_code}, телефон={partner_phone}, telegram_id={telegram_id}")
+        logger.info(f"Поиск пользователя: код={partner_code}, телефон={mask_phone(partner_phone)}, telegram_id={mask_telegram_id(telegram_id)}")
 
         if not self.worksheet:
             logger.error("Worksheet не инициализирован (Sheets конфигурация отсутствует).")
@@ -67,7 +68,7 @@ class AuthService:
                 return False
 
             phone_norm = normalize_phone(partner_phone)
-            logger.info(f"Нормализованный телефон из формы: '{phone_norm}'")
+            logger.info(f"Нормализованный телефон из формы: '{mask_phone(phone_norm)}'")
             
             # Получаем все записи через Gateway
             records = await self.gateway.get_all_records(self.worksheet)
@@ -128,11 +129,11 @@ class AuthService:
         Returns:
             bool: True если пользователь авторизован
         """
-        logger.info(f"Проверка статуса авторизации для пользователя {telegram_id}")
+        logger.info(f"Проверка статуса авторизации для пользователя {mask_telegram_id(telegram_id)}")
         
         # Проверяем кэш сначала
         if telegram_id in self.auth_cache:
-            logger.info(f"Используем кэшированный результат для пользователя {telegram_id}")
+            logger.info(f"Используем кэшированный результат для пользователя {mask_telegram_id(telegram_id)}")
             return self.auth_cache[telegram_id]
         
         # Если не в кэше, проверяем в таблице
@@ -150,12 +151,12 @@ class AuthService:
                 
                 # Проверяем, есть ли 'Telegram ID' в строке и совпадает ли он
                 telegram_id_in_sheet = row.get('Telegram ID')
-                logger.info(f"Сравнение Telegram ID: в таблице='{telegram_id_in_sheet}' vs запрашиваемый='{telegram_id}'")
+                logger.info(f"Сравнение Telegram ID: в таблице='{mask_telegram_id(telegram_id_in_sheet)}' vs запрашиваемый='{mask_telegram_id(telegram_id)}'")
                 
                 if str(telegram_id_in_sheet) == str(telegram_id):
                     # Проверяем статус в колонке 'Статус' или 'Статус авторизации'
                     status = row.get('Статус') or row.get('Статус авторизации')
-                    logger.info(f"Найден пользователь с Telegram ID {telegram_id}, статус: {status}")
+                    logger.info(f"Найден пользователь с Telegram ID {mask_telegram_id(telegram_id)}, статус: {status}")
                     status_norm = str(status or '').strip().lower()
                     result = status_norm in ("авторизован", "authorized")
                     logger.info(f"Результат проверки авторизации: {result}")
@@ -166,7 +167,7 @@ class AuthService:
                 else:
                     logger.info(f"Запись {i+1} не соответствует запрашиваемому Telegram ID")
                     
-            logger.info(f"Пользователь с Telegram ID {telegram_id} не найден в таблице")
+            logger.info(f"Пользователь с Telegram ID {mask_telegram_id(telegram_id)} не найден в таблице")
             # Обновляем кэш с результатом "не авторизован"
             self.auth_cache[telegram_id] = False
             return False
@@ -174,7 +175,7 @@ class AuthService:
             logger.warning(f"Circuit Breaker открыт для Auth Service: {e}. Возвращаем False.")
             return False
         except Exception as e:
-            logger.error(f"Ошибка при проверке статуса пользователя {telegram_id}: {e}", exc_info=True)
+            logger.error(f"Ошибка при проверке статуса пользователя {mask_telegram_id(telegram_id)}: {e}", exc_info=True)
             # При ошибке возвращаем False (fail-safe)
             return False
 
@@ -190,7 +191,7 @@ class AuthService:
         if telegram_id:
             if telegram_id in self.auth_cache:
                 del self.auth_cache[telegram_id]
-                logger.info(f"Кэш авторизации очищен для пользователя {telegram_id}")
+                logger.info(f"Кэш авторизации очищен для пользователя {mask_telegram_id(telegram_id)}")
         else:
             self.auth_cache.clear()
             logger.info("Кэш авторизации очищен для всех пользователей")

@@ -38,9 +38,9 @@ async def _handle_specialist_request(query, user, auth_service, appeals_service)
 
     try:
         # Обновляем статус в таблице
-        records = auth_service.worksheet.get_all_records()
+        records = await auth_service.gateway.get_all_records(auth_service.worksheet)
         user_data = next((r for r in records if str(r.get('Telegram ID')) == str(user.id)), None)
-        
+
         if user_data:
             await appeals_service.create_appeal(
                 code=user_data.get('Код партнера', ''),
@@ -50,8 +50,8 @@ async def _handle_specialist_request(query, user, auth_service, appeals_service)
                 text="[ЗАПРОС СПЕЦИАЛИСТА]"
             )
             # Ставим статус "В работе"
-            await appeals_service.update_appeal_status(user.id, "В работе")
-            
+            await appeals_service.set_status_in_work(user.id)
+
             await query.edit_message_text(
                 "✅ Запрос принят. Специалист ответит вам в ближайшее время прямо здесь."
             )
