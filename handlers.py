@@ -679,17 +679,17 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
         handler_start_time = time.time()
 
         try:
-            # Устанавливаем таймаут для AI запроса (25 секунд)
-            # Это предотвращает блокировку event loop длительными запросами к Gemini
+            # Устанавливаем таймаут для AI запроса (60 секунд)
+            # Это дает Gemini достаточно времени для генерации длинных ответов и работы с инструментами
             try:
                 reply = await asyncio.wait_for(
                     ai_service.ask(user.id, text),
-                    timeout=25.0
+                    timeout=60.0
                 )
             except asyncio.TimeoutError:
                 handler_duration = time.time() - handler_start_time
                 logger.warning(
-                    f"⏱ AI запрос превысил таймаут (25s) для user {user.id}. "
+                    f"⏱ AI запрос превысил таймаут (60s) для user {user.id}. "
                     f"Общее время обработчика: {handler_duration:.1f}s"
                 )
                 # ВАЖНО: НЕ меняем статус автоматически!
