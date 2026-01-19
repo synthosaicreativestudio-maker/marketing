@@ -143,7 +143,7 @@ class KnowledgeBase:
                     si_content = types.Content(parts=[types.Part(text=system_instruction)])
 
                 cached_content = self.client.caches.create(
-                    model='gemini-1.5-pro-002', 
+                    model='gemini-3-flash-preview', 
                     config=types.CreateCachedContentConfig(
                         contents=[types.Content(role='user', parts=content_parts)],
                         system_instruction=si_content,
