@@ -204,146 +204,189 @@ class GeminiService:
             logger.debug(f"History Pinning: removed message at index 2 for user {user_id}. Context preserved.")
 
     async def ask_stream(self, user_id: int, content: str) -> AsyncGenerator[str, None]:
-        """Отправляет запрос в Gemini и возвращает генератор для стриминга (Async)."""
+        """Отправляет запрос в Gemini и возвращает генератор для стриминга (Async).
+        Содержит механизм Auto-Retry для обработки пустых ответов при нестабильности модели.
+        """
         if not self.is_enabled():
             yield "Сервис ИИ временно недоступен."
             return
 
-        try:
-            # Добавляем сообщение пользователя в историю
-            self._add_to_history(user_id, "user", content)
-            
-            # Получаем всю историю для отправки
-            history = self._get_or_create_history(user_id)
-            
-            # Конфигурация инструментов (всегда актуальная)
-            tools = [
-                types.Tool(
-                    function_declarations=[types.FunctionDeclaration(
-                        name='get_promotions',
-                        description='Получить список текущих акций, скидок и условий ипотеки из базы данных. ПРИОРИТЕТНЫЙ ИСТОЧНИК для вопросов о выгоде.',
-                        parameters=types.Schema(type='OBJECT', properties={})
-                    )]
-                ),
-                types.Tool(
-                    google_search_retrieval=types.GoogleSearchRetrieval(
-                        dynamic_retrieval_config=types.DynamicRetrievalConfig(dynamic_threshold=0.6)
-                    )
+        # Добавляем сообщение пользователя в историю (ТОЛЬКО ОДИН РАЗ перед попытками)
+        # Если это рекурсивный вызов (content=""), сообщение уже там
+        if content:
+             self._add_to_history(user_id, "user", content)
+        
+        # Получаем всю историю для отправки
+        history = self._get_or_create_history(user_id)
+        
+        # Конфигурация инструментов (всегда актуальная)
+        tools = [
+            types.Tool(
+                function_declarations=[types.FunctionDeclaration(
+                    name='get_promotions',
+                    description='Получить список текущих акций, скидок и условий ипотеки из базы данных. ПРИОРИТЕТНЫЙ ИСТОЧНИК для вопросов о выгоде.',
+                    parameters=types.Schema(type='OBJECT', properties={})
+                )]
+            ),
+            types.Tool(
+                google_search_retrieval=types.GoogleSearchRetrieval(
+                    dynamic_retrieval_config=types.DynamicRetrievalConfig(dynamic_threshold=0.6)
                 )
+            )
+        ]
+
+        cache_name = await self.knowledge_base.get_cache_name()
+        config_params = {
+            'temperature': 0.7,
+            'max_output_tokens': 8192,
+            'top_p': 0.95,
+            'top_k': 40,
+            'safety_settings': [
+                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_CIVIC_INTEGRITY", threshold="BLOCK_NONE"),
             ]
+        }
+        
+        if not cache_name:
+            config_params['system_instruction'] = self.system_instruction
+            config_params['tools'] = tools
+        else:
+            config_params['cached_content'] = cache_name
+        
+        config = types.GenerateContentConfig(**config_params)
+        generate_kwargs = {
+            'model': self.model_name,
+            'contents': history,
+            'config': config
+        }
 
-            cache_name = await self.knowledge_base.get_cache_name()
-            config_params = {
-                'temperature': 0.7,
-                'max_output_tokens': 8192,
-                'top_p': 0.95,
-                'top_k': 40,
-                'safety_settings': [
-                    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
-                    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
-                    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
-                    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
-                    types.SafetySetting(category="HARM_CATEGORY_CIVIC_INTEGRITY", threshold="BLOCK_NONE"),
-                ]
-            }
+        # --- AUTO-RETRY LOGIC START ---
+        MAX_RETRIES = 2
+        full_reply_parts = []
+        grounding_sources = {}
+        
+        for attempt in range(MAX_RETRIES + 1):
+            full_reply_parts = [] # Сброс буферов перед новой попыткой
+            grounding_sources = {}
+            has_started_response = False # Флаг: начали ли мы уже отдавать данные
             
-            if not cache_name:
-                config_params['system_instruction'] = self.system_instruction
-                config_params['tools'] = tools
-            else:
-                config_params['cached_content'] = cache_name
-            
-            config = types.GenerateContentConfig(**config_params)
-            generate_kwargs = {
-                'model': self.model_name,
-                'contents': history,
-                'config': config
-            }
-
-            # Стриминг через aio.models.generate_content_stream
-            logger.info(f"Starting stream for user {user_id}")
-            
-            full_reply_parts = []
-            grounding_sources = {} # uri -> title
-
-            async for response in await self.client.aio.models.generate_content_stream(**generate_kwargs):
-                # Сбор Grounding Metadata для источников
-                if response.candidates and response.candidates[0].grounding_metadata:
-                    gm = response.candidates[0].grounding_metadata
-                    if gm.grounding_chunks:
-                        for chunk in gm.grounding_chunks:
-                            if chunk.web and chunk.web.uri and chunk.web.title:
-                                grounding_sources[chunk.web.uri] = chunk.web.title
-
-                # Проверка на Function Call в первом чанке
-                if response.candidates and response.candidates[0].content.parts:
-                    part = response.candidates[0].content.parts[0]
+            try:
+                logger.info(f"Starting stream for user {user_id} (Attempt {attempt+1}/{MAX_RETRIES+1})")
+                
+                async for response in await self.client.aio.models.generate_content_stream(**generate_kwargs):
                     
-                    if part.function_call:
-                        fc = part.function_call
-                        logger.info(f"ИИ вызывает функцию (STREAM): {fc.name}")
+                    # Сбор Grounding Metadata
+                    if response.candidates and response.candidates[0].grounding_metadata:
+                        gm = response.candidates[0].grounding_metadata
+                        if gm.grounding_chunks:
+                            for chunk in gm.grounding_chunks:
+                                if chunk.web and chunk.web.uri and chunk.web.title:
+                                    grounding_sources[chunk.web.uri] = chunk.web.title
+
+                    # Проверка на Function Call в первом чанке
+                    if response.candidates and response.candidates[0].content.parts:
+                        part = response.candidates[0].content.parts[0]
                         
-                        # Особый токен-сигнал для хендлера
-                        yield f"__TOOL_CALL__:{fc.name}"
-                        
-                        tool_result = "Данные недоступны"
-                        if fc.name == 'get_promotions':
-                            # Проверяем кэш
-                            now = time.time()
-                            if self._promotions_cache and (now - self._promotions_cache_time < self._promotions_cache_ttl):
-                                tool_result = self._promotions_cache
-                                logger.info("Using TTLCache for promotions")
-                            else:
-                                if self.promotions_gateway:
-                                    try:
-                                        tool_result = await get_promotions_json(self.promotions_gateway)
-                                        self._promotions_cache = tool_result
-                                        self._promotions_cache_time = now
-                                        logger.info(f"Promotions cache updated (len: {len(tool_result)})")
-                                    except Exception as te:
-                                        logger.error(f"Error calling promotion tool in stream: {te}")
-                                
-                        # Добавляем в историю и перезапускаем стрим (упрощенно для одного вызова)
-                        self.user_histories[user_id].append(response.candidates[0].content)
-                        function_response_part = types.Part(
-                            function_response=types.FunctionResponse(
-                                name=fc.name,
-                                response={'output': tool_result}
+                        if part.function_call:
+                            has_started_response = True # Технически это ответ
+                            fc = part.function_call
+                            logger.info(f"ИИ вызывает функцию (STREAM): {fc.name}")
+                            
+                            yield f"__TOOL_CALL__:{fc.name}"
+                            
+                            tool_result = "Данные недоступны"
+                            if fc.name == 'get_promotions':
+                                now = time.time()
+                                if self._promotions_cache and (now - self._promotions_cache_time < self._promotions_cache_ttl):
+                                    tool_result = self._promotions_cache
+                                    logger.info("Using TTLCache for promotions")
+                                else:
+                                    if self.promotions_gateway:
+                                        try:
+                                            tool_result = await get_promotions_json(self.promotions_gateway)
+                                            self._promotions_cache = tool_result
+                                            self._promotions_cache_time = now
+                                            logger.info(f"Promotions cache updated (len: {len(tool_result)})")
+                                        except Exception as te:
+                                            logger.error(f"Error calling promotion tool in stream: {te}")
+                                    
+                            # Добавляем в историю
+                            self.user_histories[user_id].append(response.candidates[0].content)
+                            function_response_part = types.Part(
+                                function_response=types.FunctionResponse(
+                                    name=fc.name,
+                                    response={'output': tool_result}
+                                )
                             )
-                        )
-                        self.user_histories[user_id].append(types.Content(role="tool", parts=[function_response_part]))
-                        
-                        # Рекурсивно перезапускаем стрим с накопленным контекстом
-                        async for sub_part in self.ask_stream(user_id, ""): # Пустой контент, так как он уже в истории
-                            # Фильтруем пустой контент в начале рекурсии если нужно
-                            if sub_part:
-                                yield sub_part
-                        return # Выходим из текущего генератора так как он заменен рекурсией
+                            self.user_histories[user_id].append(types.Content(role="tool", parts=[function_response_part]))
+                            
+                            # RECURSION: Перезапускаем стрим для получения ответа на функцию
+                            # Здесь важно: рекурсивный вызов ask_stream будет иметь свой собственный цикл retries!
+                            async for sub_part in self.ask_stream(user_id, ""): 
+                                if sub_part:
+                                    yield sub_part
+                            return # Полный выход из текущего генератора (успех)
 
-                    # Если это обычный текст
-                    if response.text:
-                        text_chunk = response.text
-                        full_reply_parts.append(text_chunk)
-                        yield text_chunk
+                        # Если это обычный текст
+                        if response.text:
+                            text_chunk = response.text
+                            # Если текст пришел, значит это не пустой ответ
+                            has_started_response = True
+                            full_reply_parts.append(text_chunk)
+                            yield text_chunk
 
-            # Формирование блока источников (Grounding)
-            if grounding_sources:
-                sources_text = "\n\n📚 **Источники:**\n"
-                for i, (uri, title) in enumerate(grounding_sources.items(), 1):
-                    sources_text += f"{i}. [{title}]({uri})\n"
+                # Конец цикла стриминга для данной попытки
                 
-                yield sources_text
-                full_reply_parts.append(sources_text)
-
-            # После завершения стрима сохраняем финальный ответ в историю
-            if full_reply_parts:
-                full_reply = "".join(full_reply_parts)
-                self._add_to_history(user_id, "model", full_reply)
-                logger.info(f"Stream finished for user {user_id}, history updated. Sources: {len(grounding_sources)}")
+                # Ключевая проверка: Был ли получен какой-то текст?
+                if not full_reply_parts:
+                    # Если стрим завершился без текста и без function call -> Это "Empty Response"
+                    raise ValueError("Received empty stream response from Gemini model")
                 
-        except Exception as e:
-            logger.error(f"Error in ask_stream for user {user_id}: {e}", exc_info=True)
-            yield f"\n[⚠️ Ошибка при генерации ответа: {str(e)[:50]}...]"
+                # Если мы здесь, значит ответ получен (full_reply_parts не пуст), выходим из цикла retry
+                break 
+
+            except Exception as e:
+                # Обработка ошибки
+                if has_started_response:
+                    # Если мы уже начали стримить текст пользователю, мы НЕ МОЖЕМ делать ретрай
+                    # иначе пользователь увидит дублирование текста или кашу.
+                    # Просто логируем и прерываем.
+                    logger.error(f"Stream error AFTER yield (user {user_id}): {e}")
+                    yield f"\n[⚠️ Обрыв соединения: {str(e)[:50]}]"
+                    return # Прерываем стрим
+                
+                # Если мы еще НИЧЕГО не выдали (пустой ответ или ошибка соединения сразу)
+                logger.warning(f"Gemini attempt {attempt+1} failed: {e}")
+                
+                if attempt < MAX_RETRIES:
+                    await asyncio.sleep(0.5) # Пауза перед ретраем
+                    continue # Идем на следующий круг
+                else:
+                    # Все попытки исчерпаны
+                    logger.error(f"All {MAX_RETRIES+1} attempts failed for user {user_id}")
+                    # Не нужно делать yield ошибки, пусть вызывающий код (chat_handler) покажет заглушку "Извините..."
+                    # или мы можем сами кинуть ошибку чтобы chat_handler ее поймал
+                    raise e
+
+        # --- FINALIZATION (Success case) ---
+        
+        # Формирование блока источников (Grounding)
+        if grounding_sources:
+            sources_text = "\n\n📚 **Источники:**\n"
+            for i, (uri, title) in enumerate(grounding_sources.items(), 1):
+                sources_text += f"{i}. [{title}]({uri})\n"
+            
+            yield sources_text
+            full_reply_parts.append(sources_text)
+
+        # Сохраняем финальный ответ в историю
+        if full_reply_parts:
+            full_reply = "".join(full_reply_parts)
+            self._add_to_history(user_id, "model", full_reply)
+            logger.info(f"Stream finished for user {user_id}, history updated. Sources: {len(grounding_sources)}")
 
     async def ask(self, user_id: int, content: str) -> Optional[str]:
         """Отправляет запрос в Gemini и возвращает полный ответ (через стриминг)."""
