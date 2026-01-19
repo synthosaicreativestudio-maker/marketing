@@ -747,9 +747,10 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
 
         # Переменные для стриминга
         status_message = None
-        full_response = ""
+        current_message_buffer = ""
+        full_response_log = ""
         last_update_time = 0
-        update_interval = 1.5 # Троттлинг 1.5 сек
+        update_interval = 1.5 
         
         try:
             # Сразу отправляем заглушку
@@ -764,42 +765,74 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
                         await status_message.edit_text("🔍 *Проверяю актуальные акции...*", parse_mode='Markdown')
                     continue
                 
-                full_response += chunk
+                current_message_buffer += chunk
+                full_response_log += chunk
+                
+                # Обработка переполнения сообщения (Telegram лимит 4096)
+                if len(current_message_buffer) > 3800: # Берем с запасом 3800
+                    # Ищем место для разрыва (абзац или пробел)
+                    split_idx = -1
+                    # Приоритет 1: Перенос строки
+                    last_newline = current_message_buffer.rfind('\n')
+                    if last_newline > 3000:
+                        split_idx = last_newline
+                    else:
+                        # Приоритет 2: Пробел
+                        last_space = current_message_buffer.rfind(' ')
+                        if last_space > 3000:
+                            split_idx = last_space
+                            
+                    if split_idx != -1:
+                        part1 = current_message_buffer[:split_idx]
+                        part2 = current_message_buffer[split_idx:].strip()
+                        
+                        # Финализируем текущее сообщение
+                        try:
+                            await status_message.edit_text(part1, parse_mode='Markdown')
+                        except Exception:
+                            # Fallback если Markdown кривой
+                            await status_message.edit_text(part1, parse_mode=None)
+                            
+                        # Создаем новое сообщение для продолжения
+                        status_message = await update.message.reply_text("⏳ *...*", parse_mode='Markdown')
+                        current_message_buffer = part2
                 
                 # Троттлинг обновлений в Telegram
                 now = time.time()
-                if (now - last_update_time >= update_interval) and full_response.strip():
+                if (now - last_update_time >= update_interval) and current_message_buffer.strip():
                     try:
-                        await status_message.edit_text(full_response + " ▌", parse_mode='Markdown')
+                        await status_message.edit_text(current_message_buffer + " ▌", parse_mode='Markdown')
                         last_update_time = now
                     except Exception as e:
                         if "Message is not modified" not in str(e):
                             logger.debug(f"Streaming update error for user {user.id}: {e}")
             
-            # Финальное обновление сообщения
-            if full_response.strip():
+            # Финальное обновление ПОСЛЕДНЕГО сообщения
+            if current_message_buffer.strip():
                 escalation_tag = "[ESCALATE_ACTION]"
-                is_escalation_triggered = escalation_tag in full_response or "Передаю ваш запрос специалисту" in full_response
-                clean_reply = full_response.replace(escalation_tag, "").strip()
+                is_escalation_triggered = escalation_tag in full_response_log or "Передаю ваш запрос специалисту" in full_response_log
+                
+                # Очищаем теги из буфера (если они попали в этот чанк)
+                clean_buffer = current_message_buffer.replace(escalation_tag, "").strip()
+                clean_full_log = full_response_log.replace(escalation_tag, "").strip()
                 
                 markup = create_specialist_button() if is_escalation_triggered else None
                 
                 try:
-                    await status_message.edit_text(clean_reply, reply_markup=markup, parse_mode='Markdown')
+                    await status_message.edit_text(clean_buffer, reply_markup=markup, parse_mode='Markdown')
                 except Exception:
-                    await status_message.edit_text(clean_reply, reply_markup=markup, parse_mode=None)
+                    await status_message.edit_text(clean_buffer, reply_markup=markup, parse_mode=None)
                 
-                # ФОНОВОЕ ЛОГИРОВАНИЕ (Fire-and-Forget)
-                asyncio.create_task(_safe_background_log(user.id, text, clean_reply, appeals_service))
+                # ФОНОВОЕ ЛОГИРОВАНИЕ (полный текст)
+                asyncio.create_task(_safe_background_log(user.id, text, clean_full_log, appeals_service))
                 
-                logger.info(f"Стриминг завершен для {user.id}. Длина: {len(clean_reply)}")
+                logger.info(f"Стриминг завершен для {user.id}. Полная длина: {len(clean_full_log)}")
 
                 # АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ ИЛЛЮСТРАЦИИ (Если ответ содержательный)
-                # Триггер: длина > 200 символов и нет эскалации
-                if len(clean_reply) > 200 and not is_escalation_triggered:
+                if len(clean_full_log) > 200 and not is_escalation_triggered:
                     asyncio.create_task(_generate_and_send_image(
                         user_id=user.id, 
-                        text_reply=clean_reply, 
+                        text_reply=clean_full_log, 
                         chat_id=update.effective_chat.id, 
                         context=context, 
                         ai_service=ai_service
