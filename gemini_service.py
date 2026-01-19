@@ -230,6 +230,7 @@ class GeminiService:
                 config_params['system_instruction'] = self.system_instruction
                 logger.info(f"Using Standard System Prompt (No Cache) for user {user_id}")
             else:
+                config_params['cached_content'] = cache_name
                 logger.info(f"Using Cached Context {cache_name} for user {user_id}")
                 
             config = types.GenerateContentConfig(**config_params)
@@ -243,8 +244,6 @@ class GeminiService:
                 'contents': history,
                 'config': config
             }
-            if cache_name:
-                generate_kwargs['cached_content'] = cache_name
             
             response = await self.client.aio.models.generate_content(**generate_kwargs)
             
