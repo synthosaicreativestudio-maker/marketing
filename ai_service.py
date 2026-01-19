@@ -28,24 +28,19 @@ class AIService:
         return self.gemini_service.is_enabled()
 
     async def ask(self, user_id: int, content: str) -> Optional[str]:
-        """Отправляет запрос в Gemini и возвращает ответ (Асинхронно).
-        
-        Args:
-            user_id: ID пользователя Telegram
-            content: Текст сообщения пользователя
-            
-        Returns:
-            Ответ от Gemini или None в случае ошибки
-        """
+        """Отправляет запрос в Gemini и возвращает ответ (Асинхронно)."""
         if not self.is_enabled():
-            logger.error("AIService is not enabled")
             return None
+        return await self.gemini_service.ask(user_id, content)
+
+    async def ask_stream(self, user_id: int, content: str):
+        """Прокси для потокового вызова Gemini."""
+        if not self.is_enabled():
+            yield "Сервис ИИ недоступен."
+            return
         
-        try:
-            return await self.gemini_service.ask(user_id, content)
-        except Exception as e:
-            logger.error(f"Error in AIService.ask: {e}", exc_info=True)
-            return None
+        async for chunk in self.gemini_service.ask_stream(user_id, content):
+            yield chunk
 
     def get_provider_name(self) -> str:
         """Возвращает имя активного провайдера."""
