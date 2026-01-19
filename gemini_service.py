@@ -235,7 +235,7 @@ class GeminiService:
             cache_name = await self.knowledge_base.get_cache_name()
             config_params = {
                 'temperature': 0.7,
-                'max_output_tokens': 2000,
+                'max_output_tokens': 8192,
                 'top_p': 0.95,
                 'top_k': 40,
                 'safety_settings': [
@@ -394,8 +394,8 @@ class GeminiService:
             return None
             
         try:
-            # Используем Gemini 3 Pro Image (Preview)
-            model = "gemini-3-pro-image-preview" # ТЕКУЩИЙ ID ИЗ ТЗ
+            # Используем Imagen 3 (Stable)
+            model = "imagen-3.0-generate-001"
             
             # Конфигурация для генерации
             config = types.GenerateImagesConfig(
