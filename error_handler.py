@@ -72,7 +72,7 @@ def safe_telegram_call(max_retries: int = 3, retry_delay: float = 1.0):
                     logger.critical(f"Ошибка авторизации Telegram: {e}")
                     raise
                     
-                except (Forbidden, ChatNotFound, BadRequest) as e:
+                except (Forbidden, BadRequest) as e:
                     # Ошибки клиента - не повторяем, но логируем
                     logger.warning(f"Ошибка клиента Telegram API: {e}")
                     raise
