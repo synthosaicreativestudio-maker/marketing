@@ -265,7 +265,7 @@ class GeminiService:
             
             full_reply_parts = []
             
-            async for response in self.client.aio.models.generate_content_stream(**generate_kwargs):
+            async for response in await self.client.aio.models.generate_content_stream(**generate_kwargs):
                 # Проверка на Function Call в первом чанке (или любом чанке до текста)
                 if response.candidates and response.candidates[0].content.parts:
                     part = response.candidates[0].content.parts[0]
