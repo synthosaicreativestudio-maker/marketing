@@ -652,7 +652,7 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
                     # Режим специалиста: не вызываем ИИ и не отправляем сервисные сообщения
                     # Страховочно логируем сообщение пользователя в таблицу обращений
                     try:
-                        appeals_service.add_user_message(user.id, text)
+                        await appeals_service.add_user_message(user.id, text)
                     except Exception:
                         pass
                     # Статус УЖЕ "В работе" - не меняем его повторно!
@@ -806,7 +806,7 @@ def callback_query_handler(auth_service: AuthService, appeals_service: AppealsSe
                     
                     if user_data:
                         # Меняем статус на "В работе" с желтой заливкой
-                        success = appeals_service.set_status_in_work(user.id)
+                        success = await appeals_service.set_status_in_work(user.id)
                         if success:
                             await query.edit_message_text(
                                 "✅ Ваше обращение передано специалисту отдела маркетинга. "
