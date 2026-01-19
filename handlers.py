@@ -655,11 +655,8 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
                         appeals_service.add_user_message(user.id, text)
                     except Exception:
                         pass
-                    # Зафиксируем статус 'В работе' для наглядности
-                    try:
-                        await appeals_service.set_status_in_work(user.id)
-                    except Exception:
-                        pass
+                    # Статус УЖЕ "В работе" - не меняем его повторно!
+                    # Изменение статуса происходит только при нажатии кнопки пользователем.
                     return
             except Exception as e:
                 logger.warning(f"Не удалось проверить статус обращения: {e}")
@@ -695,18 +692,16 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
                     f"⏱ AI запрос превысил таймаут (25s) для user {user.id}. "
                     f"Общее время обработчика: {handler_duration:.1f}s"
                 )
-                # Эскалация к специалисту при timeout
-                if appeals_service and appeals_service.is_available():
-                    try:
-                        await appeals_service.set_status_in_work(user.id)
-                    except Exception:
-                        pass
+                # ВАЖНО: НЕ меняем статус автоматически!
+                # Статус должен меняться только при нажатии кнопки пользователем.
+                # Просто информируем о задержке и предлагаем обратиться к специалисту.
                 await update.message.reply_text(
                     "⏱ Запрос обрабатывается дольше обычного. "
                     "Ваше обращение передано специалисту, который ответит в ближайшее время.",
                     reply_markup=create_specialist_button()
                 )
                 return
+
 
             # Если ИИ не ответил, не отправляем локальное приветствие/сообщение — только логируем.
             if not reply:
