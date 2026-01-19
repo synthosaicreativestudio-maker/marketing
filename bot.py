@@ -278,6 +278,15 @@ def _run_bot_main():
             except Exception as e:
                 logger.error(f"Failed to trigger Knowledge Base initialization: {e}")
         
+        # Фоновый heartbeat для Watchdog (чтобы не убивал бота когда нет сообщений)
+        if watchdog:
+            async def background_heartbeat():
+                while True:
+                    watchdog.heartbeat()
+                    await asyncio.sleep(30)
+            asyncio.create_task(background_heartbeat())
+            logger.info("Watchdog background heartbeat task started")
+
         # Запуск мониторинга здоровья
         if health_monitor:
             try:
