@@ -358,10 +358,28 @@ class GeminiService:
                     yield f"\n[⚠️ Обрыв соединения: {str(e)[:50]}]"
                     return # Прерываем стрим
                 
+                # Обнаружение ошибки истекшего кэша
+                is_cache_error = False
+                error_str = str(e)
+                if 'CachedContent' in error_str and ('403' in error_str or 'PERMISSION_DENIED' in error_str):
+                    logger.warning(f"❌ Cache expired or invalid: {e}")
+                    is_cache_error = True
+                    # Инвалидировать кэш в Knowledge Base
+                    await self.knowledge_base.invalidate_cache()
+                    # Пересоздать config БЕЗ кэша для повтора
+                    config_params['system_instruction'] = self.system_instruction
+                    config_params['tools'] = tools
+                    if 'cached_content' in config_params:
+                        del config_params['cached_content']
+                    config = types.GenerateContentConfig(**config_params)
+                    generate_kwargs['config'] = config
+                
                 # Если мы еще НИЧЕГО не выдали (пустой ответ или ошибка соединения сразу)
                 logger.warning(f"Gemini attempt {attempt+1} failed: {e}")
                 
                 if attempt < MAX_RETRIES:
+                    if is_cache_error:
+                        logger.info("🔄 Retrying WITHOUT cache (fallback mode)")
                     await asyncio.sleep(0.5) # Пауза перед ретраем
                     continue # Идем на следующий круг
                 else:

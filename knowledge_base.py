@@ -47,14 +47,41 @@ class KnowledgeBase:
 
     async def get_cache_name(self) -> Optional[str]:
         """Returns the current active cache name."""
-        # Simple TTL check for determining if we should TRIGGER an update
-        # But we always return the current valid one if it exists
-        if time.time() - self.last_update_time > (self.ttl_minutes * 60 - 300): # Refresh 5 mins before expiry
+        # Если кэша нет или он явно инвалидирован
+        if not self.cached_content_name:
+            return None
+        
+        current_age = time.time() - self.last_update_time
+        cache_lifetime = self.ttl_minutes * 60
+        
+        # Если кэш полностью истек (с запасом 1 минута на clock skew)
+        if current_age > (cache_lifetime + 60):
+            logger.warning("⚠️ Cache fully expired (beyond TTL), invalidating...")
+            await self.invalidate_cache()
+            return None
+        
+        # Если кэш скоро истечет - триггерим фоновое обновление
+        if current_age > (cache_lifetime - 300):  # 5 mins before expiry
             if not self.is_updating and self.cached_content_name:
                 logger.info("Cache is nearing expiry, triggering refresh...")
                 asyncio.create_task(self.refresh_cache())
-                
+        
         return self.cached_content_name
+    
+    async def invalidate_cache(self) -> None:
+        """Invalidates the current cache (called on errors)."""
+        if self.cached_content_name:
+            logger.warning(f"🗑️ Invalidating cache: {self.cached_content_name}")
+            old_cache = self.cached_content_name
+            self.cached_content_name = None
+            self.last_update_time = 0  # Force immediate refresh on next request
+            
+            # Попытка удалить кэш из API (best effort)
+            try:
+                await self.client.aio.caches.delete(name=old_cache)
+                logger.info(f"✅ Cache deleted from API: {old_cache}")
+            except Exception as e:
+                logger.warning(f"Failed to delete cache from API (already gone?): {e}")
 
     async def refresh_cache(self, system_instruction: Optional[str] = None, tools: Optional[List[types.Tool]] = None):
         """Refreshes the knowledge base cache in a non-blocking way."""
