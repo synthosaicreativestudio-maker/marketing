@@ -129,11 +129,11 @@ class AuthService:
         Returns:
             bool: True если пользователь авторизован
         """
-        logger.info(f"Проверка статуса авторизации для пользователя {mask_telegram_id(telegram_id)}")
+        logger.debug(f"Проверка статуса авторизации для {mask_telegram_id(telegram_id)}")
         
         # Проверяем кэш сначала
         if telegram_id in self.auth_cache:
-            logger.info(f"Используем кэшированный результат для пользователя {mask_telegram_id(telegram_id)}")
+            logger.debug(f"Используем кэшированный результат для {mask_telegram_id(telegram_id)}")
             return self.auth_cache[telegram_id]
         
         # Если не в кэше, проверяем в таблице
@@ -142,32 +142,21 @@ class AuthService:
             return False
 
         try:
-            logger.info("Получение всех записей из таблицы для проверки статуса...")
+            logger.debug("Получение записей из таблицы для проверки статуса...")
             records = await self.gateway.get_all_records(self.worksheet)
-            logger.info(f"Получено {len(records)} записей из таблицы для проверки статуса")
+            logger.debug(f"Получено {len(records)} записей для проверки статуса")
             
             for i, row in enumerate(records):
-                logger.info(f"Проверка записи {i+1} для статуса: {row}")
-                
-                # Проверяем, есть ли 'Telegram ID' в строке и совпадает ли он
                 telegram_id_in_sheet = row.get('Telegram ID')
-                logger.info(f"Сравнение Telegram ID: в таблице='{mask_telegram_id(telegram_id_in_sheet)}' vs запрашиваемый='{mask_telegram_id(telegram_id)}'")
-                
                 if str(telegram_id_in_sheet) == str(telegram_id):
-                    # Проверяем статус в колонке 'Статус' или 'Статус авторизации'
                     status = row.get('Статус') or row.get('Статус авторизации')
-                    logger.info(f"Найден пользователь с Telegram ID {mask_telegram_id(telegram_id)}, статус: {status}")
                     status_norm = str(status or '').strip().lower()
                     result = status_norm in ("авторизован", "authorized")
-                    logger.info(f"Результат проверки авторизации: {result}")
-                    
-                    # Обновляем кэш
+                    logger.info(f"Авторизация: {mask_telegram_id(telegram_id)} — {result}")
                     self.auth_cache[telegram_id] = result
                     return result
-                else:
-                    logger.info(f"Запись {i+1} не соответствует запрашиваемому Telegram ID")
-                    
-            logger.info(f"Пользователь с Telegram ID {mask_telegram_id(telegram_id)} не найден в таблице")
+            
+            logger.debug(f"Пользователь {mask_telegram_id(telegram_id)} не найден в таблице")
             # Обновляем кэш с результатом "не авторизован"
             self.auth_cache[telegram_id] = False
             return False

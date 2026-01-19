@@ -63,8 +63,10 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
 
 async def _create_appeal_entry(user, text, auth_service, appeals_service):
     """Фоновое создание записи в таблице обращений."""
+    if not getattr(auth_service, 'worksheet', None):
+        logger.debug("_create_appeal_entry: worksheet не инициализирован, пропуск")
+        return
     try:
-        # Упрощенное получение данных (для Phase 2 можно оптимизировать кешированием)
         records = await auth_service.gateway.get_all_records(auth_service.worksheet)
         user_data = next((r for r in records if str(r.get('Telegram ID')) == str(user.id)), None)
         

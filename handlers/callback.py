@@ -35,9 +35,11 @@ async def _handle_specialist_request(query, user, auth_service, appeals_service)
     if not appeals_service or not appeals_service.is_available():
         await query.message.reply_text("Сервис временно недоступен.")
         return
+    if not getattr(auth_service, 'worksheet', None):
+        await query.message.reply_text("Сервис временно недоступен.")
+        return
 
     try:
-        # Обновляем статус в таблице
         records = await auth_service.gateway.get_all_records(auth_service.worksheet)
         user_data = next((r for r in records if str(r.get('Telegram ID')) == str(user.id)), None)
 
