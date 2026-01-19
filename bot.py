@@ -12,6 +12,7 @@ import os
 import signal
 import sys
 import atexit
+import asyncio
 from dotenv import load_dotenv
 from telegram.ext import Application
 from telegram.error import TelegramError
@@ -249,7 +250,6 @@ def _run_bot_main():
     # --- Настройка мониторинга через post_init callback ---
     async def post_init(application: Application) -> None:
         """Инициализация мониторинга после запуска приложения."""
-        import asyncio
         
         # Добавляем middleware для обновления Watchdog heartbeat
         if watchdog:

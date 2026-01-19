@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from typing import Dict, List, Optional
 
 from google import genai
@@ -108,6 +109,27 @@ class GeminiService:
         else:
             logger.warning(f"System prompt file not found: {system_prompt_path}")
         
+        # Инструменты (Function Calling + Search Grounding)
+        self.tools = [
+            types.Tool(
+                function_declarations=[types.FunctionDeclaration(
+                    name='get_promotions',
+                    description='Получить список текущих акций, скидок и условий ипотеки из базы данных. ПРИОРИТЕТНЫЙ ИСТОЧНИК для вопросов о выгоде.',
+                    parameters=types.Schema(
+                        type='OBJECT',
+                        properties={}
+                    )
+                )]
+            ),
+            types.Tool(
+                google_search_retrieval=types.GoogleSearchRetrieval(
+                    dynamic_retrieval_config=types.DynamicRetrievalConfig(
+                        dynamic_threshold=0.3
+                    )
+                )
+            )
+        ]
+        
         # Хранилище истории диалогов: user_id -> list of Content objects
         self.user_histories: Dict[int, List[types.Content]] = {}
         
@@ -115,13 +137,18 @@ class GeminiService:
         # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
         # В knowledge_base.py мы используем 'models/gemini-1.5-pro-001' (или flash).
         # Проверим, что используется.
-        self.model_name = "gemini-3-flash-preview" 
+        self.model_name = "gemini-1.5-pro-002" 
         self.max_history_messages = 10  # Храним последние 10 сообщений + 2pinned
 
     async def initialize(self):
-        """Async init for Knowledge Base."""
+        """Async init for Knowledge Base with Rules and Tools."""
         if self.knowledge_base:
             await self.knowledge_base.initialize()
+            # ПРИНУДИТЕЛЬНО запускаем обновление кэша с нашими правилами
+            asyncio.create_task(self.knowledge_base.refresh_cache(
+                system_instruction=self.system_instruction,
+                tools=self.tools
+            ))
 
     def is_enabled(self) -> bool:
         """Проверяет, доступен ли сервис."""
@@ -225,13 +252,16 @@ class GeminiService:
                 ]
             }
             
-            # Если кэша нет - используем System Instruction в конфиге
+            # Если кэша нет - используем System Instruction и Tools в конфиге
             if not cache_name:
                 config_params['system_instruction'] = self.system_instruction
-                logger.info(f"Using Standard System Prompt (No Cache) for user {user_id}")
+                config_params['tools'] = self.tools
+                logger.info(f"Using Standard System Prompt & Tools (No Cache) for user {user_id}")
             else:
+                # ВАЖНО: Если есть кэш, то system_instruction и tools ЗАПРЕЩЕНО 
+                # передавать в generate_content (они уже в кэше).
                 config_params['cached_content'] = cache_name
-                logger.info(f"Using Cached Context {cache_name} for user {user_id}")
+                logger.info(f"Using Cached Context {cache_name} for user {user_id}. Instruction/Tools embedded.")
                 
             config = types.GenerateContentConfig(**config_params)
             

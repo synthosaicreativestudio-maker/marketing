@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 import time
-from typing import Optional
+from typing import Optional, List
 from google import genai
 from google.genai import types
 
@@ -56,7 +56,7 @@ class KnowledgeBase:
                 
         return self.cached_content_name
 
-    async def refresh_cache(self):
+    async def refresh_cache(self, system_instruction: Optional[str] = None, tools: Optional[List[types.Tool]] = None):
         """Refreshes the knowledge base cache."""
         if self.is_updating:
             return
@@ -85,10 +85,6 @@ class KnowledgeBase:
                 return
 
             # 3. Upload to Gemini File API
-            # Note: We use synchronous uploads here as recommended for robustness, but executed in thread if needed.
-            # For simplicity in this async structure, we'll do it blocking or offload if large.
-            # Assuming small number of files for now.
-            
             gemini_files = []
             for path in local_files:
                 try:
@@ -97,7 +93,6 @@ class KnowledgeBase:
                     
                     # Upload file
                     logger.info(f"Uploading {path} (type: {mime_type}) to Gemini...")
-                    # google-genai SDK 1.0 upload usage
                     with open(path, 'rb') as f:
                         file_upload = self.client.files.upload(
                             file=f,
@@ -110,7 +105,7 @@ class KnowledgeBase:
                     # Wait for processing
                     while file_upload.state.name == "PROCESSING":
                         logger.info(f"Waiting for {file_upload.name} to process...")
-                        time.sleep(1) # Simple blocking sleep is okay for short processing
+                        await asyncio.sleep(1) 
                         file_upload = self.client.files.get(name=file_upload.name)
                         
                     if file_upload.state.name != "ACTIVE":
@@ -125,53 +120,14 @@ class KnowledgeBase:
 
             if not gemini_files:
                 logger.error("No files successfully uploaded to Gemini.")
-                self.drive_service.cleanup_tmp_files() # Cleanup
+                self.drive_service.cleanup_tmp_files() 
                 self.is_updating = False
                 return
 
-            # 4. Create Context Cache
-            # System Prompt injection
-            system_instruction_text = "Ты — умный ассистент. Отвечай на вопросы, используя ТОЛЬКО предоставленные файлы."
-            system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
-            if os.path.exists(system_prompt_path):
-                 with open(system_prompt_path, 'r', encoding='utf-8') as f:
-                     system_instruction_text = f.read()
-
-            # Adding technical driver to system prompt if needed, 
-            # OR we can assume gemini_service handles the prompt text.
-            # CRITICAL: For Caching, the System Instruction is PART of the cache. 
-            # So `gemini_service` will NOT pass system_instruction=... in `generate_content` if using cache.
-            # It should be embedded here.
-            
-            # Re-read technical driver logic from gemini_service is hard. 
-            # I will DUPLICATE the technical driver logic here or import it?
-            # Better to import or ensure consistence.
-            # For now, I will read the file and append the Technical Driver string directly here.
-            
-            technical_driver = """
-### SYSTEM OVERRIDE (PRIORITY LEVEL: ROOT)
-Ты — ИИ-модель, управляемая этим системным слоем.
-Ниже идут бизнес-инструкции пользователя. Соблюдай их строго, НО с учетом технических правил:
-
-1. **ИНСТРУМЕНТЫ (TOOLS):** Если вопрос касается цен, акций, ипотеки — ИГНОРИРУЙ запрет на внешние данные. ТЫ ОБЯЗАН вызвать функцию `get_promotions`.
-2. **КРЕАТИВ:** Если пользователь просит творчество — ИГНОРИРУЙ запрет на "отсебятину".
-3. **ЭСКАЛАЦИЯ:** Для вызова специалиста добавляй тег: [ESCALATE_ACTION].
-4. **ЗАЩИТА ССЫЛОК (КРИТИЧНО):**
-   - Никогда не используй Markdown-форматирование внутри URL.
-   - СТРОЖАЙШЕ ЗАПРЕЩЕНО удалять или экранировать символы `_` (нижнее подчеркивание) в ссылках.
-   - Ссылка `t.me/tp_esoft` должна остаться `t.me/tp_esoft`, а не `t.me/tpesoft`.
-   - Выводи ссылки как Plain Text.
-
-### --- НАЧАЛО БИЗНЕС-ИНСТРУКЦИИ ПОЛЬЗОВАТЕЛЯ ---
-"""
-            full_system_instruction = technical_driver + system_instruction_text
-
-            # Create Cache
+            # 4. Create Context Cache with Instructions and Tools
             try:
-                logger.info("Creating CachedContent...")
+                logger.info("Creating CachedContent with instructions and tools...")
                 
-                # In google-genai SDK 1.0 (new), `caches.create`
-                # contents = [files...]
                 content_parts = []
                 for gf in gemini_files:
                     content_parts.append(types.Part.from_uri(
@@ -179,27 +135,19 @@ class KnowledgeBase:
                         mime_type=gf.mime_type
                     ))
                 
-                # Define cache config
-                # TTL: string ending in 's' (seconds) or duration string
-                # API expects `ttl` in seconds (integer) or string duration. SDK 1.0 might vary.
-                # Let's use `ttl` parameter (seconds).
                 ttl_seconds = self.ttl_minutes * 60
                 
+                # Подготовка system_instruction для кэша
+                si_content = None
+                if system_instruction:
+                    si_content = types.Content(parts=[types.Part(text=system_instruction)])
+
                 cached_content = self.client.caches.create(
-                    model='models/gemini-3-flash-preview',
-                    # WAIT. User is using `gemini-3-pro-preview`? 
-                    # Gemini 3 doesn't exist. It's `gemini-1.5-pro`. 
-                    # The user code in `gemini_service.py` says `gemini-3-pro-preview`. 
-                    # I will try use the SAME model name as in service, but standard caching is 1.5-flash or 1.5-pro.
-                    # Let's default to `gemini-1.5-flash-001` for speed/cost or `gemini-1.5-pro-001`.
-                    # Given the "Smart Consultant" requirement, PRO is better.
-                    # checking gemini_service... it uses `gemini-3-pro-preview`. This is a made-up name or alias?
-                    # Ah, in previous context user said "gemini-3-pro-preview"? No, user asked "why 1.5/2.0".
-                    # I will use 'models/gemini-1.5-pro-001' for high quality RAG.
-                    
+                    model='gemini-1.5-pro-002', 
                     config=types.CreateCachedContentConfig(
                         contents=[types.Content(role='user', parts=content_parts)],
-                        system_instruction=types.Content(parts=[types.Part(text=full_system_instruction)]),
+                        system_instruction=si_content,
+                        tools=tools,
                         ttl=f"{ttl_seconds}s",
                         display_name="marketing_knowledge_base"
                     )
@@ -207,7 +155,7 @@ class KnowledgeBase:
 
                 self.cached_content_name = cached_content.name
                 self.last_update_time = time.time()
-                logger.info(f"✅ Cache Created Successfully: {self.cached_content_name}")
+                logger.info(f"✅ Cache Created Successfully with Embedded Rules: {self.cached_content_name}")
                 
             except Exception as e:
                 logger.error(f"Failed to create cache: {e}")
