@@ -34,6 +34,7 @@ from promotions_notifier import PromotionsNotifier  # noqa: E402
 from appeals_service import AppealsService  # noqa: E402
 from bot_health_monitor import BotHealthMonitor  # noqa: E402
 from sheets_gateway import AsyncGoogleSheetsGateway  # noqa: E402
+from polling_watchdog import PollingWatchdog  # noqa: E402
 
 # Превентивные механизмы
 try:
@@ -48,6 +49,7 @@ application_instance = None
 response_monitor_instance = None
 promotions_notifier_instance = None
 health_monitor_instance = None
+polling_watchdog_instance = None
 shutdown_in_progress = False
 
 
@@ -219,6 +221,22 @@ def _run_bot_main():
         logger.error(f"Ошибка инициализации BotHealthMonitor: {e}", exc_info=True)
         health_monitor = None
 
+    # Инициализация PollingWatchdog
+    global polling_watchdog_instance
+    try:
+        logger.info("Инициализация PollingWatchdog...")
+        watchdog = PollingWatchdog(
+            max_silence_seconds=120,  # 2 минуты без getUpdates = проблема
+            check_interval_seconds=30,  # Проверка каждые 30 секунд
+            max_restart_attempts=3,  # Максимум 3 перезапуска
+            restart_cooldown_hours=1  # За 1 час
+        )
+        polling_watchdog_instance = watchdog
+        logger.info("PollingWatchdog готов к работе")
+    except Exception as e:
+        logger.error(f"Ошибка инициализации PollingWatchdog: {e}", exc_info=True)
+        watchdog = None
+
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
     try:
@@ -268,6 +286,29 @@ def _run_bot_main():
             except Exception as e:
                 logger.error(f"Ошибка запуска мониторинга акций: {e}", exc_info=True)
 
+        # Запуск PollingWatchdog
+        if watchdog:
+            logger.info("Запуск PollingWatchdog...")
+            try:
+                # Устанавливаем callback для перезапуска polling
+                async def restart_polling_callback():
+                    """Callback для graceful restart polling при обнаружении остановки."""
+                    logger.warning("🔄 PollingWatchdog инициирует перезапуск polling...")
+                    # TODO: Реализовать graceful restart в будущем
+                    # Пока только логируем критическую ошибку
+                    logger.critical(
+                        "⚠️ ТРЕБУЕТСЯ РУЧНОЙ ПЕРЕЗАПУСК БОТА! "
+                        "Polling остановился и не может быть автоматически восстановлен."
+                    )
+                
+                watchdog.set_restart_callback(restart_polling_callback)
+                
+                # Запускаем мониторинг в фоне
+                asyncio.create_task(watchdog.start_monitoring())
+                logger.info("PollingWatchdog запущен (проверка каждые 30 секунд)")
+            except Exception as e:
+                logger.error(f"Ошибка запуска PollingWatchdog: {e}", exc_info=True)
+
     async def post_stop(application: Application) -> None:
         """Остановка мониторинга при завершении работы бота."""
         logger.info("Остановка всех мониторингов...")
@@ -294,6 +335,14 @@ def _run_bot_main():
                 logger.info("Мониторинг акций остановлен")
             except Exception as e:
                 logger.error(f"Ошибка остановки мониторинга акций: {e}")
+
+        # Остановка PollingWatchdog
+        if watchdog:
+            try:
+                await watchdog.stop_monitoring()
+                logger.info("PollingWatchdog остановлен")
+            except Exception as e:
+                logger.error(f"Ошибка остановки PollingWatchdog: {e}")
 
     # Регистрация хуков
     application.post_init = post_init
@@ -326,8 +375,12 @@ def _run_bot_main():
         try:
             logger.info("Начинается polling для получения обновлений от Telegram...")
             application.run_polling(
-                poll_interval=0.0,  # Немедленная обработка обновлений без задержки
-                timeout=10,  # Таймаут long polling запроса
+                poll_interval=1.0,  # Интервал между запросами (1 секунда - баланс скорости и нагрузки)
+                timeout=30,  # Таймаут long polling запроса (увеличен с 10 до 30)
+                read_timeout=30,  # Таймаут чтения ответа от Telegram API
+                write_timeout=20,  # Таймаут записи запроса к Telegram API
+                connect_timeout=10,  # Таймаут установки соединения
+                pool_timeout=10,  # Таймаут ожидания свободного соединения в пуле
                 stop_signals=(signal.SIGINT, signal.SIGTERM),
                 allowed_updates=None,  # Принимаем все типы обновлений
                 drop_pending_updates=True,  # Сбрасываем устаревшие обновления при старте

@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import asyncio
 from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
@@ -676,8 +677,36 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
         except Exception:
             pass
 
+        # Мониторинг времени выполнения обработчика
+        import time
+        handler_start_time = time.time()
+
         try:
-            reply = await ai_service.ask(user.id, text)
+            # Устанавливаем таймаут для AI запроса (25 секунд)
+            # Это предотвращает блокировку event loop длительными запросами к Gemini
+            try:
+                reply = await asyncio.wait_for(
+                    ai_service.ask(user.id, text),
+                    timeout=25.0
+                )
+            except asyncio.TimeoutError:
+                handler_duration = time.time() - handler_start_time
+                logger.warning(
+                    f"⏱ AI запрос превысил таймаут (25s) для user {user.id}. "
+                    f"Общее время обработчика: {handler_duration:.1f}s"
+                )
+                # Эскалация к специалисту при timeout
+                if appeals_service and appeals_service.is_available():
+                    try:
+                        await appeals_service.set_status_in_work(user.id)
+                    except Exception:
+                        pass
+                await update.message.reply_text(
+                    "⏱ Запрос обрабатывается дольше обычного. "
+                    "Ваше обращение передано специалисту, который ответит в ближайшее время.",
+                    reply_markup=create_specialist_button()
+                )
+                return
 
             # Если ИИ не ответил, не отправляем локальное приветствие/сообщение — только логируем.
             if not reply:
@@ -734,10 +763,18 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
                 logger.error(f"Ошибка отправки ответа ИИ: {e}")
                 await update.message.reply_text("Получен ответ от ассистента, но возникла ошибка форматирования.")
         except Exception as e:
-            logger.error(f"Ошибка при обращении к OpenAI: {e}")
+            logger.error(f"Ошибка при обращении к AI: {e}")
             await update.message.reply_text(
                 "Произошла ошибка при обращении к ассистенту. Попробуйте позже."
             )
+        finally:
+            # Мониторинг общего времени выполнения обработчика
+            handler_duration = time.time() - handler_start_time
+            if handler_duration > 5.0:
+                logger.warning(
+                    f"⚠️ Медленный обработчик chat_handler: {handler_duration:.1f}s для user {user.id}"
+                )
+
 
     return handle_chat
 
