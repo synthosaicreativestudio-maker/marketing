@@ -22,6 +22,7 @@ class KnowledgeBase:
         self.last_update_time = 0
         self.ttl_minutes = 60 # Cache TTL (standard is 1 hour)
         self.is_updating = False
+        self._lock = asyncio.Lock()
         
         # Initialize Gemini Client
         if self.api_key:
@@ -85,10 +86,11 @@ class KnowledgeBase:
 
     async def refresh_cache(self, system_instruction: Optional[str] = None, tools: Optional[List[types.Tool]] = None):
         """Refreshes the knowledge base cache in a non-blocking way."""
-        if self.is_updating:
-            return
-        
-        self.is_updating = True
+        async with self._lock:
+            if self.is_updating:
+                return
+            
+            self.is_updating = True
         logger.info("🔄 Starting Knowledge Base Refresh (Non-blocking)...")
         
         try:

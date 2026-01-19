@@ -3,36 +3,27 @@ import os
 import json
 import asyncio
 import time
-from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
 from auth_service import AuthService
 from ai_service import AIService
 from appeals_service import AppealsService
 from promotions_api import get_promotions_json, is_promotions_available
+from error_handler import safe_handler
+from utils import (
+    get_web_app_url,
+    get_spa_menu_url,
+    create_specialist_button,
+    _is_user_escalation_request
+)
 
 logger = logging.getLogger(__name__)
 
-def get_web_app_url() -> str:
-    """Ленивое чтение URL WebApp из окружения (после загрузки .env)."""
-    base_url = os.getenv("WEB_APP_URL") or ""
-    if base_url and not base_url.endswith('/'):
-        base_url += '/'
-    return base_url + "index.html"
 
-def get_spa_menu_url() -> str:
-    """Ленивое чтение URL SPA меню из окружения."""
-    base_url = os.getenv("WEB_APP_URL") or ""
-    if base_url and not base_url.endswith('/'):
-        base_url += '/'
-    # Версия для принудительного обновления кеша WebApp
-    cache_bust = "v=20260108-2"
-    return f"{base_url}menu.html?{cache_bust}"
+# Функции get_web_app_url, get_spa_menu_url, create_specialist_button импортированы из utils.py
+# для устранения дублирования кода.
 
-def create_specialist_button() -> InlineKeyboardMarkup:
-    """Создает инлайн-кнопку для обращения к специалисту."""
-    keyboard = [[InlineKeyboardButton("👨‍💼 Обратиться к специалисту", callback_data="contact_specialist")]]
-    return InlineKeyboardMarkup(keyboard)
 
 async def _safe_background_log(user_id: int, user_text: str, ai_reply: str, appeals_service: AppealsService):
     """Фоновое логирование в Google Sheets и локальный JSONL."""
@@ -106,7 +97,12 @@ async def _generate_and_send_image(user_id: int, text_reply: str, chat_id: int, 
         except Exception:
             pass
 
-def _is_user_escalation_request(text: str) -> bool:
+# Функция _is_user_escalation_request импортирована из utils.py
+
+# УДАЛЕНО: дублированная функция _is_user_escalation_request (lines 109-168)
+# Используется версия из utils.py
+
+def _REMOVED_is_user_escalation_request(text: str) -> bool:
     """
     Проверяет, содержит ли сообщение пользователя триггерные слова для эскалации.
     
@@ -167,133 +163,12 @@ def _is_user_escalation_request(text: str) -> bool:
     
     return False
 
-def _is_ai_asking_for_escalation(ai_response: str) -> bool:
-    """
-    Проверяет, спрашивает ли ИИ о необходимости передачи специалисту.
-    
-    Args:
-        ai_response: ответ ИИ
-        
-    Returns:
-        bool: True если ИИ спрашивает об эскалации
-    """
-    if not ai_response:
-        return False
-        
-    response_lower = ai_response.lower()
-    
-    # Фразы, когда ИИ спрашивает об эскалации
-    escalation_questions = [
-        'нужно ли передать',
-        'передать специалисту',
-        'соединить со специалистом',
-        'связать со специалистом',
-        'передать ваш запрос',
-        'передать вашу проблему',
-        'передать ваше обращение',
-        'эскалировать вопрос',
-        'эскалировать проблему',
-        'эскалировать обращение',
-        'передать менеджеру',
-        'соединить с менеджером',
-        'связать с менеджером',
-        'передать маркетологу',
-        'соединить с маркетологом',
-        'связать с маркетологом'
-    ]
-    
-    # Проверяем наличие вопросов об эскалации
-    for phrase in escalation_questions:
-        if phrase in response_lower:
-            return True
-    
-    return False
+# Функция _is_ai_asking_for_escalation импортирована из utils.py
+# Оригинальная реализация удалена для устранения дублирования
 
-def _is_escalation_confirmation(text: str) -> bool:
-    """
-    Проверяет, содержит ли сообщение подтверждение эскалации к специалисту.
-    
-    Args:
-        text: текст сообщения пользователя
-        
-    Returns:
-        bool: True если найдены фразы подтверждения
-    """
-    text_lower = text.lower()
-    
-    # Фразы подтверждения эскалации (когда ИИ спрашивает)
-    confirmation_phrases = [
-        'да',
-        'да, нужно',
-        'да, передайте',
-        'да, соедините',
-        'да, свяжите',
-        'да, пожалуйста',
-        'да, конечно',
-        'да, давайте',
-        'да, хорошо',
-        'да, согласен',
-        'нужно',
-        'передайте',
-        'соедините',
-        'свяжите',
-        'пожалуйста',
-        'конечно',
-        'давайте',
-        'хорошо',
-        'согласен',
-        'подтверждаю'
-    ]
-    
-    # Проверяем наличие фраз подтверждения
-    for phrase in confirmation_phrases:
-        if phrase in text_lower:
-            return True
-    
-    return False
+# Функция _is_escalation_confirmation импортирована из utils.py
 
-def _should_show_specialist_button(text: str) -> bool:
-    """
-    Проверяет, просит ли пользователь соединить его со специалистом/живым человеком.
-    
-    Args:
-        text: текст сообщения пользователя
-        
-    Returns:
-        bool: True если нужно показать кнопку "Обратиться к специалисту"
-    """
-    text_lower = text.lower()
-    
-    # Ключевые фразы, которые указывают на желание поговорить со специалистом
-    specialist_keywords = [
-        'специалист', 'специалиста', 'специалисту', 'специалистом',
-        'живой человек', 'живому человеку', 'живым человеком',
-        'менеджер', 'менеджера', 'менеджеру', 'менеджером',
-        'сотрудник', 'сотрудника', 'сотруднику', 'сотрудником',
-        'оператор', 'оператора', 'оператору', 'оператором',
-        'консультант', 'консультанта', 'консультанту', 'консультантом',
-        'соединить', 'соедините', 'соедини', 'соединиться',
-        'поговорить', 'поговорить с', 'поговорить с человеком',
-        'человек', 'человека', 'человеку', 'человеком',
-        'позвонить', 'позвоните', 'звонок', 'звонить',
-        'связаться', 'связаться с', 'связать', 'связать с',
-        'поддержка', 'поддержку', 'поддержке', 'поддержкой',
-        'помощь', 'помощи', 'помочь', 'помощью',
-        'не могу', 'не получается', 'не работает',
-        'проблема', 'проблемы', 'проблему', 'проблемой',
-        'сложно', 'сложный', 'сложная', 'сложное',
-        'не понимаю', 'не понятно', 'не ясно',
-        'объясните', 'объясни', 'объяснить',
-        'подробнее', 'подробно', 'подробный',
-        'детали', 'детализация', 'детально'
-    ]
-    
-    # Проверяем наличие ключевых слов
-    for keyword in specialist_keywords:
-        if keyword in text_lower:
-            return True
-    
-    return False
+# Функция _should_show_specialist_button импортирована из utils.py
 
 
 
@@ -309,6 +184,7 @@ def setup_handlers(application, auth_service: AuthService, ai_service: AIService
 
 def start_command_handler(auth_service: AuthService):
     """Фабрика для создания обработчика /start с доступом к сервису авторизации."""
+    @safe_handler
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         logger.info(f"Пользователь {user.id} ({user.first_name}) запустил команду /start.")
@@ -361,6 +237,7 @@ def start_command_handler(auth_service: AuthService):
 
 def web_app_data_handler(auth_service: AuthService):
     """Фабрика для создания обработчика данных из Mini App."""
+    @safe_handler
     async def handle_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         logger.info(f"Получены данные Web App от пользователя {user.id} ({user.first_name})")
@@ -469,6 +346,7 @@ def web_app_data_handler(auth_service: AuthService):
 
 def appeals_command_handler(auth_service: AuthService, appeals_service: AppealsService):
     """Фабрика обработчика команды /appeals для просмотра обращений."""
+    @safe_handler
     async def handle_appeals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         logger.info(f"Команда /appeals от пользователя {user.id}")
@@ -537,6 +415,7 @@ def appeals_command_handler(auth_service: AuthService, appeals_service: AppealsS
 
 def promotions_command_handler(auth_service: AuthService):
     """Фабрика обработчика команды /promotions для получения данных акций."""
+    @safe_handler
     async def handle_promotions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         logger.info(f"Команда /promotions от пользователя {user.id}")
@@ -592,6 +471,7 @@ def promotions_command_handler(auth_service: AuthService):
 
     return handle_promotions
 
+@safe_handler
 async def handle_promotions_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик запроса акций от WebApp."""
     user = update.effective_user
@@ -647,6 +527,7 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
 
     Доступно только авторизованным пользователям. При отключенном AIService — вежливое сообщение.
     """
+    @safe_handler
     async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         text = update.effective_message.text or ""
@@ -892,6 +773,7 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
 
 def callback_query_handler(auth_service: AuthService, appeals_service: AppealsService):
     """Фабрика обработчика для callback query (инлайн кнопки)."""
+    @safe_handler
     async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         user = update.effective_user

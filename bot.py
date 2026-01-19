@@ -36,6 +36,7 @@ from appeals_service import AppealsService  # noqa: E402
 from bot_health_monitor import BotHealthMonitor  # noqa: E402
 from sheets_gateway import AsyncGoogleSheetsGateway  # noqa: E402
 from polling_watchdog import PollingWatchdog  # noqa: E402
+from task_tracker import task_tracker  # noqa: E402
 
 # Превентивные механизмы
 try:
@@ -273,7 +274,7 @@ def _run_bot_main():
         # Launching as a background task to avoid blocking polling start
         if ai_service.get_provider_name() == "Gemini" and ai_service.gemini_service and hasattr(ai_service.gemini_service, 'initialize'):
             try:
-                asyncio.create_task(ai_service.gemini_service.initialize())
+                task_tracker.create_tracked_task(ai_service.gemini_service.initialize(), "kb_init")
                 logger.info("Knowledge Base initialization triggered in background")
             except Exception as e:
                 logger.error(f"Failed to trigger Knowledge Base initialization: {e}")
@@ -284,7 +285,7 @@ def _run_bot_main():
                 while True:
                     watchdog.heartbeat()
                     await asyncio.sleep(30)
-            asyncio.create_task(background_heartbeat())
+            task_tracker.create_tracked_task(background_heartbeat(), "watchdog_heartbeat")
             logger.info("Watchdog background heartbeat task started")
 
         # Запуск мониторинга здоровья
@@ -299,7 +300,7 @@ def _run_bot_main():
         if response_monitor and appeals_service and appeals_service.is_available():
             logger.info("Запуск мониторинга ответов специалистов...")
             try:
-                asyncio.create_task(response_monitor.start_monitoring(interval_seconds=60))
+                task_tracker.create_tracked_task(response_monitor.start_monitoring(interval_seconds=60), "response_monitor")
                 logger.info("Мониторинг ответов запущен (проверка каждую минуту)")
             except Exception as e:
                 logger.error(f"Ошибка запуска мониторинга ответов: {e}", exc_info=True)
@@ -308,7 +309,7 @@ def _run_bot_main():
         if promotions_notifier:
             logger.info("Запуск мониторинга новых акций...")
             try:
-                asyncio.create_task(promotions_notifier.start_monitoring(interval_minutes=15))
+                task_tracker.create_tracked_task(promotions_notifier.start_monitoring(interval_minutes=15), "promotions_notifier")
                 logger.info("Мониторинг акций запущен (проверка каждые 15 минут)")
             except Exception as e:
                 logger.error(f"Ошибка запуска мониторинга акций: {e}", exc_info=True)
@@ -341,7 +342,7 @@ def _run_bot_main():
                 watchdog.set_restart_callback(restart_polling_callback)
                 
                 # Запускаем мониторинг в фоне
-                asyncio.create_task(watchdog.start_monitoring())
+                task_tracker.create_tracked_task(watchdog.start_monitoring(), "watchdog_monitor")
                 logger.info("PollingWatchdog запущен (проверка каждые 30 секунд)")
             except Exception as e:
                 logger.error(f"Ошибка запуска PollingWatchdog: {e}", exc_info=True)

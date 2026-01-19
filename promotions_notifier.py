@@ -2,7 +2,7 @@ import logging
 import asyncio
 import io
 import base64
-import requests
+import aiohttp
 from typing import List, Dict, Optional
 from urllib.parse import urlparse, parse_qs
 
@@ -42,43 +42,47 @@ class PromotionsNotifier:
                 data = base64.b64decode(encoded)
                 return io.BytesIO(data)
 
-            # Сценарий Б: Google Drive
-            if 'drive.google.com' in content_url:
-                logger.debug(f"Detected Google Drive link: {content_url}")
-                file_id = None
-                if '/file/d/' in content_url:
-                    file_id = content_url.split('/file/d/')[1].split('/')[0]
-                elif 'id=' in content_url:
-                    parsed_url = urlparse(content_url)
-                    file_id = parse_qs(parsed_url.query).get('id', [None])[0]
-                
-                if file_id:
-                    # Конвертируем в формат скачивания (ТЗ 2.1.Б)
-                    download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                    logger.info(f"Downloading from Google Drive: {download_url}")
+            # Создаем или используем aiohttp сессию
+            async with aiohttp.ClientSession() as session:
+                # Сценарий Б: Google Drive
+                if 'drive.google.com' in content_url:
+                    logger.debug(f"Detected Google Drive link: {content_url}")
+                    file_id = None
+                    if '/file/d/' in content_url:
+                        file_id = content_url.split('/file/d/')[1].split('/')[0]
+                    elif 'id=' in content_url:
+                        parsed_url = urlparse(content_url)
+                        file_id = parse_qs(parsed_url.query).get('id', [None])[0]
                     
-                    # Используем таймаут 15 сек и маршрут через US (requests подхватит системный прокси)
-                    response = requests.get(download_url, timeout=15)
-                    response.raise_for_status()
-                    
-                    # Проверка размера (ТГ лимит ~10МБ для фото, но ТЗ допускает до 20МБ)
-                    if len(response.content) > 20 * 1024 * 1024:
-                        logger.warning(f"File from Drive is too large: {len(response.content)} bytes")
-                        return None
+                    if file_id:
+                        # Конвертируем в формат скачивания (ТЗ 2.1.Б)
+                        download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                        logger.info(f"Downloading from Google Drive: {download_url}")
                         
-                    return io.BytesIO(response.content)
+                        # Используем таймаут 15 сек и маршрут через US
+                        async with session.get(download_url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                            response.raise_for_status()
+                            content = await response.read()
+                        
+                            # Проверка размера (ТГ лимит ~10МБ для фото, но ТЗ допускает до 20МБ)
+                            if len(content) > 20 * 1024 * 1024:
+                                logger.warning(f"File from Drive is too large: {len(content)} bytes")
+                                return None
+                                
+                            return io.BytesIO(content)
 
-            # Сценарий В: Прямая ссылка
-            if content_url.startswith('http'):
-                logger.debug(f"Detected direct URL: {content_url}")
-                response = requests.get(content_url, timeout=15)
-                response.raise_for_status()
-                
-                if len(response.content) > 20 * 1024 * 1024:
-                    logger.warning(f"File from URL is too large: {len(response.content)} bytes")
-                    return None
-                    
-                return io.BytesIO(response.content)
+                # Сценарий В: Прямая ссылка
+                if content_url.startswith('http'):
+                    logger.debug(f"Detected direct URL: {content_url}")
+                    async with session.get(content_url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                        response.raise_for_status()
+                        content = await response.read()
+                        
+                        if len(content) > 20 * 1024 * 1024:
+                            logger.warning(f"File from URL is too large: {len(content)} bytes")
+                            return None
+                        
+                        return io.BytesIO(content)
 
             return None
             
