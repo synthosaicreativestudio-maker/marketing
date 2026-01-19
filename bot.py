@@ -261,7 +261,8 @@ def _run_bot_main():
                     logger.error(f"Ошибка обновления watchdog heartbeat: {e}")
             
             # Регистрируем middleware с наивысшим приоритетом
-            from telegram.ext import TypeHandler, Update
+            from telegram import Update
+            from telegram.ext import TypeHandler
             application.add_handler(
                 TypeHandler(Update, watchdog_heartbeat_middleware),
                 group=-1  # Самый высокий приоритет - выполняется первым
