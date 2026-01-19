@@ -143,8 +143,9 @@ class BotHealthMonitor:
                 # Пытаемся переподключиться не чаще чем раз в 2 минуты
                 time_since_last_reconnect = time.time() - self.last_sheets_reconnect
                 if time_since_last_reconnect > 120:
-                    logger.info("🔄 Попытка переподключения к Google Sheets...")
-                    await self._reconnect_sheets()
+                    logger.info("🔄 Попытка переподключения к Google Sheets (non-blocking)...")
+                    # Выполняем переподключение в отдельном потоке
+                    await asyncio.to_thread(self._reconnect_sheets)
                     self.last_sheets_reconnect = time.time()
                 else:
                     logger.debug(

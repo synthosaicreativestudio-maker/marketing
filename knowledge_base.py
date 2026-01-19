@@ -57,56 +57,62 @@ class KnowledgeBase:
         return self.cached_content_name
 
     async def refresh_cache(self, system_instruction: Optional[str] = None, tools: Optional[List[types.Tool]] = None):
-        """Refreshes the knowledge base cache."""
+        """Refreshes the knowledge base cache in a non-blocking way."""
         if self.is_updating:
             return
         
         self.is_updating = True
-        logger.info("🔄 Starting Knowledge Base Refresh...")
+        logger.info("🔄 Starting Knowledge Base Refresh (Non-blocking)...")
         
         try:
-            # 1. List files from Drive
-            files_meta = self.drive_service.list_files(self.folder_id)
+            # 1. List files from Drive (Sync operation -> Thread)
+            files_meta = await asyncio.to_thread(self.drive_service.list_files, self.folder_id)
             if not files_meta:
                 logger.warning("No files found in Knowledge Base folder.")
                 self.is_updating = False
                 return
 
-            # 2. Download files locally
+            # 2. Download files locally (Sync operation -> Thread)
             local_files = []
             for f in files_meta:
-                 path = self.drive_service.download_file(f['id'], f['name'], f['mimeType'])
-                 if path:
-                     local_files.append(path)
+                # Wrap each download in a thread to keep event loop free
+                path = await asyncio.to_thread(
+                    self.drive_service.download_file, 
+                    f['id'], f['name'], f['mimeType']
+                )
+                if path:
+                    local_files.append(path)
             
             if not local_files:
                 logger.warning("Failed to download any files.")
                 self.is_updating = False
                 return
 
-            # 3. Upload to Gemini File API
+            # 3. Upload to Gemini File API (Using Async Client)
             gemini_files = []
+            import mimetypes
+            
             for path in local_files:
                 try:
-                    import mimetypes
-                    mime_type, _ = mimetypes.guess_type(path)
+                    # Guess mime type (Lightweight but good for thread)
+                    mime_type, _ = await asyncio.to_thread(mimetypes.guess_type, path)
                     
-                    # Upload file
-                    logger.info(f"Uploading {path} (type: {mime_type}) to Gemini...")
-                    with open(path, 'rb') as f:
-                        file_upload = self.client.files.upload(
-                            file=f,
+                    # Upload file using AIO client
+                    logger.info(f"Uploading {path} (type: {mime_type}) to Gemini Async...")
+                    with open(path, 'rb') as f_data:
+                        file_upload = await self.client.aio.files.upload(
+                            file=f_data,
                             config={
                                 'display_name': os.path.basename(path),
                                 'mime_type': mime_type
                             }
                         )
                     
-                    # Wait for processing
+                    # Wait for processing (Non-blocking sleep)
                     while file_upload.state.name == "PROCESSING":
                         logger.info(f"Waiting for {file_upload.name} to process...")
-                        await asyncio.sleep(1) 
-                        file_upload = self.client.files.get(name=file_upload.name)
+                        await asyncio.sleep(2) 
+                        file_upload = await self.client.aio.files.get(name=file_upload.name)
                         
                     if file_upload.state.name != "ACTIVE":
                         logger.error(f"File {file_upload.name} failed processing: {file_upload.state.name}")
@@ -120,13 +126,13 @@ class KnowledgeBase:
 
             if not gemini_files:
                 logger.error("No files successfully uploaded to Gemini.")
-                self.drive_service.cleanup_tmp_files() 
+                await asyncio.to_thread(self.drive_service.cleanup_tmp_files)
                 self.is_updating = False
                 return
 
             # 4. Create Context Cache with Instructions and Tools
             try:
-                logger.info("Creating CachedContent with instructions and tools...")
+                logger.info("Creating CachedContent with instructions and tools (Async)...")
                 
                 content_parts = []
                 for gf in gemini_files:
@@ -142,7 +148,8 @@ class KnowledgeBase:
                 if system_instruction:
                     si_content = types.Content(parts=[types.Part(text=system_instruction)])
 
-                cached_content = self.client.caches.create(
+                # Create cache using AIO client
+                cached_content = await self.client.aio.caches.create(
                     model='gemini-3-flash-preview', 
                     config=types.CreateCachedContentConfig(
                         contents=[types.Content(role='user', parts=content_parts)],
@@ -155,13 +162,13 @@ class KnowledgeBase:
 
                 self.cached_content_name = cached_content.name
                 self.last_update_time = time.time()
-                logger.info(f"✅ Cache Created Successfully with Embedded Rules: {self.cached_content_name}")
+                logger.info(f"✅ Cache Created Successfully (Async): {self.cached_content_name}")
                 
             except Exception as e:
                 logger.error(f"Failed to create cache: {e}")
                 
-            # Cleanup local files
-            self.drive_service.cleanup_tmp_files()
+            # Cleanup local files (Thread)
+            await asyncio.to_thread(self.drive_service.cleanup_tmp_files)
             
         except Exception as e:
             logger.error(f"Error during cache refresh: {e}")

@@ -270,13 +270,13 @@ def _run_bot_main():
             logger.info("Watchdog heartbeat middleware зарегистрирован")
         
         # Initialize RAG (Knowledge Base) if using Gemini
-        # Используем глобальную переменную или из замыкания (ai_service доступен)
+        # Launching as a background task to avoid blocking polling start
         if ai_service.get_provider_name() == "Gemini" and ai_service.gemini_service and hasattr(ai_service.gemini_service, 'initialize'):
             try:
-                await ai_service.gemini_service.initialize()
-                logger.info("Knowledge Base initialization triggered")
+                asyncio.create_task(ai_service.gemini_service.initialize())
+                logger.info("Knowledge Base initialization triggered in background")
             except Exception as e:
-                logger.error(f"Failed to initialize Knowledge Base: {e}")
+                logger.error(f"Failed to trigger Knowledge Base initialization: {e}")
         
         # Запуск мониторинга здоровья
         if health_monitor:
