@@ -109,29 +109,32 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     full_response = ""
     last_update = 0
     STREAM_TOTAL_TIMEOUT = 120  # 2 минуты на весь ответ
+    stream_start_time = time.time()
     
     try:
-        # Общий таймаут на весь стрим
-        async with asyncio.timeout(STREAM_TOTAL_TIMEOUT):
-            async for chunk in ai_service.ask_stream(user.id, text + instruction):
-                if chunk.startswith("__TOOL_CALL__"):
-                    continue
-                
-                full_response += chunk
-                if (time.time() - last_update) > 1.5:
-                    try:
-                        await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode='Markdown')
-                        last_update = time.time()
-                    except Exception as e:
-                        # При ошибке парсинга Markdown пробуем без форматирования
-                        if "Can't parse entities" in str(e) or "parse" in str(e).lower():
-                            try:
-                                await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode=None)
-                                last_update = time.time()
-                            except Exception as inner:
-                                logger.debug(f"Fallback edit_text (parse_mode=None): {inner}", exc_info=True)
-                        else:
-                            logger.debug(f"edit_text during stream: {e}", exc_info=True)
+        async for chunk in ai_service.ask_stream(user.id, text + instruction):
+            # Проверка таймаута вручную (совместимо с Python 3.10)
+            if time.time() - stream_start_time > STREAM_TOTAL_TIMEOUT:
+                raise asyncio.TimeoutError(f"Stream timeout after {STREAM_TOTAL_TIMEOUT}s")
+            
+            if chunk.startswith("__TOOL_CALL__"):
+                continue
+            
+            full_response += chunk
+            if (time.time() - last_update) > 1.5:
+                try:
+                    await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode='Markdown')
+                    last_update = time.time()
+                except Exception as e:
+                    # При ошибке парсинга Markdown пробуем без форматирования
+                    if "Can't parse entities" in str(e) or "parse" in str(e).lower():
+                        try:
+                            await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode=None)
+                            last_update = time.time()
+                        except Exception as inner:
+                            logger.debug(f"Fallback edit_text (parse_mode=None): {inner}", exc_info=True)
+                    else:
+                        logger.debug(f"edit_text during stream: {e}", exc_info=True)
         
         # Финализация
         is_esc = "[ESCALATE_ACTION]" in full_response
