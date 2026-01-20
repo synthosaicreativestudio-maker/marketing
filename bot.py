@@ -28,6 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from auth_service import AuthService  # noqa: E402
+from utils import alert_admin  # noqa: E402
 from handlers import setup_handlers  # noqa: E402
 from ai_service import AIService  # noqa: E402
 from response_monitor import ResponseMonitor  # noqa: E402
@@ -397,6 +398,12 @@ def _run_bot_main():
             if "Conflict" in str(error):
                 logger.critical("⚠️ ОБНАРУЖЕН КОНФЛИКТ: Запущено несколько экземпляров бота! "
                                "Проверьте активные процессы и systemd сервисы.")
+                # Отправляем алерт админу
+                asyncio.create_task(alert_admin(
+                    application.bot,
+                    "CONFLICT ERROR: Обнаружен запуск второго экземпляра бота!",
+                    "CRITICAL"
+                ))
         else:
             logger.error(f"Неожиданная ошибка: {error}", exc_info=True)
         

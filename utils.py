@@ -6,6 +6,38 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 logger = logging.getLogger(__name__)
 
 
+async def alert_admin(bot, message: str, level: str = "ERROR") -> bool:
+    """
+    Отправляет критическое уведомление админу в Telegram.
+    
+    Args:
+        bot: Экземпляр Telegram бота
+        message: Текст уведомления
+        level: Уровень (ERROR, CRITICAL, WARNING)
+    
+    Returns:
+        True если сообщение отправлено, False если произошла ошибка
+    """
+    admin_id = os.getenv("ADMIN_TELEGRAM_ID")
+    if not admin_id:
+        logger.warning("ADMIN_TELEGRAM_ID не настроен, алерт не отправлен")
+        return False
+    
+    emoji = {"ERROR": "⚠️", "CRITICAL": "🚨", "WARNING": "⚡"}.get(level, "ℹ️")
+    
+    try:
+        await bot.send_message(
+            chat_id=admin_id,
+            text=f"{emoji} **{level}**\n\n{message}",
+            parse_mode="Markdown"
+        )
+        logger.info(f"Алерт отправлен админу: {message[:50]}...")
+        return True
+    except Exception as e:
+        logger.error(f"Не удалось отправить алерт админу: {e}")
+        return False
+
+
 def mask_phone(phone: str) -> str:
     """Маскирует номер телефона: 89123456789 -> 8*******89."""
     if not phone or not str(phone).strip():

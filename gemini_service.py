@@ -264,7 +264,18 @@ class GeminiService:
             try:
                 logger.info(f"Starting stream for user {user_id} (Attempt {attempt+1}/{MAX_RETRIES+1})")
                 
-                async for response in await self.client.aio.models.generate_content_stream(**generate_kwargs):
+                # Таймаут на инициализацию стрима (60 секунд)
+                STREAM_INIT_TIMEOUT = 60.0
+                try:
+                    stream = await asyncio.wait_for(
+                        self.client.aio.models.generate_content_stream(**generate_kwargs),
+                        timeout=STREAM_INIT_TIMEOUT
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"Gemini stream init timeout ({STREAM_INIT_TIMEOUT}s) for user {user_id}")
+                    raise TimeoutError(f"Gemini API не ответил за {STREAM_INIT_TIMEOUT} секунд")
+                
+                async for response in stream:
                     
                     # Сбор Grounding Metadata
                     if response.candidates and response.candidates[0].grounding_metadata:
