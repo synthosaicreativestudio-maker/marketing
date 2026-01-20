@@ -13,15 +13,38 @@ logger = logging.getLogger(__name__)
 class SingleInstanceGuard:
     """
     Механизм защиты от запуска нескольких экземпляров бота.
-    Предотвращает 409 Conflict ошибки.
+    Использует два уровня защиты:
+    1. Lock-файл с PID для tracking процессов
+    2. Socket-binding на локальный порт 60001 (гарантированная защита на уровне ОС)
     """
     
-    def __init__(self, lockfile_path: str = "/tmp/marketingbot.lock"):
+    def __init__(self, lockfile_path: str = "/tmp/marketingbot.lock", port: int = 60001):
         self.lockfile_path = Path(lockfile_path)
+        self.port = port
         self.pid = os.getpid()
+        self.socket = None
         
     def __enter__(self):
-        """Проверяет и создает lock-файл при входе."""
+        """Активирует защиту при входе."""
+        # 1. Socket Lock (самый надежный - ОС не даст открыть тот же порт)
+        import socket
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # SO_REUSEADDR не используем специально, чтобы порт освобождался не мгновенно
+            # и чтобы предотвратить race condition
+            self.socket.bind(('127.0.0.1', self.port))
+            self.socket.listen(1)
+            logger.info(f"✅ Socket Lock активирован (Port: {self.port})")
+        except socket.error as e:
+            logger.critical(
+                f"❌ КРИТИЧЕСКАЯ ОШИБКА: Порт {self.port} занят!\n"
+                f"Это означает, что ДРУГОЙ ЭКЗЕМПЛЯР БОТА УЖЕ РАБОТАЕТ.\n"
+                f"Невозможно запустить две копии одновременно.\n"
+                f"Ошибка: {e}"
+            )
+            sys.exit(1)
+
+        # 2. File Lock (для удобства человека - чтобы видеть PID)
         if self.lockfile_path.exists():
             # Проверяем, жив ли процесс из lock-файла
             try:
@@ -35,13 +58,14 @@ class SingleInstanceGuard:
                         # Проверяем, что это действительно наш бот
                         if 'python' in proc.name().lower() and 'bot.py' in ' '.join(proc.cmdline()):
                             logger.critical(
-                                f"❌ КРИТИЧЕСКАЯ ОШИБКА: Бот уже запущен (PID: {old_pid})\n"
+                                f"❌ КРИТИЧЕСКАЯ ОШИБКА: Lock-файл указывает на живой процесс (PID: {old_pid})\n"
                                 f"Это приведет к 409 Conflict ошибкам!\n"
                                 f"Остановите предыдущий экземпляр: kill {old_pid}"
                             )
+                            # Socket lock должен был сработать раньше, но если файл остался от
+                            # процесса, который не держит порт (например, завис), то выходим
                             sys.exit(1)
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        # Процесс не существует или нет доступа - можно продолжать
                         pass
                 
                 # Старый процесс не существует, удаляем stale lock
@@ -59,7 +83,8 @@ class SingleInstanceGuard:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Удаляет lock-файл при выходе."""
+        """Снимает защиту при выходе."""
+        # 1. Удаляем lock-файл
         try:
             if self.lockfile_path.exists():
                 with open(self.lockfile_path, 'r') as f:
@@ -68,9 +93,17 @@ class SingleInstanceGuard:
                 # Удаляем только если это наш PID
                 if current_pid == self.pid:
                     self.lockfile_path.unlink()
-                    logger.info("✅ SingleInstanceGuard деактивирован")
+                    logger.info("✅ File Lock удален")
         except Exception as e:
             logger.error(f"Ошибка при удалении lock-файла: {e}")
+            
+        # 2. Закрываем сокет
+        if self.socket:
+            try:
+                self.socket.close()
+                logger.info("✅ Socket Lock освобожден")
+            except Exception as e:
+                logger.error(f"Ошибка при закрытии сокета: {e}")
 
 
 class MemoryMonitor:
