@@ -2,12 +2,11 @@
 
 # Скрипт для установки Cloudflare Tunnel на сервере Yandex VM
 # Использует токен из cloudflare_tunnel_token.txt
+# Хост и ключ: scripts/yandex_vm_config.sh
 
 set -e
+source "$(dirname "$0")/yandex_vm_config.sh"
 
-VM_USER="ubuntu"
-VM_HOST="158.160.0.127"
-SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599}"
 TOKEN_FILE="cloudflare_tunnel_token.txt"
 
 echo "==> Установка Cloudflare Tunnel на ${VM_USER}@${VM_HOST}"

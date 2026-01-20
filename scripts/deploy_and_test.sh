@@ -48,11 +48,9 @@ echo ""
 
 # 4. Деплой на сервер
 echo "4️⃣ Деплой на сервер Yandex Cloud..."
-SERVER_USER="ubuntu"
-SERVER_HOST="84.252.137.116"
-SSH_KEY="$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599"
+source "$(dirname "$0")/yandex_vm_config.sh"
 
-ssh -i "$SSH_KEY" "${SERVER_USER}@${SERVER_HOST}" << 'ENDSSH'
+ssh -i "$SSH_KEY" "${VM_USER}@${VM_HOST}" << 'ENDSSH'
 cd /home/ubuntu/marketingbot
 echo "Обновление кода..."
 git pull
@@ -69,11 +67,11 @@ echo ""
 
 # 5. Проверка статуса на сервере
 echo "5️⃣ Проверка статуса бота на сервере..."
-ssh -i "$SSH_KEY" "${SERVER_USER}@${SERVER_HOST}" \
+ssh -i "$SSH_KEY" "${VM_USER}@${VM_HOST}" \
     "sudo systemctl status marketingbot-bot.service | head -20"
 echo ""
 
 echo "✅ Деплой успешно завершен!"
 echo ""
 echo "📱 Теперь можно тестировать бота через Telegram"
-echo "📊 Просмотр логов: ssh -i $SSH_KEY ${SERVER_USER}@${SERVER_HOST} 'journalctl -u marketingbot-bot.service -f'"
+echo "📊 Просмотр логов: ssh -i $SSH_KEY ${VM_USER}@${VM_HOST} 'journalctl -u marketingbot-bot.service -f'"

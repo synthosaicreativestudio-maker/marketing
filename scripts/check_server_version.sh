@@ -5,11 +5,9 @@
 # 1. Последний git commit на сервере
 # 2. Количество запущенных процессов бота
 # 3. Статус systemd сервиса
+# Хост и ключ: scripts/yandex_vm_config.sh
 
-VM_USER="ubuntu"
-VM_HOST="84.252.137.116"  # Используем IP из deploy_yandex.sh
-SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599}"
-REMOTE_DIR="/home/ubuntu/marketingbot"
+source "$(dirname "$0")/yandex_vm_config.sh"
 
 echo "🔍 Проверка версии бота на сервере..."
 echo ""

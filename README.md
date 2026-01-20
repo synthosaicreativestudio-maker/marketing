@@ -105,7 +105,7 @@ Please refer to it for:
 
 4.  **Тестирование:**
     - Отправьте сообщение боту в Telegram
-    - Проверьте логи: `ssh ubuntu@158.160.0.127 "journalctl -u marketingbot-bot.service -f"`
+    - Проверьте логи: `ssh ubuntu@84.252.137.116 "journalctl -u marketingbot-bot.service -f"`
 
 **📚 Подробные правила:** [docs/DEVELOPMENT_RULES.md](docs/DEVELOPMENT_RULES.md)
 

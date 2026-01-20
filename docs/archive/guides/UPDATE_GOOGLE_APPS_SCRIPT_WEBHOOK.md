@@ -33,7 +33,7 @@
 
 ```javascript
 // Webhook настройки для мгновенных уведомлений
-const WEBHOOK_URL = 'http://158.160.0.127:8080/webhook/promotions';
+const WEBHOOK_URL = 'http://84.252.137.116:8080/webhook/promotions';
 const WEBHOOK_SECRET = 'default_secret'; // Должен совпадать с WEBHOOK_SECRET на сервере
 ```
 
@@ -53,7 +53,7 @@ const WEBHOOK_SECRET = 'default_secret'; // Должен совпадать с W
 
 Откройте в браузере:
 ```
-http://158.160.0.127:8080/webhook/promotions
+http://84.252.137.116:8080/webhook/promotions
 ```
 
 Должно показаться JSON сообщение:
@@ -92,7 +92,7 @@ http://158.160.0.127:8080/webhook/promotions
 
 **На сервере:**
 ```bash
-ssh ubuntu@158.160.0.127
+ssh ubuntu@84.252.137.116
 journalctl -u marketingbot-web.service -f
 ```
 

@@ -8,13 +8,10 @@
 # Требования:
 #  - проект уже развернут в /home/ubuntu/marketingbot (deploy_yandex.sh)
 #  - создан файл /home/ubuntu/marketingbot/.env с нужными переменными
+# Хост и ключ: scripts/yandex_vm_config.sh
 
 set -e
-
-VM_USER="ubuntu"
-VM_HOST="158.160.0.127"
-SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599}"
-REMOTE_DIR="/home/ubuntu/marketingbot"
+source "$(dirname "$0")/yandex_vm_config.sh"
 
 echo "==> Настраиваю systemd-сервисы на ${VM_USER}@${VM_HOST}"
 
@@ -47,7 +44,7 @@ GOOGLE_SERVICE_ACCOUNT_JSON=credentials.json
 SPREADSHEET_ID=ВАШ_SPREADSHEET_ID
 APPEALS_SHEET_NAME=обращения
 PROMOTIONS_SHEET_ID=ID_ТАБЛИЦЫ_АКЦИЙ
-WEB_APP_URL=http://158.160.0.127/
+WEB_APP_URL=http://84.252.137.116/
 ADMIN_TELEGRAM_ID=0
 WEBHOOK_SECRET=замените_на_случайный_секрет
 EENV

@@ -1,12 +1,8 @@
 #!/bin/bash
 
 # Скрипт для диагностики статуса бота на сервере
-# Проверяет статус systemd сервиса, процессы, логи и конфликты
-
-VM_USER="ubuntu"
-VM_HOST="158.160.0.127"
-SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599}"
-REMOTE_DIR="/home/ubuntu/marketingbot"
+# Хост и ключ: scripts/yandex_vm_config.sh
+source "$(dirname "$0")/yandex_vm_config.sh"
 
 echo "🔍 Диагностика статуса MarketingBot на сервере..."
 echo ""

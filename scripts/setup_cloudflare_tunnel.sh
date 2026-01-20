@@ -2,12 +2,10 @@
 
 # Скрипт для установки и настройки Cloudflare Tunnel на Yandex VM
 # Решает проблему SSL для мини-приложения, предоставляя доверенный HTTPS URL
+# Хост и ключ: scripts/yandex_vm_config.sh
 
 set -e
-
-VM_USER="ubuntu"
-VM_HOST="158.160.0.127"
-SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599}"
+source "$(dirname "$0")/yandex_vm_config.sh"
 
 echo "==> Установка и настройка Cloudflare Tunnel на ${VM_USER}@${VM_HOST}"
 echo ""

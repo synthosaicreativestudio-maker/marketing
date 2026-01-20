@@ -3,13 +3,11 @@
 # Деплой проекта MarketingBot на ВМ Yandex Cloud.
 # Скрипт запускается ЛОКАЛЬНО, подключается к серверу по SSH и
 # клонирует/обновляет репозиторий в /home/ubuntu/marketingbot.
+# Хост и ключ: scripts/yandex_vm_config.sh
 
 set -e
+source "$(dirname "$0")/yandex_vm_config.sh"
 
-VM_USER="ubuntu"
-VM_HOST="84.252.137.116"
-SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599}"
-REMOTE_DIR="/home/ubuntu/marketingbot"
 REPO_URL="https://github.com/synthosaicreativestudio-maker/marketing.git"
 
 echo "==> Подключаюсь к ${VM_USER}@${VM_HOST} и размещаю/обновляю проект в ${REMOTE_DIR}"

@@ -101,7 +101,7 @@ sudo mkdir -p /etc/cloudflared
 
 # Скопируйте credentials файл на сервер
 # (выполните на локальном компьютере)
-scp -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 <TUNNEL_ID>.json ubuntu@158.160.0.127:/tmp/
+scp -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 <TUNNEL_ID>.json ubuntu@84.252.137.116:/tmp/
 
 # На сервере переместите файл
 sudo mv /tmp/<TUNNEL_ID>.json /etc/cloudflared/

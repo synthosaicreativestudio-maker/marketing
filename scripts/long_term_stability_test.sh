@@ -1,8 +1,9 @@
 #!/bin/bash
 # Скрипт долгосрочного тестирования стабильности бота (24+ часа)
+# Хост и ключ: scripts/yandex_vm_config.sh
 
-SSH_KEY="$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599"
-SERVER="ubuntu@158.160.0.127"
+source "$(dirname "$0")/yandex_vm_config.sh"
+SERVER="${VM_USER}@${VM_HOST}"
 SERVICE="marketingbot-bot.service"
 LOG_FILE="bot_stability_test_$(date +%Y%m%d_%H%M%S).log"
 

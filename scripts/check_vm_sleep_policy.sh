@@ -1,8 +1,8 @@
 #!/bin/bash
 # Проверка политики засыпания VM на Yandex Cloud
-
-SSH_KEY="$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599"
-SERVER="ubuntu@158.160.0.127"
+# Хост и ключ: scripts/yandex_vm_config.sh
+source "$(dirname "$0")/yandex_vm_config.sh"
+SERVER="${VM_USER}@${VM_HOST}"
 
 echo "🖥️  ПРОВЕРКА ПОЛИТИКИ ЗАСЫПАНИЯ VM"
 echo "===================================="
@@ -10,7 +10,7 @@ echo ""
 
 echo "1️⃣ Проверка планировщика задач (cron):"
 echo "  Ищем автоматические остановки/перезагрузки..."
-CRON_JOBS=$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SERVER" \
+CRON_JOBS=$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "${VM_USER}@${VM_HOST}" \
   "crontab -l 2>/dev/null; sudo crontab -l 2>/dev/null" | grep -E "(shutdown|poweroff|reboot|suspend)")
 
 if [ -z "$CRON_JOBS" ]; then

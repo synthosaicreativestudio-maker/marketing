@@ -1,13 +1,10 @@
 #!/bin/bash
 
 # Скрипт для обновления бота на Yandex VM с локального компьютера
+# Хост и ключ: scripts/yandex_vm_config.sh (или YANDEX_VM_IP, SSH_KEY_PATH)
+source "$(dirname "$0")/yandex_vm_config.sh"
+
 echo "🚀 Обновление MarketingBot на Yandex VM с локального компьютера..."
-
-VM_USER="ubuntu"
-VM_HOST="158.160.0.127"
-SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599}"
-REMOTE_DIR="/home/ubuntu/marketingbot"
-
 echo "==> Подключаюсь к ${VM_USER}@${VM_HOST} и обновляю проект..."
 
 ssh -i "$SSH_KEY" "${VM_USER}@${VM_HOST}" bash <<'EOF'
@@ -24,7 +21,7 @@ cd "${REMOTE_DIR}"
 
 echo "📥 Обновление кода из GitHub..."
 git fetch origin
-git pull origin main
+git reset --hard origin/main
 
 echo "🔄 Перезапуск сервисов..."
 sudo systemctl restart marketingbot-bot.service

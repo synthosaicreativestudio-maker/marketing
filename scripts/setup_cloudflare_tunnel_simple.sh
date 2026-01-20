@@ -3,12 +3,10 @@
 # Упрощенный скрипт для настройки Cloudflare Tunnel
 # Используется когда туннель уже создан через Dashboard
 # и нужно только установить cloudflared и настроить его на сервере
+# Хост и ключ: scripts/yandex_vm_config.sh
 
 set -e
-
-VM_USER="ubuntu"
-VM_HOST="158.160.0.127"
-SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599}"
+source "$(dirname "$0")/yandex_vm_config.sh"
 
 echo "==> Упрощенная установка Cloudflare Tunnel"
 echo ""

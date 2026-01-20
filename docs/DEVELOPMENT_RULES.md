@@ -22,7 +22,7 @@ Telegram API **не позволяет** двум ботам с одним то�
 
 2. **Деплой на сервер:**
    ```bash
-   ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@158.160.0.127 \
+   ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@84.252.137.116 \
      "cd /home/ubuntu/marketingbot && git pull && sudo systemctl restart marketingbot-bot.service"
    ```
 
@@ -30,7 +30,7 @@ Telegram API **не позволяет** двум ботам с одним то�
    - Отправить сообщение боту в Telegram
    - Проверить логи на сервере:
    ```bash
-   ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@158.160.0.127 \
+   ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@84.252.137.116 \
      "journalctl -u marketingbot-bot.service -f"
    ```
 
@@ -42,11 +42,11 @@ Telegram API **не позволяет** двум ботам с одним то�
 #### ✅ Как проверить, что бот работает на сервере:
 ```bash
 # Проверка процесса на сервере
-ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@158.160.0.127 \
+ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@84.252.137.116 \
   "ps aux | grep 'python.*bot.py' | grep -v grep"
 
 # Проверка статуса сервиса
-ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@158.160.0.127 \
+ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@84.252.137.116 \
   "sudo systemctl status marketingbot-bot.service"
 
 # Проверка отсутствия локальных процессов
@@ -73,7 +73,7 @@ ps aux | grep 'python.*bot.py' | grep -v grep
 # Должно быть пусто
 
 # 2. Убедиться, что бот работает на сервере
-ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@158.160.0.127 \
+ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@84.252.137.116 \
   "systemctl is-active marketingbot-bot.service"
 # Должно быть: active
 ```
@@ -95,11 +95,11 @@ echo "2️⃣ Пуш изменений в GitHub..."
 git push origin main
 
 echo "3️⃣ Деплой на сервер..."
-ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@158.160.0.127 \
+ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@84.252.137.116 \
   "cd /home/ubuntu/marketingbot && git pull && sudo systemctl restart marketingbot-bot.service"
 
 echo "4️⃣ Проверка статуса..."
-ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@158.160.0.127 \
+ssh -i ~/.ssh/ssh-key-1767684261599/ssh-key-1767684261599 ubuntu@84.252.137.116 \
   "sudo systemctl status marketingbot-bot.service | head -20"
 
 echo "✅ Деплой завершен! Можно тестировать через Telegram."

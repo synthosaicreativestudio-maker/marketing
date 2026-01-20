@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 
 # Удобный запуск/проверка сервисов MarketingBot на ВМ Yandex Cloud.
+# Хост и ключ: scripts/yandex_vm_config.sh
 
 set -e
-
-VM_USER="ubuntu"
-VM_HOST="158.160.0.127"
-SSH_KEY="${SSH_KEY_PATH:-$HOME/.ssh/ssh-key-1767684261599/ssh-key-1767684261599}"
+source "$(dirname "$0")/yandex_vm_config.sh"
 
 ssh -t -i "$SSH_KEY" "${VM_USER}@${VM_HOST}" <<'EOF'
 set -e
