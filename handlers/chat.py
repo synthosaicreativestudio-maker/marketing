@@ -94,7 +94,7 @@ async def _is_specialist_mode(user_id, appeals_service):
         return False
 
 async def _process_ai_response(update, context, ai_service, appeals_service, text):
-    """Стриминг ответа от ИИ."""
+    """Стриминг ответа от ИИ с таймаутом и graceful degradation."""
     user = update.effective_user
     
     # Контекстуальное приветствие
@@ -108,27 +108,30 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     
     full_response = ""
     last_update = 0
+    STREAM_TOTAL_TIMEOUT = 120  # 2 минуты на весь ответ
     
     try:
-        async for chunk in ai_service.ask_stream(user.id, text + instruction):
-            if chunk.startswith("__TOOL_CALL__"):
-                continue
-            
-            full_response += chunk
-            if (time.time() - last_update) > 1.5:
-                try:
-                    await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode='Markdown')
-                    last_update = time.time()
-                except Exception as e:
-                    # При ошибке парсинга Markdown пробуем без форматирования
-                    if "Can't parse entities" in str(e) or "parse" in str(e).lower():
-                        try:
-                            await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode=None)
-                            last_update = time.time()
-                        except Exception as inner:
-                            logger.debug(f"Fallback edit_text (parse_mode=None): {inner}", exc_info=True)
-                    else:
-                        logger.debug(f"edit_text during stream: {e}", exc_info=True)
+        # Общий таймаут на весь стрим
+        async with asyncio.timeout(STREAM_TOTAL_TIMEOUT):
+            async for chunk in ai_service.ask_stream(user.id, text + instruction):
+                if chunk.startswith("__TOOL_CALL__"):
+                    continue
+                
+                full_response += chunk
+                if (time.time() - last_update) > 1.5:
+                    try:
+                        await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode='Markdown')
+                        last_update = time.time()
+                    except Exception as e:
+                        # При ошибке парсинга Markdown пробуем без форматирования
+                        if "Can't parse entities" in str(e) or "parse" in str(e).lower():
+                            try:
+                                await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode=None)
+                                last_update = time.time()
+                            except Exception as inner:
+                                logger.debug(f"Fallback edit_text (parse_mode=None): {inner}", exc_info=True)
+                        else:
+                            logger.debug(f"edit_text during stream: {e}", exc_info=True)
         
         # Финализация
         is_esc = "[ESCALATE_ACTION]" in full_response
@@ -149,10 +152,34 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
         # Фоновое логирование
         if settings.LOG_TO_SHEETS:
             asyncio.create_task(_safe_background_log(user.id, text, clean_response, appeals_service))
+    
+    except asyncio.TimeoutError:
+        logger.error(f"Stream timeout ({STREAM_TOTAL_TIMEOUT}s) for user {user.id}")
+        # Graceful degradation: предлагаем специалиста
+        await status_msg.edit_text(
+            "⚠️ Превышено время ожидания ответа. Специалист скоро ответит.",
+            reply_markup=create_specialist_button()
+        )
+        # Автоматическая эскалация
+        if appeals_service and appeals_service.is_available():
+            try:
+                await appeals_service.set_status(user.id, "Передано специалисту")
+            except Exception:
+                pass
             
     except Exception as e:
         logger.error(f"Ошибка стриминга ИИ: {e}")
-        await status_msg.edit_text("⚠️ Ошибка связи с ИИ. Попробуйте позже.")
+        # Graceful degradation: предлагаем специалиста при любой ошибке
+        await status_msg.edit_text(
+            "⚠️ ИИ временно недоступен. Специалист скоро ответит.",
+            reply_markup=create_specialist_button()
+        )
+        # Автоматическая эскалация
+        if appeals_service and appeals_service.is_available():
+            try:
+                await appeals_service.set_status(user.id, "Передано специалисту")
+            except Exception:
+                pass
 
 async def _safe_background_log(user_id, text, reply, appeals_service):
     """Логирование диалога."""

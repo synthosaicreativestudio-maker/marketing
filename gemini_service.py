@@ -125,6 +125,10 @@ class GeminiService:
         
         # Хранилище истории диалогов: user_id -> list of Content objects
         self.user_histories: Dict[int, List[types.Content]] = {}
+        # TTL tracking для защиты от memory leak
+        self._history_timestamps: Dict[int, float] = {}
+        self._max_histories = 500  # Максимум сессий в памяти
+        self._history_ttl = 3600 * 24  # 24 часа TTL
         
         # Настройки модели
         # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
@@ -150,12 +154,41 @@ class GeminiService:
         """Проверяет, доступен ли сервис."""
         return self.client is not None
 
+    def _cleanup_old_histories(self) -> None:
+        """Очистка старых историй для предотвращения memory leak."""
+        now = time.time()
+        
+        # Удаляем устаревшие (старше TTL)
+        expired = [uid for uid, ts in self._history_timestamps.items() if now - ts > self._history_ttl]
+        for uid in expired:
+            self.user_histories.pop(uid, None)
+            self._history_timestamps.pop(uid, None)
+        
+        if expired:
+            logger.info(f"Cleaned up {len(expired)} expired chat histories (TTL: {self._history_ttl}s)")
+        
+        # Если всё ещё слишком много — удаляем самые старые
+        if len(self.user_histories) > self._max_histories:
+            sorted_users = sorted(self._history_timestamps.items(), key=lambda x: x[1])
+            to_remove = len(self.user_histories) - self._max_histories // 2
+            for uid, _ in sorted_users[:to_remove]:
+                self.user_histories.pop(uid, None)
+                self._history_timestamps.pop(uid, None)
+            logger.warning(f"Memory cleanup: removed {to_remove} oldest histories (limit: {self._max_histories})")
+
     def _get_or_create_history(self, user_id: int) -> List[types.Content]:
         """Получает или создает историю для пользователя.
         
         Реализация Context Injection (ТЗ Блок А-1):
         Вместо системного параметра вставляем 2 фейковых сообщения.
         """
+        # Периодическая очистка старых историй
+        if len(self.user_histories) > self._max_histories // 2:
+            self._cleanup_old_histories()
+        
+        # Обновляем timestamp последней активности
+        self._history_timestamps[user_id] = time.time()
+        
         if user_id not in self.user_histories:
             self.user_histories[user_id] = []
             # Добавляем системный промпт как первое сообщение (Role: User)

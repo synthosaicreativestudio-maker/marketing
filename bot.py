@@ -13,6 +13,7 @@ import signal
 import sys
 import atexit
 import asyncio
+import time
 from dotenv import load_dotenv
 from telegram.ext import Application
 from telegram.error import TelegramError
@@ -347,6 +348,52 @@ def _run_bot_main():
                 logger.info("PollingWatchdog запущен (проверка каждые 30 секунд)")
             except Exception as e:
                 logger.error(f"Ошибка запуска PollingWatchdog: {e}", exc_info=True)
+        
+        # Мониторинг памяти (защита от memory leak)
+        if PREVENTIVE_GUARDS_AVAILABLE:
+            try:
+                from preventive_guards import MemoryMonitor
+                memory_monitor = MemoryMonitor(max_memory_mb=300)
+                
+                async def check_memory_periodically():
+                    """Периодическая проверка памяти с алертами."""
+                    while True:
+                        await asyncio.sleep(300)  # Каждые 5 минут
+                        if not memory_monitor.check_memory():
+                            await alert_admin(
+                                application.bot,
+                                f"Критическое потребление памяти: {memory_monitor.get_memory_mb():.0f}MB!",
+                                "CRITICAL"
+                            )
+                            logger.critical("Memory limit exceeded, triggering restart...")
+                            os._exit(1)  # Systemd перезапустит
+                
+                task_tracker.create_tracked_task(check_memory_periodically(), "memory_monitor")
+                logger.info(f"Memory monitor запущен (лимит: {memory_monitor.max_memory_mb}MB)")
+            except Exception as e:
+                logger.error(f"Ошибка запуска Memory monitor: {e}")
+        
+        # Heartbeat алерты (подтверждение что бот жив)
+        HEARTBEAT_INTERVAL = 3600 * 6  # Каждые 6 часов
+        bot_start_time = time.time()
+        
+        async def heartbeat_alert():
+            """Периодический алерт о работоспособности бота."""
+            while True:
+                await asyncio.sleep(HEARTBEAT_INTERVAL)
+                uptime_hours = (time.time() - bot_start_time) / 3600
+                try:
+                    import psutil
+                    process = psutil.Process()
+                    memory_mb = process.memory_info().rss / 1024 / 1024
+                    stats = f"Uptime: {uptime_hours:.1f}h, Memory: {memory_mb:.0f}MB"
+                except Exception:
+                    stats = f"Uptime: {uptime_hours:.1f}h"
+                
+                await alert_admin(application.bot, f"💓 Heartbeat: {stats}", "INFO")
+        
+        task_tracker.create_tracked_task(heartbeat_alert(), "heartbeat_alert")
+        logger.info("Heartbeat алерты запущены (каждые 6 часов)")
 
     async def post_stop(application: Application) -> None:
         """Остановка мониторинга при завершении работы бота."""
