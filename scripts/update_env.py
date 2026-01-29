@@ -42,7 +42,8 @@ def update_env_file():
         
         f.write("# Google Cloud Platform Service Account\n")
         f.write(f"GCP_SA_FILE={env_vars.get('GCP_SA_FILE', '')}\n")
-        f.write(f"SHEET_NAME={env_vars.get('SHEET_NAME', '')}\n\n")
+        f.write(f"SHEET_NAME={env_vars.get('SHEET_NAME', '')}\n")
+        f.write(f"DRIVE_FOLDER_ID={env_vars.get('DRIVE_FOLDER_ID', '')}\n\n")
         
         f.write("# Appeals sheet configuration\n")
         f.write(f"APPEALS_SHEET_ID={env_vars.get('APPEALS_SHEET_ID', '')}\n")

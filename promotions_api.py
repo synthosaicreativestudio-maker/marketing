@@ -309,7 +309,18 @@ async def is_promotions_available(gateway: AsyncGoogleSheetsGateway) -> bool:
         bool: True если система акций настроена и доступна
     """
     try:
-        _get_promotions_client_and_sheet()
+        if not gateway:
+             # Fallback to sync method if gateway not provided (legacy)
+            _get_promotions_client_and_sheet()
+            return True
+
+        client = await gateway.authorize_client()
+        sheet_id = os.environ.get('PROMOTIONS_SHEET_ID')
+        if not sheet_id:
+            return False
+            
+        # Just check if we can open the spreadsheet
+        await gateway.open_spreadsheet(client, sheet_id)
         return True
     except (PromotionsNotConfiguredError, SheetsNotConfiguredError, CircuitBreakerOpenError):
         return False
