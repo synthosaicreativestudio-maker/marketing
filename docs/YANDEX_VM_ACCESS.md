@@ -65,6 +65,12 @@
 
 ---
 
+## Обход блокировок Gemini (Вариант Б)
+
+Чтобы ИИ работал с Yandex VM (Россия), запросы к Gemini идут через американский сервер. Настройка — **только для Gemini**, без глобального прокси: [GEMINI_PROXY_AMERICAN_SERVER.md](GEMINI_PROXY_AMERICAN_SERVER.md).
+
+---
+
 ## Единый источник настроек
 
 **`scripts/yandex_vm_config.sh`** задаёт: `VM_USER`, `VM_HOST`, `SSH_KEY`, `REMOTE_DIR`. Его подключают все скрипты из таблицы выше.

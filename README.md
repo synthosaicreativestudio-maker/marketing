@@ -20,6 +20,7 @@ Please refer to it for:
 ### Additional Resources
 - **TODO / Тех. Долг:** [docs/TODO.md](docs/TODO.md) ([RU](docs/TODO_RU.md))
 - **IDEAS / Идеи:** [docs/IDEAS.md](docs/IDEAS.md) ([RU](docs/IDEAS_RU.md))
+- **Обход блокировок Gemini (Вариант Б):** [docs/GEMINI_PROXY_AMERICAN_SERVER.md](docs/GEMINI_PROXY_AMERICAN_SERVER.md) — только Gemini через американский сервер; Telegram и Google Sheets — напрямую.
 
 ## 📂 Project Structure
 

@@ -28,19 +28,18 @@ class GeminiService:
     def __init__(self, promotions_gateway: Optional[AsyncGoogleSheetsGateway] = None) -> None:
         self.promotions_gateway = promotions_gateway
         
-        # Проверка конфигурации ProxyAPI.ru (Вариант Б: прямая замена endpoint)
+        # Вариант Б (предпочтительно): только Gemini через американский сервер (reverse proxy)
         proxyapi_key = os.getenv("PROXYAPI_KEY")
         proxyapi_base_url = os.getenv("PROXYAPI_BASE_URL")
         
-        # Вариант Б: Использование ProxyAPI.ru
         if proxyapi_key and proxyapi_base_url:
-            logger.info("ProxyAPI.ru detected - using custom endpoint for Gemini access")
+            logger.info("Using custom Gemini endpoint (bypass regional restrictions)")
             try:
                 self.client = genai.Client(
                     api_key=proxyapi_key,
                     http_options={'api_endpoint': proxyapi_base_url}
                 )
-                logger.info("GeminiService initialized via ProxyAPI.ru (bypass regional restrictions)")
+                logger.info("GeminiService initialized via proxy (bypass regional restrictions)")
             except Exception as e:
                 logger.error(f"Failed to initialize GeminiService via ProxyAPI: {e}", exc_info=True)
                 self.client = None
