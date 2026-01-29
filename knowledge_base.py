@@ -28,7 +28,6 @@ class KnowledgeBase:
         
         self.client = None
         try:
-        try:
             if proxy_key and proxy_url:
                 logger.info("KnowledgeBase using Proxy API")
                 self.client = genai.Client(
