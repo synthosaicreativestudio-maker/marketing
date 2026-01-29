@@ -148,3 +148,4 @@ server-stats.txt
 audit-files/
 audit-results/
 ALL_CREDENTIALS.md
+.agent/
