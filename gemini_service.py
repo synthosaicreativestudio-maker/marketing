@@ -132,7 +132,7 @@ class GeminiService:
         
         # Настройки модели
         # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
-        self.model_name = "gemini-3-flash-preview" 
+        self.model_name = "gemini-3-pro-preview" 
         self.max_history_messages = 12  # Оптимально для быстрого скользящего окна (6 пар)
         
         # Кэш для акций (Simple TTL Cache)

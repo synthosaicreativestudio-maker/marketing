@@ -155,7 +155,15 @@ def _is_retryable_error(exception: Exception) -> bool:
     """
     # Проверяем APIError с кодами ошибок
     if isinstance(exception, APIError):
-        status_code = getattr(exception, 'response', {}).get('status', 0)
+        resp = getattr(exception, 'response', None)
+        status_code = 0
+        if isinstance(resp, dict):
+            status_code = resp.get('status', 0)
+        elif hasattr(resp, 'status_code'):
+            status_code = resp.status_code
+        elif hasattr(resp, 'status'):
+            status_code = resp.status
+            
         # Retry для временных ошибок
         if status_code in [500, 502, 503, 504]:
             return True

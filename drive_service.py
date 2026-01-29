@@ -53,6 +53,10 @@ class DriveService:
             logger.warning("DriveService not initialized, cannot list files")
             return []
             
+        if not folder_id or str(folder_id).lower() in ('none', ''):
+            logger.warning("Invalid folder_id provided for list_files")
+            return []
+            
         try:
             # Query for supported types not in trash
             # Mime types: application/pdf, application/vnd.openxmlformats-officedocument.presentationml.presentation

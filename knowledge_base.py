@@ -33,8 +33,8 @@ class KnowledgeBase:
 
     async def initialize(self):
         """Initial check and cache creation."""
-        if not self.client or not self.folder_id:
-            logger.warning("KnowledgeBase disabled: client or folder_id missing")
+        if not self.client or not self.folder_id or str(self.folder_id).lower() in ('none', ''):
+            logger.warning(f"KnowledgeBase disabled: client missing or invalid folder_id: {self.folder_id}")
             return
             
         # Check drive access
