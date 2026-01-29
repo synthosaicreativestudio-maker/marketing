@@ -177,6 +177,16 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             "⚠️ ИИ временно недоступен. Специалист скоро ответит.",
             reply_markup=create_specialist_button()
         )
+        
+        # ALERT ADMIN: Отправляем уведомление об ошибке
+        from utils import alert_admin
+        error_details = str(e)[:200]
+        await alert_admin(
+            context.bot, 
+            f"⚠️ **Ошибка AI Chat**\nUser: {user.id}\nError: `{error_details}`",
+            level="ERROR"
+        )
+
         # Автоматическая эскалация
         if appeals_service and appeals_service.is_available():
             try:

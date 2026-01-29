@@ -257,6 +257,15 @@ def _run_bot_main():
     async def post_init(application: Application) -> None:
         """Инициализация мониторинга после запуска приложения."""
         
+        # --- NEW: Proxy Monitor (CRITICAL) ---
+        try:
+            from monitors.proxy_monitor import ProxyMonitor
+            proxy_monitor = ProxyMonitor(check_interval=300) # Проверка каждые 5 минут
+            await proxy_monitor.start(application.bot)
+            logger.info("ProxyMonitor service started")
+        except Exception as e:
+            logger.error(f"Failed to start ProxyMonitor: {e}")
+
         # Добавляем middleware для обновления Watchdog heartbeat
         if watchdog:
             async def watchdog_heartbeat_middleware(update, context):
