@@ -194,7 +194,7 @@ class KnowledgeBase:
 
                 # Create cache using AIO client
                 cached_content = await self.client.aio.caches.create(
-                    model='gemini-3-flash-preview', 
+                    model='gemini-3-pro-preview', 
                     config=types.CreateCachedContentConfig(
                         contents=[types.Content(role='user', parts=content_parts)],
                         system_instruction=si_content,
