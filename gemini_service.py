@@ -37,7 +37,7 @@ class GeminiService:
             try:
                 self.client = genai.Client(
                     api_key=proxyapi_key,
-                    http_options={'api_endpoint': proxyapi_base_url}
+                    http_options={'base_url': proxyapi_base_url}
                 )
                 logger.info("GeminiService initialized via proxy (bypass regional restrictions)")
             except Exception as e:

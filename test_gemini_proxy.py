@@ -39,7 +39,7 @@ async def test_gemini_access():
             print("Режим: ProxyAPI (прямая замена URL)")
             client = genai.Client(
                 api_key=proxyapi_key,
-                http_options={'api_endpoint': proxyapi_base_url}
+                http_options={'base_url': proxyapi_base_url}
             )
         # Вариант А: Стандартный API с HTTP_PROXY
         elif gemini_key:
