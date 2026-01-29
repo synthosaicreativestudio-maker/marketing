@@ -13,9 +13,14 @@ logger = logging.getLogger(__name__)
 class KnowledgeBase:
     """Manages the Knowledge Base (cache) for Gemini."""
     
-    def __init__(self, drive_service: DriveService):
         self.drive_service = drive_service
         self.folder_id = os.getenv('DRIVE_FOLDER_ID')
+        self.cached_content_name = None
+        self.last_update_time = 0
+        self.ttl_minutes = 60 # Cache TTL (standard is 1 hour)
+        self.is_updating = False
+        self._lock = asyncio.Lock()
+        
         # Initialize Gemini Client with Proxy Support
         proxy_key = os.getenv("PROXYAPI_KEY")
         proxy_url = os.getenv("PROXYAPI_BASE_URL")
