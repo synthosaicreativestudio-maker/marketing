@@ -16,20 +16,23 @@ class KnowledgeBase:
     def __init__(self, drive_service: DriveService):
         self.drive_service = drive_service
         self.folder_id = os.getenv('DRIVE_FOLDER_ID')
-        self.api_key = os.getenv("GEMINI_API_KEY")
-        self.client = None
-        self.cached_content_name = None
-        self.last_update_time = 0
-        self.ttl_minutes = 60 # Cache TTL (standard is 1 hour)
-        self.is_updating = False
-        self._lock = asyncio.Lock()
+        # Initialize Gemini Client with Proxy Support
+        proxy_key = os.getenv("PROXYAPI_KEY")
+        proxy_url = os.getenv("PROXYAPI_BASE_URL")
         
-        # Initialize Gemini Client
-        if self.api_key:
-            try:
+        self.client = None
+        try:
+            if proxy_key and proxy_url:
+                logger.info("KnowledgeBase using Proxy API")
+                self.client = genai.Client(
+                    api_key=proxy_key,
+                    http_options={'base_url': proxy_url}
+                )
+            elif self.api_key:
+                logger.info("KnowledgeBase using Direct API")
                 self.client = genai.Client(api_key=self.api_key)
-            except Exception as e:
-                logger.error(f"Failed to initialize Gemini Client in KnowledgeBase: {e}")
+        except Exception as e:
+             logger.error(f"Failed to initialize Gemini Client in KnowledgeBase: {e}")
 
     async def initialize(self):
         """Initial check and cache creation."""
