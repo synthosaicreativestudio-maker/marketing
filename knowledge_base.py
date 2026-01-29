@@ -28,11 +28,15 @@ class KnowledgeBase:
         
         self.client = None
         try:
+        try:
             if proxy_key and proxy_url:
                 logger.info("KnowledgeBase using Proxy API")
                 self.client = genai.Client(
                     api_key=proxy_key,
-                    http_options={'base_url': proxy_url}
+                    http_options={
+                        'base_url': proxy_url, 
+                        'api_version': 'v1beta'
+                    }
                 )
             elif self.api_key:
                 logger.info("KnowledgeBase using Direct API")
@@ -161,6 +165,9 @@ class KnowledgeBase:
                     
                 except Exception as e:
                     logger.error(f"Error uploading {path}: {e}")
+                
+                # Small delay to avoid rate limits/geo-checks
+                await asyncio.sleep(2)
 
             if not gemini_files:
                 logger.error("No files successfully uploaded to Gemini.")
