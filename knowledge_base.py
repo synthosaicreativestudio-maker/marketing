@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class KnowledgeBase:
     """Manages the Knowledge Base (cache) for Gemini."""
     
+    def __init__(self, drive_service: DriveService):
         self.drive_service = drive_service
         self.folder_id = os.getenv('DRIVE_FOLDER_ID')
         self.cached_content_name = None
