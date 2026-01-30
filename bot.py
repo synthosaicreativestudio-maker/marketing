@@ -39,6 +39,8 @@ from bot_health_monitor import BotHealthMonitor  # noqa: E402
 from sheets_gateway import AsyncGoogleSheetsGateway  # noqa: E402
 from polling_watchdog import PollingWatchdog  # noqa: E402
 from task_tracker import task_tracker  # noqa: E402
+from drive_service import DriveService  # noqa: E402
+from user_profile_manager import UserProfileManager  # noqa: E402
 
 # Превентивные механизмы
 try:
@@ -145,6 +147,10 @@ def _run_bot_main():
     # --- Инициализация сервисов с защитой от ошибок ---
     logger.info("Инициализация сервисов...")
     
+    # Инициализация DriveService для профилей (использует те же учетки)
+    drive_service = DriveService()
+    profile_manager = UserProfileManager(drive_service)
+    
     try:
         logger.info("Инициализация AuthService с Gateway...")
         auth_service = AuthService(gateway=auth_gateway)
@@ -247,7 +253,7 @@ def _run_bot_main():
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
     try:
-        setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway)
+        setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway, profile_manager)
         logger.info("Обработчики успешно зарегистрированы")
     except Exception as e:
         logger.error(f"Ошибка регистрации обработчиков: {e}", exc_info=True)

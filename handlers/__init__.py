@@ -8,7 +8,7 @@ from handlers.callback import register_callback_handlers
 
 logger = logging.getLogger(__name__)
 
-def setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway=None):
+def setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway=None, profile_manager=None):
     """
     Централизованная регистрация всех обработчиков.
     Модули включаются/выключаются на основе config.settings.
@@ -20,7 +20,7 @@ def setup_handlers(application, auth_service, ai_service, appeals_service, promo
 
     # 2. Чат с ИИ
     if settings.ENABLE_AI_CHAT:
-        register_chat_handlers(application, auth_service, ai_service, appeals_service)
+        register_chat_handlers(application, auth_service, ai_service, appeals_service, profile_manager)
         logger.info("Модуль AI Chat подключен")
 
     # 3. Обращения

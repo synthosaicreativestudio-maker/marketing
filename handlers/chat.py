@@ -15,14 +15,14 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-def register_chat_handlers(application, auth_service, ai_service, appeals_service):
+def register_chat_handlers(application, auth_service, ai_service, appeals_service, profile_manager=None):
     """Регистрация обработчиков чата."""
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & ~filters.StatusUpdate.WEB_APP_DATA, 
-        chat_handler(auth_service, ai_service, appeals_service)
+        chat_handler(auth_service, ai_service, appeals_service, profile_manager)
     ))
 
-def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_service: AppealsService):
+def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_service: AppealsService, profile_manager=None):
     """Основной обработчик общения с ИИ."""
     @safe_handler
     async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -38,6 +38,20 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
         # 2. Логирование обращения в таблицу (если включено)
         if settings.ENABLE_APPEALS and appeals_service and appeals_service.is_available():
             asyncio.create_task(_create_appeal_entry(user, text, auth_service, appeals_service))
+
+        # --- USER PROFILE: Update & Load ---
+        profile_context = ""
+        if profile_manager:
+            try:
+                # Update basic info from Telegram
+                await profile_manager.update_profile(user.id, {
+                    "first_name": user.first_name,
+                    "username": user.username,
+                    "last_seen": time.strftime("%Y-%m-%d %H:%M:%S")
+                })
+                profile_context = await profile_manager.get_system_context(user.id)
+            except Exception as e:
+                logger.error(f"Error handling profile for {user.id}: {e}")
 
         # 3. Проверка на запрос специалиста
         if _is_user_escalation_request(text):
@@ -57,7 +71,7 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
             return
 
         # 6. Подготовка контекста и стриминг
-        await _process_ai_response(update, context, ai_service, appeals_service, text)
+        await _process_ai_response(update, context, ai_service, appeals_service, text, profile_context)
 
     return handle_chat
 
@@ -93,7 +107,7 @@ async def _is_specialist_mode(user_id, appeals_service):
         logger.debug(f"_is_specialist_mode: {e}", exc_info=True)
         return False
 
-async def _process_ai_response(update, context, ai_service, appeals_service, text):
+async def _process_ai_response(update, context, ai_service, appeals_service, text, profile_context=""):
     """Стриминг ответа от ИИ с таймаутом и graceful degradation."""
     user = update.effective_user
     
@@ -103,6 +117,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     context.user_data['last_interaction_timestamp'] = now
     
     instruction = "\n\n[SYSTEM: Продолжение диалога]" if (now - last) < 28800 else "\n\n[SYSTEM: Новая сессия]"
+    instruction += profile_context
     
     status_msg = await update.message.reply_text("⏳ *Синта печатает...*", parse_mode='Markdown')
     
