@@ -166,35 +166,38 @@ class DriveService:
                 logger.error(f"Error cleaning up tmp files: {e}")
 
     def upload_file(self, local_path: str, folder_id: str, display_name: Optional[str] = None, overwrite: bool = True, owner_email: Optional[str] = None) -> Optional[str]:
-        """Upload a local file to a specific Drive folder. Overwrites if it already exists. 
+        """Upload a local file to a specific Drive folder. Overwrites if it already exists.
         If owner_email is provided, attempts to transfer ownership to avoid quota issues."""
         if not self.service:
             logger.error("DriveService not initialized, cannot upload")
             return None
         
         from googleapiclient.http import MediaFileUpload
-        
         try:
             name = display_name or os.path.basename(local_path)
             media = MediaFileUpload(local_path, resumable=True)
             
-            # Check for existing file if overwrite is enabled
+            # 1. Look for existing file
             existing_id = None
             if overwrite:
                 query = f"name = '{name}' and '{folder_id}' in parents and trashed = false"
-                results = self.service.files().list(q=query, fields="files(id)").execute()
+                results = self.service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
                 files = results.get('files', [])
                 if files:
                     existing_id = files[0].get('id')
 
             if existing_id:
-                logger.info(f"Overwriting existing file {name} (ID: {existing_id}) on Drive...")
+                logger.info(f"Updating existing file {name} (ID: {existing_id})...")
                 file = self.service.files().update(
                     fileId=existing_id,
-                    media_body=media
+                    media_body=media,
+                    fields='id',
+                    supportsAllDrives=True
                 ).execute()
-                file_id = existing_id
+                return existing_id
             else:
+                # 2. Create new file
+                logger.info(f"Creating NEW file {name} in folder {folder_id}...")
                 file_metadata = {
                     'name': name,
                     'parents': [folder_id]
@@ -202,47 +205,28 @@ class DriveService:
                 file = self.service.files().create(
                     body=file_metadata,
                     media_body=media,
-                    fields='id'
-                ).execute()
-                file_id = file.get('id')
-            logger.info(f"Successfully uploaded/updated {name} on Drive (ID: {file_id})")
-            
-            # --- QUOTA FIX: Try to upload and immediately transfer ownership ---
-            if owner_email and not file_id:
-                try:
-                    # Create with permission in mind
-                    file = self.service.files().create(
-                        body=file_metadata,
-                        media_body=media,
-                        fields='id',
-                        supportsAllDrives=True
-                    ).execute()
-                    file_id = file.get('id')
-                    
-                    # Immediate transfer
-                    logger.info(f"Transferring ownership of NEW file {file_id} to {owner_email}...")
-                    self.service.permissions().create(
-                        fileId=file_id,
-                        body={'type': 'user', 'role': 'owner', 'emailAddress': owner_email},
-                        transferOwnership=True
-                    ).execute()
-                except Exception as e:
-                    if 'storageQuotaExceeded' in str(e):
-                        logger.warning(f"Quota exceeded on CREATE. File might be partially created or needs direct owner upload.")
-                    else:
-                        logger.error(f"Error in initial upload/transfer: {e}")
-
-            elif file_id:
-                # Update existing file (if ownership was already transferred, it uses OWNER's quota!)
-                file = self.service.files().update(
-                    fileId=file_id,
-                    media_body=media,
                     fields='id',
                     supportsAllDrives=True
                 ).execute()
-                logger.info(f"Updated existing file {file_id} (uses owner quota)")
-
-            return file_id
+                file_id = file.get('id')
+                
+                # 3. Transfer ownership IMMEDIATELY if possible to avoid quota issues for next updates
+                if owner_email and file_id:
+                    try:
+                        logger.info(f"Transferring ownership of {name} to {owner_email}...")
+                        self.service.permissions().create(
+                            fileId=file_id,
+                            body={'type': 'user', 'role': 'owner', 'emailAddress': owner_email},
+                            transferOwnership=True,
+                            supportsAllDrives=True
+                        ).execute()
+                    except Exception as pe:
+                        logger.warning(f"Could not transfer ownership of {name}: {pe}")
+                
+                return file_id
         except Exception as e:
-            logger.error(f"Error uploading file {local_path} to Drive: {e}")
+            if 'storageQuotaExceeded' in str(e):
+                logger.error(f"QUOTA ERROR: Service Account has no quota to create '{name}'. Please ask owner to create a placeholder file.")
+            else:
+                logger.error(f"Error uploading file {local_path} to Drive: {e}")
             return None
