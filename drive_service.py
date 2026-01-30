@@ -207,27 +207,35 @@ class DriveService:
                 file_id = file.get('id')
             logger.info(f"Successfully uploaded/updated {name} on Drive (ID: {file_id})")
             
-            # --- QUOTA FIX: Transfer ownership / Add permissions ---
+            # --- QUOTA FIX: Transfer ownership to avoid storageQuotaExceeded ---
             if owner_email and file_id:
                 try:
-                    logger.info(f"Adding permission for {owner_email} on file {file_id}...")
-                    # First add as writer
+                    logger.info(f"Transferring ownership to {owner_email} for file {file_id}...")
                     permission = {
                         'type': 'user',
-                        'role': 'writer',
+                        'role': 'owner',
                         'emailAddress': owner_email
                     }
                     self.service.permissions().create(
                         fileId=file_id,
                         body=permission,
+                        transferOwnership=True,
                         fields='id'
                     ).execute()
-                    
-                    # Note: Transferring OWNER requires transferOwnership=True and the service account must be on the same domain or have specific rights.
-                    # For now, adding as 'writer' is safe. If the SA creates it in a folder YOU own, it usually counts against YOUR quota if configured.
-                    # Alternatively, we can try to transferOwnership if needed.
+                    logger.info(f"Ownership successfully transferred to {owner_email}")
                 except Exception as e:
-                    logger.warning(f"Could not add permissions/transfer ownership for {owner_email}: {e}")
+                    logger.warning(f"Could not transfer ownership for {owner_email}: {e}")
+                    # Fallback: try as writer if owner transfer fails (e.g. different domain)
+                    try:
+                        permission['role'] = 'writer'
+                        self.service.permissions().create(
+                            fileId=file_id,
+                            body=permission,
+                            fields='id'
+                        ).execute()
+                        logger.info(f"Added {owner_email} as writer (fallback)")
+                    except:
+                        pass
 
             return file_id
         except Exception as e:
