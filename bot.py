@@ -39,8 +39,7 @@ from bot_health_monitor import BotHealthMonitor  # noqa: E402
 from sheets_gateway import AsyncGoogleSheetsGateway  # noqa: E402
 from polling_watchdog import PollingWatchdog  # noqa: E402
 from task_tracker import task_tracker  # noqa: E402
-from drive_service import DriveService  # noqa: E402
-from user_profile_manager import UserProfileManager  # noqa: E402
+from user_profile_manager_sheets import UserProfileManagerSheets  # noqa: E402
 
 # Превентивные механизмы
 try:
@@ -147,9 +146,9 @@ def _run_bot_main():
     # --- Инициализация сервисов с защитой от ошибок ---
     logger.info("Инициализация сервисов...")
     
-    # Инициализация DriveService для профилей (использует те же учетки)
-    drive_service = DriveService()
-    profile_manager = UserProfileManager(drive_service)
+    # 4. Менеджер профилей пользователей (Long-term memory)
+    profile_manager = UserProfileManagerSheets(auth_gateway)
+    logger.info("Менеджер профилей (Google Sheets) инициализирован")
     
     try:
         logger.info("Инициализация AuthService с Gateway...")
