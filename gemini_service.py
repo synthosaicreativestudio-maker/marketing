@@ -262,7 +262,15 @@ class GeminiService:
             )
         ]
 
-        cache_name = await self.knowledge_base.get_cache_name()
+        # Graceful degradation: если KnowledgeBase недоступен, продолжаем без кэша
+        cache_name = None
+        try:
+            if self.knowledge_base:
+                cache_name = await self.knowledge_base.get_cache_name()
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to get cache_name (continuing without RAG): {e}")
+            cache_name = None
+        
         config_params = {
             'temperature': 0.7,
             'max_output_tokens': 8192,

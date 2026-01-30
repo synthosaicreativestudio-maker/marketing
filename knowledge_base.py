@@ -22,6 +22,13 @@ class KnowledgeBase:
         self.is_updating = False
         self._lock = asyncio.Lock()
         
+        # Feature flag: Context Caching отключен по умолчанию (не работает через reverse proxy)
+        self.caching_enabled = os.getenv("ENABLE_CONTEXT_CACHING", "false").lower() == "true"
+        if not self.caching_enabled:
+            logger.info("⚠️ KnowledgeBase: Context Caching DISABLED (ENABLE_CONTEXT_CACHING=false)")
+            self.client = None
+            return
+        
         # Initialize Gemini Client with Proxy Support
         proxy_key = os.getenv("PROXYAPI_KEY")
         proxy_url = os.getenv("PROXYAPI_BASE_URL")
@@ -38,9 +45,14 @@ class KnowledgeBase:
                         'api_version': api_version
                     }
                 )
-            elif self.api_key:
-                logger.info("KnowledgeBase using Direct API")
-                self.client = genai.Client(api_key=self.api_key)
+            else:
+                # FIX: Использовать GEMINI_API_KEY вместо несуществующего self.api_key
+                api_key = os.getenv("GEMINI_API_KEY")
+                if api_key:
+                    logger.info("KnowledgeBase using Direct API")
+                    self.client = genai.Client(api_key=api_key)
+                else:
+                    logger.warning("KnowledgeBase: No API key found (GEMINI_API_KEY or PROXYAPI_KEY)")
         except Exception as e:
              logger.error(f"Failed to initialize Gemini Client in KnowledgeBase: {e}")
 
