@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 from google.genai import types
 from drive_service import DriveService
 

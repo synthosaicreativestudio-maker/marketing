@@ -33,16 +33,18 @@ class GeminiService:
         proxyapi_base_url = os.getenv("PROXYAPI_BASE_URL")
         
         if proxyapi_key and proxyapi_base_url:
-            logger.info("Using custom Gemini endpoint (bypass regional restrictions)")
+            logger.info(f"Using custom Gemini endpoint: {proxyapi_base_url}")
             try:
+                # v1beta is required for context caching and tools
+                api_version = os.getenv("PROXYAPI_VERSION", "v1beta")
                 self.client = genai.Client(
                     api_key=proxyapi_key,
                     http_options={
                         'base_url': proxyapi_base_url,
-                        'api_version': 'v1beta'
+                        'api_version': api_version
                     }
                 )
-                logger.info("GeminiService initialized via proxy (bypass regional restrictions)")
+                logger.info(f"GeminiService initialized via proxy ({api_version})")
             except Exception as e:
                 logger.error(f"Failed to initialize GeminiService via ProxyAPI: {e}", exc_info=True)
                 self.client = None
@@ -135,8 +137,8 @@ class GeminiService:
         self._history_ttl = 3600 * 24  # 24 часа TTL
         
         # Настройки модели
-        # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
-        self.model_name = "gemini-3-pro-preview" 
+        # ПРИМЕЧАНИЕ: gemini-3-pro-preview не существует. Используем актуальную модель.
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro") 
         self.max_history_messages = 12  # Оптимально для быстрого скользящего окна (6 пар)
         
         # Кэш для акций (Simple TTL Cache)

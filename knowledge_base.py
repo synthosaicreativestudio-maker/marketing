@@ -29,12 +29,13 @@ class KnowledgeBase:
         self.client = None
         try:
             if proxy_key and proxy_url:
-                logger.info("KnowledgeBase using Proxy API")
+                logger.info(f"KnowledgeBase using Proxy API: {proxy_url}")
+                api_version = os.getenv("PROXYAPI_VERSION", "v1beta")
                 self.client = genai.Client(
                     api_key=proxy_key,
                     http_options={
                         'base_url': proxy_url, 
-                        'api_version': 'v1beta'
+                        'api_version': api_version
                     }
                 )
             elif self.api_key:
@@ -193,8 +194,9 @@ class KnowledgeBase:
                     si_content = types.Content(parts=[types.Part(text=system_instruction)])
 
                 # Create cache using AIO client
+                model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
                 cached_content = await self.client.aio.caches.create(
-                    model='gemini-3-pro-preview', 
+                    model=model_name, 
                     config=types.CreateCachedContentConfig(
                         contents=[types.Content(role='user', parts=content_parts)],
                         system_instruction=si_content,
