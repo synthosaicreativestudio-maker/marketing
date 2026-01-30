@@ -254,16 +254,8 @@ class GeminiService:
         # Получаем всю историю для отправки
         history = self._get_or_create_history(user_id)
         
-        # Конфигурация инструментов (всегда актуальная)
-        tools = [
-            types.Tool(
-                function_declarations=[types.FunctionDeclaration(
-                    name='get_promotions',
-                    description='Получить список текущих акций, скидок и условий ипотеки из базы данных. ПРИОРИТЕТНЫЙ ИСТОЧНИК для вопросов о выгоде.',
-                    parameters=types.Schema(type='OBJECT', properties={})
-                )]
-            )
-        ]
+        # Использование инструментов из self.tools (уже содержат Web Search и get_promotions)
+        tools = self.tools
 
         # Graceful degradation: если KnowledgeBase недоступен, продолжаем без кэша
         cache_name = None

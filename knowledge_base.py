@@ -177,6 +177,9 @@ class KnowledgeBase:
                     gemini_files.append(file_upload)
                     logger.info(f"File {file_upload.display_name} is ACTIVE.")
                     
+                    # Инкрементальное обновление для RAG без кэша
+                    self.active_files = list(gemini_files) # Создаем копию списка
+                    
                 except Exception as e:
                     logger.error(f"Error uploading {path}: {e}")
                 
