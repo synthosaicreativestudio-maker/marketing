@@ -207,35 +207,40 @@ class DriveService:
                 file_id = file.get('id')
             logger.info(f"Successfully uploaded/updated {name} on Drive (ID: {file_id})")
             
-            # --- QUOTA FIX: Transfer ownership to avoid storageQuotaExceeded ---
-            if owner_email and file_id:
+            # --- QUOTA FIX: Try to upload and immediately transfer ownership ---
+            if owner_email and not file_id:
                 try:
-                    logger.info(f"Transferring ownership to {owner_email} for file {file_id}...")
-                    permission = {
-                        'type': 'user',
-                        'role': 'owner',
-                        'emailAddress': owner_email
-                    }
+                    # Create with permission in mind
+                    file = self.service.files().create(
+                        body=file_metadata,
+                        media_body=media,
+                        fields='id',
+                        supportsAllDrives=True
+                    ).execute()
+                    file_id = file.get('id')
+                    
+                    # Immediate transfer
+                    logger.info(f"Transferring ownership of NEW file {file_id} to {owner_email}...")
                     self.service.permissions().create(
                         fileId=file_id,
-                        body=permission,
-                        transferOwnership=True,
-                        fields='id'
+                        body={'type': 'user', 'role': 'owner', 'emailAddress': owner_email},
+                        transferOwnership=True
                     ).execute()
-                    logger.info(f"Ownership successfully transferred to {owner_email}")
                 except Exception as e:
-                    logger.warning(f"Could not transfer ownership for {owner_email}: {e}")
-                    # Fallback: try as writer if owner transfer fails (e.g. different domain)
-                    try:
-                        permission['role'] = 'writer'
-                        self.service.permissions().create(
-                            fileId=file_id,
-                            body=permission,
-                            fields='id'
-                        ).execute()
-                        logger.info(f"Added {owner_email} as writer (fallback)")
-                    except:
-                        pass
+                    if 'storageQuotaExceeded' in str(e):
+                        logger.warning(f"Quota exceeded on CREATE. File might be partially created or needs direct owner upload.")
+                    else:
+                        logger.error(f"Error in initial upload/transfer: {e}")
+
+            elif file_id:
+                # Update existing file (if ownership was already transferred, it uses OWNER's quota!)
+                file = self.service.files().update(
+                    fileId=file_id,
+                    media_body=media,
+                    fields='id',
+                    supportsAllDrives=True
+                ).execute()
+                logger.info(f"Updated existing file {file_id} (uses owner quota)")
 
             return file_id
         except Exception as e:
