@@ -19,37 +19,18 @@ class UserProfileManagerSheets:
     async def _ensure_sheet(self):
         """Checks if 'profiles' sheet exists, creates it with headers if not."""
         try:
-            spreadsheet = await asyncio.to_thread(
-                self.gateway.service.spreadsheets().get(spreadsheetId=self.spreadsheet_id).execute
-            )
-            sheets = [s.get('properties', {}).get('title') for s in spreadsheet.get('sheets', [])]
+            client = await self.gateway.authorize_client()
+            spreadsheet = await self.gateway.open_spreadsheet(client, self.spreadsheet_id)
+            worksheets = await asyncio.to_thread(spreadsheet.worksheets)
+            titles = [s.title for s in worksheets]
             
-            if self.sheet_name not in sheets:
+            if self.sheet_name not in titles:
                 logger.info(f"Creating sheet '{self.sheet_name}' in spreadsheet {self.spreadsheet_id}")
-                body = {
-                    'requests': [{
-                        'addSheet': {
-                            'properties': {
-                                'title': self.sheet_name,
-                                'gridProperties': {'rowCount': 5000, 'columnCount': 10}
-                            }
-                        }
-                    }]
-                }
-                await asyncio.to_thread(
-                    self.gateway.service.spreadsheets().batchUpdate(spreadsheetId=self.spreadsheet_id, body=body).execute
-                )
+                worksheet = await asyncio.to_thread(spreadsheet.add_worksheet, title=self.sheet_name, rows=5000, cols=10)
                 
                 # Add headers
                 headers = [['user_id', 'first_name', 'last_name', 'username', 'interests', 'city', 'last_note', 'last_seen']]
-                await asyncio.to_thread(
-                    self.gateway.service.spreadsheets().values().update(
-                        spreadsheetId=self.spreadsheet_id,
-                        range=f"{self.sheet_name}!A1:H1",
-                        valueInputOption='RAW',
-                        body={'values': headers}
-                    ).execute
-                )
+                await self.gateway.update(worksheet, 'A1:H1', headers)
                 logger.info("Sheet 'profiles' created successfully.")
         except Exception as e:
             logger.error(f"Error ensuring profiles sheet: {e}")
@@ -62,21 +43,18 @@ class UserProfileManagerSheets:
         await self._ensure_sheet()
         
         try:
-            result = await asyncio.to_thread(
-                self.gateway.service.spreadsheets().values().get(
-                    spreadsheetId=self.spreadsheet_id,
-                    range=f"{self.sheet_name}!A:H"
-                ).execute
-            )
-            rows = result.get('values', [])
-            if not rows or len(rows) < 2:
+            client = await self.gateway.authorize_client()
+            spreadsheet = await self.gateway.open_spreadsheet(client, self.spreadsheet_id)
+            worksheet = await self.gateway.get_worksheet_async(spreadsheet, self.sheet_name)
+            
+            rows = await self.gateway.get_all_records(worksheet)
+            if not rows:
                 return self._get_default(user_id)
                 
-            headers = rows[0]
-            for i, row in enumerate(rows[1:], start=2):
-                if row and str(row[0]) == str(user_id):
+            for i, row in enumerate(rows, start=2): # Header is row 1
+                if str(row.get('user_id')) == str(user_id):
                     # Found user!
-                    profile = {headers[j]: row[j] if j < len(row) else "" for j in range(len(headers))}
+                    profile = dict(row)
                     # Handle interests (stored as comma-string)
                     if isinstance(profile.get('interests'), str):
                         profile['interests'] = [i.strip() for i in profile['interests'].split(',')] if profile['interests'] else []
@@ -111,32 +89,25 @@ class UserProfileManagerSheets:
             interests_str,
             profile.get('city', ''),
             profile.get('last_note', ''),
-            profile.get('last_seen', '')
+            profile.get('last_seen', str(profile.get('last_seen', '')))
         ]
         
         try:
+            client = await self.gateway.authorize_client()
+            spreadsheet = await self.gateway.open_spreadsheet(client, self.spreadsheet_id)
+            worksheet = await self.gateway.get_worksheet_async(spreadsheet, self.sheet_name)
+            
             row_idx = profile.get('row_index')
             if row_idx:
                 # Update existing row
-                range_name = f"{self.sheet_name}!A{row_idx}:H{row_idx}"
-                await asyncio.to_thread(
-                    self.gateway.service.spreadsheets().values().update(
-                        spreadsheetId=self.spreadsheet_id,
-                        range=range_name,
-                        valueInputOption='RAW',
-                        body={'values': [row_data]}
-                    ).execute
-                )
+                range_name = f"A{row_idx}:H{row_idx}"
+                await self.gateway.update(worksheet, range_name, [row_data])
             else:
                 # Append new row
-                await asyncio.to_thread(
-                    self.gateway.service.spreadsheets().values().append(
-                        spreadsheetId=self.spreadsheet_id,
-                        range=f"{self.sheet_name}!A:H",
-                        valueInputOption='RAW',
-                        body={'values': [row_data]}
-                    ).execute
-                )
+                await self.gateway.append_row(worksheet, row_data)
+                # After append, find its index to avoid duplicate appends next time
+                new_rows = await self.gateway.get_all_records(worksheet)
+                profile['row_index'] = len(new_rows) + 1
         except Exception as e:
             logger.error(f"Error updating profile for {user_id}: {e}")
 
