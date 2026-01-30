@@ -19,6 +19,34 @@ class UserProfileManager:
         
         if not os.path.exists(self.local_cache_dir):
             os.makedirs(self.local_cache_dir, exist_ok=True)
+            
+    async def _ensure_folder(self) -> Optional[str]:
+        """Ensures the profiles folder exists and returns its ID."""
+        if self.folder_id:
+            # Check if valid
+            if await asyncio.to_thread(self.drive_service.check_access, self.folder_id):
+                return self.folder_id
+                
+        # Try to find or create 'profiles' in the main folder
+        main_folder_id = os.getenv('DRIVE_FOLDER_ID')
+        if not main_folder_id or not self.drive_service:
+            return None
+            
+        try:
+            # Search for 'profiles' folder correctly
+            query = f"name = 'profiles' and '{main_folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            results = await asyncio.to_thread(self.drive_service.service.files().list(q=query, fields="files(id)").execute)
+            files = results.get('files', [])
+            
+            if files:
+                self.folder_id = files[0]['id']
+            else:
+                self.folder_id = await asyncio.to_thread(self.drive_service.create_folder, "profiles", main_folder_id)
+            
+            return self.folder_id
+        except Exception as e:
+            logger.error(f"Error ensuring profiles folder: {e}")
+            return None
 
     async def get_profile(self, user_id: int) -> Dict[str, Any]:
         """Retrieves user profile. Checks local cache, then Drive."""
@@ -26,19 +54,21 @@ class UserProfileManager:
             return self._profiles_cache[user_id]
         
         filename = f"profile_{user_id}.json"
-        local_path = os.path.join(self.local_cache_dir, filename)
         
         # 1. Try to download from Drive
-        if self.folder_id and self.drive_service:
+        folder_id = await self._ensure_folder()
+        if folder_id and self.drive_service:
             try:
                 # Find file ID on Drive
-                files = await asyncio.to_thread(self.drive_service.list_files, self.folder_id)
-                profile_file = next((f for f in files if f['name'] == filename), None)
+                query = f"name = '{filename}' and '{folder_id}' in parents and trashed = false"
+                results = await asyncio.to_thread(self.drive_service.service.files().list(q=query, fields="files(id)").execute)
+                files = results.get('files', [])
                 
-                if profile_file:
+                if files:
+                    file_id = files[0]['id']
                     path = await asyncio.to_thread(
                         self.drive_service.download_file, 
-                        profile_file['id'], filename, 'application/json'
+                        file_id, filename, 'application/json'
                     )
                     if path and os.path.exists(path):
                         with open(path, 'r', encoding='utf-8') as f:
@@ -64,11 +94,12 @@ class UserProfileManager:
             with open(local_path, 'w', encoding='utf-8') as f:
                 json.dump(profile, f, ensure_ascii=False, indent=2)
             
-            if self.folder_id and self.drive_service:
+            folder_id = await self._ensure_folder()
+            if folder_id and self.drive_service:
                 await asyncio.to_thread(
                     self.drive_service.upload_file,
                     local_path,
-                    self.folder_id,
+                    folder_id,
                     filename,
                     True, # Overwrite
                     self.owner_email

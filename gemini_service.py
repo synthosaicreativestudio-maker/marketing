@@ -128,7 +128,7 @@ class GeminiService:
                 )]
             ),
             types.Tool(
-                google_search_retrieval=types.GoogleSearchRetrieval()
+                google_search=types.GoogleSearch()
             )
         ]
         

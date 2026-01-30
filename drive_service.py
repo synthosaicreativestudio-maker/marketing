@@ -51,6 +51,26 @@ class DriveService:
             logger.error(f"Access check failed for folder {folder_id}: {e}")
             return False
 
+    def create_folder(self, name: str, parent_id: Optional[str] = None) -> Optional[str]:
+        """Create a folder on Drive."""
+        if not self.service:
+            return None
+        try:
+            file_metadata = {
+                'name': name,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            if parent_id:
+                file_metadata['parents'] = [parent_id]
+                
+            file = self.service.files().create(body=file_metadata, fields='id').execute()
+            folder_id = file.get('id')
+            logger.info(f"Created folder '{name}' on Drive (ID: {folder_id})")
+            return folder_id
+        except Exception as e:
+            logger.error(f"Error creating folder {name}: {e}")
+            return None
+
     def list_files(self, folder_id: str) -> List[Dict]:
         """List PDF, PPTX, Docs, and Slides files in the folder."""
         if not self.service:
