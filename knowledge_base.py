@@ -103,14 +103,20 @@ class KnowledgeBase:
             self.last_update_time = 0  # Force immediate refresh on next request
             
             # Попытка удалить кэш из API (best effort)
-            try:
-                await self.client.aio.caches.delete(name=old_cache)
-                logger.info(f"✅ Cache deleted from API: {old_cache}")
-            except Exception as e:
-                logger.warning(f"Failed to delete cache from API (already gone?): {e}")
+            if self.client:
+                try:
+                    await self.client.aio.caches.delete(name=old_cache)
+                    logger.info(f"✅ Cache deleted from API: {old_cache}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete cache from API (already gone?): {e}")
 
     async def refresh_cache(self, system_instruction: Optional[str] = None, tools: Optional[List[types.Tool]] = None):
         """Refreshes the knowledge base cache in a non-blocking way."""
+        # Skip if caching is disabled or client not initialized
+        if not self.client:
+            logger.debug("KnowledgeBase refresh skipped: client not initialized (caching disabled)")
+            return
+        
         async with self._lock:
             if self.is_updating:
                 return
