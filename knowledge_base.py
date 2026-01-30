@@ -22,12 +22,9 @@ class KnowledgeBase:
         self.is_updating = False
         self._lock = asyncio.Lock()
         
-        # Feature flag: Context Caching отключен по умолчанию (не работает через reverse proxy)
+        # Feature flag: Context Caching (СAG)
         self.caching_enabled = os.getenv("ENABLE_CONTEXT_CACHING", "false").lower() == "true"
-        if not self.caching_enabled:
-            logger.info("⚠️ KnowledgeBase: Context Caching DISABLED (ENABLE_CONTEXT_CACHING=false)")
-            self.client = None
-            return
+        self.active_files = [] # Список активных файлов Gemini для RAG без кэша
         
         # Initialize Gemini Client with Proxy Support
         proxy_key = os.getenv("PROXYAPI_KEY")
@@ -111,10 +108,9 @@ class KnowledgeBase:
                     logger.warning(f"Failed to delete cache from API (already gone?): {e}")
 
     async def refresh_cache(self, system_instruction: Optional[str] = None, tools: Optional[List[types.Tool]] = None):
-        """Refreshes the knowledge base cache in a non-blocking way."""
-        # Skip if caching is disabled or client not initialized
+        """Refreshes the knowledge base files and optionally the cache."""
         if not self.client:
-            logger.debug("KnowledgeBase refresh skipped: client not initialized (caching disabled)")
+            logger.error("KnowledgeBase refresh failed: client not initialized")
             return
         
         async with self._lock:
@@ -193,43 +189,50 @@ class KnowledgeBase:
                 self.is_updating = False
                 return
 
-            # 4. Create Context Cache with Instructions and Tools
-            try:
-                logger.info("Creating CachedContent with instructions and tools (Async)...")
-                
-                content_parts = []
-                for gf in gemini_files:
-                    content_parts.append(types.Part.from_uri(
-                        file_uri=gf.uri,
-                        mime_type=gf.mime_type
-                    ))
-                
-                ttl_seconds = self.ttl_minutes * 60
-                
-                # Подготовка system_instruction для кэша
-                si_content = None
-                if system_instruction:
-                    si_content = types.Content(parts=[types.Part(text=system_instruction)])
+            # Обновляем список активных файлов для RAG без кэша
+            self.active_files = gemini_files
 
-                # Create cache using AIO client
-                model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
-                cached_content = await self.client.aio.caches.create(
-                    model=model_name, 
-                    config=types.CreateCachedContentConfig(
-                        contents=[types.Content(role='user', parts=content_parts)],
-                        system_instruction=si_content,
-                        tools=tools,
-                        ttl=f"{ttl_seconds}s",
-                        display_name="marketing_knowledge_base"
+            # 4. Create Context Cache (CAG) only if enabled
+            if self.caching_enabled:
+                try:
+                    logger.info("Creating CachedContent (CAG) with instructions and tools (Async)...")
+                    
+                    content_parts = []
+                    for gf in gemini_files:
+                        content_parts.append(types.Part.from_uri(
+                            file_uri=gf.uri,
+                            mime_type=gf.mime_type
+                        ))
+                    
+                    ttl_seconds = self.ttl_minutes * 60
+                    
+                    # Подготовка system_instruction для кэша
+                    si_content = None
+                    if system_instruction:
+                        si_content = types.Content(parts=[types.Part(text=system_instruction)])
+
+                    # Create cache using AIO client
+                    model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
+                    cached_content = await self.client.aio.caches.create(
+                        model=model_name, 
+                        config=types.CreateCachedContentConfig(
+                            contents=[types.Content(role='user', parts=content_parts)],
+                            system_instruction=si_content,
+                            tools=tools,
+                            ttl=f"{ttl_seconds}s",
+                            display_name="marketing_knowledge_base"
+                        )
                     )
-                )
 
-                self.cached_content_name = cached_content.name
-                self.last_update_time = time.time()
-                logger.info(f"✅ Cache Created Successfully (Async): {self.cached_content_name}")
-                
-            except Exception as e:
-                logger.error(f"Failed to create cache: {e}")
+                    self.cached_content_name = cached_content.name
+                    self.last_update_time = time.time()
+                    logger.info(f"✅ Cache Created Successfully (Async): {self.cached_content_name}")
+                except Exception as e:
+                    logger.error(f"Failed to create cache: {e}")
+            else:
+                logger.info("KnowledgeBase: Files uploaded, CAG skipped (disabled in .env)")
+                self.cached_content_name = None
+                self.last_update_time = time.time() # Помечаем обновление как успешное
                 
             # Cleanup local files (Thread)
             await asyncio.to_thread(self.drive_service.cleanup_tmp_files)
@@ -239,3 +242,6 @@ class KnowledgeBase:
         finally:
             self.is_updating = False
 
+    async def get_active_files(self) -> List[types.File]:
+        """Returns the list of active files in Gemini for RAG without cache."""
+        return self.active_files

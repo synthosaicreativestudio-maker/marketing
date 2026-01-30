@@ -288,6 +288,26 @@ class GeminiService:
         if not cache_name:
             config_params['system_instruction'] = self.system_instruction
             config_params['tools'] = tools
+            
+            # Внедряем файлы из KnowledgeBase в историю, если кэш не используется (простой RAG)
+            try:
+                if self.knowledge_base:
+                    active_files = await self.knowledge_base.get_active_files()
+                    if active_files:
+                        logger.info(f"Adding {len(active_files)} files to contents for RAG (No Cache mode)")
+                        file_parts = []
+                        for gf in active_files:
+                            file_parts.append(types.Part.from_uri(
+                                file_uri=gf.uri,
+                                mime_type=gf.mime_type
+                            ))
+                        # Создаем временную копию истории для этого запроса
+                        history_with_context = [
+                            types.Content(role='user', parts=file_parts)
+                        ] + history
+                        history = history_with_context
+            except Exception as e:
+                logger.error(f"Error adding RAG files to contents: {e}")
         else:
             config_params['cached_content'] = cache_name
         
