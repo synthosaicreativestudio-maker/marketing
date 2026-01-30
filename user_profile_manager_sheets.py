@@ -11,9 +11,10 @@ class UserProfileManagerSheets:
     
     def __init__(self, sheets_gateway: AsyncGoogleSheetsGateway):
         self.gateway = sheets_gateway
-        self.spreadsheet_id = os.getenv('SPREADSHEET_ID')
+        self.spreadsheet_id = os.getenv('APPEALS_SHEET_ID') or os.getenv('SPREADSHEET_ID')
         self.sheet_name = "profiles"
         self._cache: Dict[int, Dict[str, Any]] = {}
+        logger.info(f"UserProfileManagerSheets initialized with Spreadsheet ID: {self.spreadsheet_id}")
         
     async def _ensure_sheet(self):
         """Checks if 'profiles' sheet exists, creates it with headers if not."""
