@@ -14,6 +14,7 @@ class MemoryArchiver:
     def __init__(self, drive_service: DriveService):
         self.drive_service = drive_service
         self.folder_id = os.getenv('DRIVE_FOLDER_ID')
+        self.owner_email = os.getenv('DRIVE_OWNER_EMAIL')
         self.tmp_dir = "tmp_memory"
         
         # Ensure tmp directory exists
@@ -76,7 +77,8 @@ class MemoryArchiver:
                 local_path, 
                 self.folder_id, 
                 filename,
-                True # Overwrite
+                True, # Overwrite
+                self.owner_email
             )
             
         except Exception as e:

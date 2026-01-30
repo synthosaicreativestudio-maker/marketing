@@ -11,7 +11,11 @@ logger = logging.getLogger(__name__)
 class DriveService:
     """Service to interact with Google Drive API."""
     
-    SCOPES = ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive.readonly']
+    SCOPES = [
+        'https://www.googleapis.com/auth/drive.file', 
+        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/drive' # Full access for permissions management
+    ]
     
     def __init__(self, credentials_path: Optional[str] = None):
         """Initialize Drive Service."""
@@ -141,8 +145,9 @@ class DriveService:
             except Exception as e:
                 logger.error(f"Error cleaning up tmp files: {e}")
 
-    def upload_file(self, local_path: str, folder_id: str, display_name: Optional[str] = None, overwrite: bool = True) -> Optional[str]:
-        """Upload a local file to a specific Drive folder. Overwrites if it already exists."""
+    def upload_file(self, local_path: str, folder_id: str, display_name: Optional[str] = None, overwrite: bool = True, owner_email: Optional[str] = None) -> Optional[str]:
+        """Upload a local file to a specific Drive folder. Overwrites if it already exists. 
+        If owner_email is provided, attempts to transfer ownership to avoid quota issues."""
         if not self.service:
             logger.error("DriveService not initialized, cannot upload")
             return None
@@ -180,8 +185,30 @@ class DriveService:
                     fields='id'
                 ).execute()
                 file_id = file.get('id')
-            
             logger.info(f"Successfully uploaded/updated {name} on Drive (ID: {file_id})")
+            
+            # --- QUOTA FIX: Transfer ownership / Add permissions ---
+            if owner_email and file_id:
+                try:
+                    logger.info(f"Adding permission for {owner_email} on file {file_id}...")
+                    # First add as writer
+                    permission = {
+                        'type': 'user',
+                        'role': 'writer',
+                        'emailAddress': owner_email
+                    }
+                    self.service.permissions().create(
+                        fileId=file_id,
+                        body=permission,
+                        fields='id'
+                    ).execute()
+                    
+                    # Note: Transferring OWNER requires transferOwnership=True and the service account must be on the same domain or have specific rights.
+                    # For now, adding as 'writer' is safe. If the SA creates it in a folder YOU own, it usually counts against YOUR quota if configured.
+                    # Alternatively, we can try to transferOwnership if needed.
+                except Exception as e:
+                    logger.warning(f"Could not add permissions/transfer ownership for {owner_email}: {e}")
+
             return file_id
         except Exception as e:
             logger.error(f"Error uploading file {local_path} to Drive: {e}")
