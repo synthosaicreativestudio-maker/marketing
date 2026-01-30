@@ -75,9 +75,11 @@ class GeminiService:
         # Инициализация Knowledge Base (RAG)
         from drive_service import DriveService
         from knowledge_base import KnowledgeBase
+        from memory_archiver import MemoryArchiver
         
         self.drive_service = DriveService()
         self.knowledge_base = KnowledgeBase(self.drive_service)
+        self.memory_archiver = MemoryArchiver(self.drive_service)
         
         # Проверка существования файла промпта
         if os.path.exists(system_prompt_path):
@@ -442,6 +444,13 @@ class GeminiService:
             full_reply = "".join(full_reply_parts)
             self._add_to_history(user_id, "model", full_reply)
             logger.info(f"Stream finished for user {user_id}, history updated. Sources: {len(grounding_sources)}")
+            
+            # Архивация истории для "памяти"
+            if self.memory_archiver:
+                 asyncio.create_task(self.memory_archiver.archive_user_history(
+                     user_id, 
+                     self.user_histories.get(user_id, [])
+                 ))
 
     async def ask(self, user_id: int, content: str) -> Optional[str]:
         """Отправляет запрос в Gemini и возвращает полный ответ (через стриминг)."""

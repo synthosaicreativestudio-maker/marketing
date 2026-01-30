@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class DriveService:
     """Service to interact with Google Drive API."""
     
-    SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+    SCOPES = ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive.readonly']
     
     def __init__(self, credentials_path: Optional[str] = None):
         """Initialize Drive Service."""
@@ -140,3 +140,49 @@ class DriveService:
                 logger.info("Cleaned up temporary drive files")
             except Exception as e:
                 logger.error(f"Error cleaning up tmp files: {e}")
+
+    def upload_file(self, local_path: str, folder_id: str, display_name: Optional[str] = None, overwrite: bool = True) -> Optional[str]:
+        """Upload a local file to a specific Drive folder. Overwrites if it already exists."""
+        if not self.service:
+            logger.error("DriveService not initialized, cannot upload")
+            return None
+        
+        from googleapiclient.http import MediaFileUpload
+        
+        try:
+            name = display_name or os.path.basename(local_path)
+            media = MediaFileUpload(local_path, resumable=True)
+            
+            # Check for existing file if overwrite is enabled
+            existing_id = None
+            if overwrite:
+                query = f"name = '{name}' and '{folder_id}' in parents and trashed = false"
+                results = self.service.files().list(q=query, fields="files(id)").execute()
+                files = results.get('files', [])
+                if files:
+                    existing_id = files[0].get('id')
+
+            if existing_id:
+                logger.info(f"Overwriting existing file {name} (ID: {existing_id}) on Drive...")
+                file = self.service.files().update(
+                    fileId=existing_id,
+                    media_body=media
+                ).execute()
+                file_id = existing_id
+            else:
+                file_metadata = {
+                    'name': name,
+                    'parents': [folder_id]
+                }
+                file = self.service.files().create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields='id'
+                ).execute()
+                file_id = file.get('id')
+            
+            logger.info(f"Successfully uploaded/updated {name} on Drive (ID: {file_id})")
+            return file_id
+        except Exception as e:
+            logger.error(f"Error uploading file {local_path} to Drive: {e}")
+            return None
