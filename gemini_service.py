@@ -234,16 +234,29 @@ class GeminiService:
             history.pop(2)
             logger.debug(f"History Pinning: removed message at index 2 for user {user_id}. Context preserved.")
 
-    async def ask_stream(self, user_id: int, content: str) -> AsyncGenerator[str, None]:
+    async def ask_stream(self, user_id: int, content: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Отправляет запрос в Gemini и возвращает генератор для стриминга (Async).
-        Содержит механизм Auto-Retry для обработки пустых ответов при нестабильности модели.
+        external_history - текст истории из Google Таблицы (ячейка E).
         """
         if not self.is_enabled():
             yield "Сервис ИИ временно недоступен."
             return
 
-        # Добавляем сообщение пользователя в историю (ТОЛЬКО ОДИН РАЗ перед попытками)
-        # Если это рекурсивный вызов (content=""), сообщение уже там
+        # Инъекция истории из Таблицы (если она не пуста)
+        if external_history and external_history.strip():
+            # Ограничиваем длину для безопасности (последние ~15к символов)
+            clean_history = external_history[-15000:]
+            logger.info(f"Injecting external history from Table for {user_id} (len: {len(clean_history)})")
+            
+            # Вставляем как системный контекст в начало диалога
+            context_msg = f"Здесь краткая история нашего недавнего общения из оперативной памяти базы данных:\n{clean_history}\n\nПожалуйста, используй эту информацию для продолжения диалога."
+            # Очищаем временную историю в памяти, если пришел свежий дамп из Таблицы
+            # Это гарантирует, что Таблица — главный источник правды.
+            self.clear_history(user_id)
+            self._add_to_history(user_id, "user", context_msg)
+            self._add_to_history(user_id, "model", "Поняла. Я прочитала историю из базы данных и готова продолжать обсуждение с учетом предыдущих деталей.")
+
+        # Добавляем сообщение пользователя в историю
         if content:
              self._add_to_history(user_id, "user", content)
         
@@ -473,10 +486,10 @@ class GeminiService:
                      self.user_histories.get(user_id, [])
                  ))
 
-    async def ask(self, user_id: int, content: str) -> Optional[str]:
+    async def ask(self, user_id: int, content: str, external_history: Optional[str] = None) -> Optional[str]:
         """Отправляет запрос в Gemini и возвращает полный ответ (через стриминг)."""
         full_reply = []
-        async for chunk in self.ask_stream(user_id, content):
+        async for chunk in self.ask_stream(user_id, content, external_history=external_history):
             if not chunk.startswith("__TOOL_CALL__"):
                 full_reply.append(chunk)
         

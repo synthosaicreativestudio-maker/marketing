@@ -27,19 +27,19 @@ class AIService:
         """Проверяет, доступен ли AI сервис."""
         return self.gemini_service.is_enabled()
 
-    async def ask(self, user_id: int, content: str) -> Optional[str]:
+    async def ask(self, user_id: int, content: str, external_history: Optional[str] = None) -> Optional[str]:
         """Отправляет запрос в Gemini и возвращает ответ (Асинхронно)."""
         if not self.is_enabled():
             return None
-        return await self.gemini_service.ask(user_id, content)
+        return await self.gemini_service.ask(user_id, content, external_history=external_history)
 
-    async def ask_stream(self, user_id: int, content: str):
+    async def ask_stream(self, user_id: int, content: str, external_history: Optional[str] = None):
         """Прокси для потокового вызова Gemini."""
         if not self.is_enabled():
             yield "Сервис ИИ недоступен."
             return
         
-        async for chunk in self.gemini_service.ask_stream(user_id, content):
+        async for chunk in self.gemini_service.ask_stream(user_id, content, external_history=external_history):
             yield chunk
 
     async def generate_image_prompt(self, text_context: str) -> Optional[str]:

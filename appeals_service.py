@@ -206,34 +206,30 @@ class AppealsService:
         except Exception:
             return text[:limit]
 
-    async def get_user_appeals(self, telegram_id: int) -> List[Dict]:
+    async def get_raw_history(self, telegram_id: int) -> str:
         """
-        Получает все обращения пользователя.
+        Получает сырой текст всей истории переписки из ячейки 'текст_обращений'.
         
         Args:
             telegram_id: ID пользователя в Telegram
             
         Returns:
-            List[Dict]: список обращений пользователя
+            str: текст из ячейки E или пустая строка
         """
         if not self.is_available():
-            logger.error("Сервис обращений недоступен")
-            return []
+            return ""
 
         try:
             records = await self.gateway.get_all_records(self.worksheet)
-            user_appeals = []
-            
-            for record in records:
+            for i, record in enumerate(records, start=2):
                 if str(record.get('telegram_id', '')) == str(telegram_id):
-                    user_appeals.append(record)
-            
-            logger.info(f"Найдено {len(user_appeals)} обращений для пользователя {mask_telegram_id(telegram_id)}")
-            return user_appeals
-            
+                    history = record.get('текст_обращений', '')
+                    logger.info(f"Получена история из таблицы для {mask_telegram_id(telegram_id)} (длина: {len(history)})")
+                    return history
+            return ""
         except Exception as e:
-            logger.error(f"Ошибка получения обращений пользователя: {e}")
-            return []
+            logger.error(f"Ошибка получения истории из таблицы: {e}")
+            return ""
 
     async def update_appeal_status(self, telegram_id: int, appeal_text: str, status: str, specialist_answer: str = '') -> bool:
         """

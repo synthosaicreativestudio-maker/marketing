@@ -126,8 +126,18 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     STREAM_TOTAL_TIMEOUT = 120  # 2 минуты на весь ответ
     stream_start_time = time.time()
     
+    # Получение истории из Google Таблицы (ячейка E) для восстановления контекста
+    table_history = ""
+    if appeals_service and appeals_service.is_available():
+        try:
+            table_history = await appeals_service.get_raw_history(user.id)
+            if table_history:
+                logger.info(f"Context recovered from Table for {user.id} (len: {len(table_history)})")
+        except Exception as e:
+            logger.error(f"Error recovering history from Table: {e}")
+
     try:
-        async for chunk in ai_service.ask_stream(user.id, text + instruction):
+        async for chunk in ai_service.ask_stream(user.id, text + instruction, external_history=table_history):
             # Проверка таймаута вручную (совместимо с Python 3.10)
             if time.time() - stream_start_time > STREAM_TOTAL_TIMEOUT:
                 raise asyncio.TimeoutError(f"Stream timeout after {STREAM_TOTAL_TIMEOUT}s")
