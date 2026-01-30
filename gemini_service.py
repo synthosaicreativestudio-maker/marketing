@@ -137,8 +137,8 @@ class GeminiService:
         self._history_ttl = 3600 * 24  # 24 часа TTL
         
         # Настройки модели
-        # ПРИМЕЧАНИЕ: gemini-3-pro-preview не существует. Используем актуальную модель.
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro") 
+        # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview") 
         self.max_history_messages = 12  # Оптимально для быстрого скользящего окна (6 пар)
         
         # Кэш для акций (Simple TTL Cache)

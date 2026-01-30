@@ -194,7 +194,7 @@ class KnowledgeBase:
                     si_content = types.Content(parts=[types.Part(text=system_instruction)])
 
                 # Create cache using AIO client
-                model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+                model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
                 cached_content = await self.client.aio.caches.create(
                     model=model_name, 
                     config=types.CreateCachedContentConfig(
