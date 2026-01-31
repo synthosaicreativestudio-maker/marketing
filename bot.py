@@ -289,9 +289,9 @@ def _run_bot_main():
             )
             logger.info("Watchdog heartbeat middleware зарегистрирован")
         
-        # Initialize RAG (Knowledge Base) if using Gemini
+        # Initialize RAG (Knowledge Base)
         # Launching as a background task to avoid blocking polling start
-        if ai_service.get_provider_name() == "Gemini" and ai_service.gemini_service and hasattr(ai_service.gemini_service, 'initialize'):
+        if ai_service.gemini_service and hasattr(ai_service.gemini_service, 'initialize'):
             try:
                 task_tracker.create_tracked_task(ai_service.gemini_service.initialize(), "kb_init")
                 logger.info("Knowledge Base initialization triggered in background")
