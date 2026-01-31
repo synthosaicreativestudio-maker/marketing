@@ -605,7 +605,7 @@ class GeminiService:
 
         except Exception as e:
             logger.error(f"OpenRouter Error: {e}")
-            yield f"\n[Ошибка OpenRouter: {str(e)[:50]}]"
+            raise e
 
     def clear_history(self, user_id: int) -> None:
         """Очищает историю диалога для пользователя."""
