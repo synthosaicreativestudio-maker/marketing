@@ -27,12 +27,14 @@ def start_command_handler(auth_service: AuthService):
         await set_dynamic_menu_button(context.bot, user.id, auth_status)
 
         if auth_status:
+            keyboard = [[KeyboardButton(text="👤 ЛК", web_app=WebAppInfo(url=get_spa_menu_url()))]]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            
             await update.message.reply_text(
-                f"Добрый день, {user.first_name}! Вы авторизованы. Можете задавать вопросы или перейти в личный кабинет через кнопку меню слева. 👇",
-                reply_markup=ReplyKeyboardRemove() # Принудительно убираем клавиатуру входа
+                f"Добрый день, {user.first_name}! Вы авторизованы. Можете задавать вопросы или перейти в личный кабинет через кнопку внизу. 👇",
+                reply_markup=reply_markup
             )
         else:
-            # Для неавторизованных используем ReplyKeyboardMarkup, т.к. sendData работает только через нее
             keyboard = [[KeyboardButton(text="🔑 Вход", web_app=WebAppInfo(url=get_web_app_url()))]]
             reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             
@@ -70,12 +72,13 @@ def web_app_data_handler(auth_service: AuthService):
         auth_result = await auth_service.find_and_update_user(partner_code, partner_phone, user.id)
         
         if auth_result:
-            # Сразу меняем кнопку на "ЛК" после успешного входа
-            await set_dynamic_menu_button(context.bot, user.id, True)
+            # Устанавливаем кнопку ЛК на клавиатуру
+            keyboard = [[KeyboardButton(text="👤 ЛК", web_app=WebAppInfo(url=get_spa_menu_url()))]]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             
             await update.message.reply_text(
-                "Авторизация успешна! ✨\nКнопка меню обновлена на «👤 ЛК».", 
-                reply_markup=ReplyKeyboardRemove() # Убираем кнопку входа
+                "Авторизация успешна! ✨\nКнопка входа обновлена на «👤 ЛК».", 
+                reply_markup=reply_markup
             )
         else:
             await update.message.reply_text("Данные не найдены. Проверьте код и номер телефона.")

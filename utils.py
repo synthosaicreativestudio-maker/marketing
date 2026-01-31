@@ -281,32 +281,16 @@ def _should_show_specialist_button(text: str) -> bool:
     
     return False
 
-async def set_dynamic_menu_button(bot, chat_id: int, is_authorized: bool):
+async def set_dynamic_menu_button(bot, chat_id: int, is_authorized: bool = False):
     """
-    Устанавливает динамическую кнопку меню (Menu Button) для пользователя.
-    Для неавторизованных сбрасывает в Default, чтобы использовать ReplyKeyboardMarkup.
+    Сбрасывает динамическую кнопку меню (Menu Button) для пользователя в стандартное состояние.
+    Мы перешли на использование ReplyKeyboardMarkup для всех действий.
     """
-    from utils import get_spa_menu_url
-    
     try:
-        if is_authorized:
-            url = get_spa_menu_url()
-            if url:
-                await bot.set_chat_menu_button(
-                    chat_id=chat_id,
-                    menu_button=MenuButtonWebApp(
-                        text="👤 ЛК",
-                        web_app=WebAppInfo(url=url)
-                    )
-                )
-                logger.info(f"Menu button updated for {chat_id}: 👤 ЛК")
-        else:
-            # Сбрасываем на стандартную кнопку (Default), 
-            # чтобы кнопка входа была только на клавиатуре (ReplyKeyboardMarkup)
-            await bot.set_chat_menu_button(
-                chat_id=chat_id,
-                menu_button=MenuButtonDefault()
-            )
-            logger.info(f"Menu button reset to default for {chat_id}")
+        await bot.set_chat_menu_button(
+            chat_id=chat_id,
+            menu_button=MenuButtonDefault()
+        )
+        logger.debug(f"Menu button reset to default for {chat_id}")
     except Exception as e:
-        logger.error(f"Failed to set menu button for {chat_id}: {e}")
+        logger.error(f"Failed to reset menu button for {chat_id}: {e}")
