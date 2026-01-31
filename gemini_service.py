@@ -460,13 +460,11 @@ class GeminiService:
                     config = types.GenerateContentConfig(**config_params)
                     generate_kwargs['config'] = config
                 
-                # Если мы еще НИЧЕГО не выдали (пустой ответ или ошибка соединения сразу)
-                logger.warning(f"Gemini attempt {attempt+1} failed: {e}")
-                
                 if attempt < MAX_RETRIES:
-                    if is_cache_error:
-                        logger.info("🔄 Retrying WITHOUT cache (fallback mode)")
-                    await asyncio.sleep(0.5) # Пауза перед ретраем
+                    # Exponential Backoff: 1s, 2s, 4s...
+                    wait_time = (2 ** attempt) + 0.1
+                    logger.info(f"🔄 Retrying in {wait_time}s (fallback/retry mode)")
+                    await asyncio.sleep(wait_time) 
                     continue # Идем на следующий круг
                 else:
                     # Все попытки исчерпаны

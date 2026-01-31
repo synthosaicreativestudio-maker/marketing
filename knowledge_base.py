@@ -193,7 +193,7 @@ class KnowledgeBase:
                     logger.error(f"Error uploading {path}: {e}")
                 
                 # Small delay to avoid rate limits/geo-checks
-                await asyncio.sleep(2)
+                await asyncio.sleep(4)
 
             if not gemini_files:
                 logger.error("No files successfully uploaded to Gemini.")
