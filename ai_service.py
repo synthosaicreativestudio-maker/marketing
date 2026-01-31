@@ -58,7 +58,8 @@ class AIService:
         """Возвращает имя активных провайдеров."""
         active = []
         if self.gemini_service.or_client:
-            active.append(f"OpenRouter({self.gemini_service.or_model})")
-        if self.gemini_service.client:
-            active.append("Gemini")
+            models_short = [m.split("/")[-1] for m in self.gemini_service.or_models]
+            active.append(f"OpenRouter({', '.join(models_short)})")
+        if self.gemini_service.gemini_clients:
+            active.append(f"Gemini({self.gemini_service.gemini_model})")
         return " + ".join(active) if active else "None"
