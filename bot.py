@@ -371,7 +371,7 @@ def _run_bot_main():
         if PREVENTIVE_GUARDS_AVAILABLE:
             try:
                 from preventive_guards import MemoryMonitor
-                memory_monitor = MemoryMonitor(max_memory_mb=300)
+                memory_monitor = MemoryMonitor(max_memory_mb=500)
                 
                 async def check_memory_periodically():
                     """Периодическая проверка памяти с алертами."""
