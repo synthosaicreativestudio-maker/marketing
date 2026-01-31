@@ -82,13 +82,7 @@ class DriveService:
             return []
             
         try:
-            # Query for supported types not in trash
-            # Mime types: application/pdf, application/vnd.openxmlformats-officedocument.presentationml.presentation
-            # application/vnd.openxmlformats-officedocument.wordprocessingml.document
-            # text/plain
-            # application/vnd.google-apps.document (Google Docs)
-            # application/vnd.google-apps.presentation (Google Slides)
-            
+            # Mime types: application/pdf, pptx, docx, text/plain, Google Docs/Slides, Images (png, jpg), Sheets (Google/XLSX)
             query = (
                 f"'{folder_id}' in parents and trashed = false and ("
                 "mimeType = 'application/pdf' or "
@@ -96,7 +90,11 @@ class DriveService:
                 "mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' or "
                 "mimeType = 'text/plain' or "
                 "mimeType = 'application/vnd.google-apps.document' or "
-                "mimeType = 'application/vnd.google-apps.presentation')"
+                "mimeType = 'application/vnd.google-apps.presentation' or "
+                "mimeType = 'image/png' or "
+                "mimeType = 'image/jpeg' or "
+                "mimeType = 'application/vnd.google-apps.spreadsheet' or "
+                "mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')"
             )
             
             results = self.service.files().list(
@@ -123,7 +121,7 @@ class DriveService:
             tmp_dir = "tmp_drive_files"
             os.makedirs(tmp_dir, exist_ok=True)
             
-            # Handle Google Apps files (Export to PDF)
+            # Handle Google Apps files (Export to PDF or CSV)
             if mime_type in ('application/vnd.google-apps.document', 'application/vnd.google-apps.presentation'):
                 # Append .pdf if not present
                 if not file_name.lower().endswith('.pdf'):
@@ -134,8 +132,18 @@ class DriveService:
                     fileId=file_id,
                     mimeType='application/pdf'
                 )
+            elif mime_type == 'application/vnd.google-apps.spreadsheet':
+                # Export Google Sheets as CSV
+                if not file_name.lower().endswith('.csv'):
+                    file_name += '.csv'
+                
+                logger.info(f"Exporting Google Sheet {file_name} as CSV...")
+                request = self.service.files().export_media(
+                    fileId=file_id,
+                    mimeType='text/csv'
+                )
             else:
-                # Regular download
+                # Regular download (PDF, PPTX, DOCX, TXT, Images, XLSX)
                 request = self.service.files().get_media(fileId=file_id)
             
             file_path = os.path.join(tmp_dir, file_name)

@@ -1,11 +1,11 @@
 import logging
 import json
-from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from auth_service import AuthService
 from error_handler import safe_handler
-from utils import get_web_app_url, get_spa_menu_url
+from utils import get_web_app_url, set_dynamic_menu_button
 
 logger = logging.getLogger(__name__)
 
@@ -22,28 +22,24 @@ def start_command_handler(auth_service: AuthService):
         logger.info(f"Команда /start от {user.id}")
 
         auth_status = await auth_service.get_user_auth_status(user.id)
+        
+        # Устанавливаем динамическую кнопку меню (Menu Button)
+        await set_dynamic_menu_button(context.bot, user.id, auth_status)
+
         if auth_status:
-            SPA_MENU_URL = get_spa_menu_url()
-            if SPA_MENU_URL:
-                keyboard = [[KeyboardButton(text="👤 Личный кабинет", web_app=WebAppInfo(url=SPA_MENU_URL))]]
-                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-                await update.message.reply_text(
-                    f"Добрый день, {user.first_name}! Вы авторизованы. Используйте меню или личный кабинет.",
-                    reply_markup=reply_markup
-                )
-            else:
-                await update.message.reply_text(f"Добрый день, {user.first_name}! Вы уже авторизованы.")
+            await update.message.reply_text(
+                f"Добрый день, {user.first_name}! Вы авторизованы. Можете задавать вопросы или перейти в личный кабинет через кнопку меню слева. 👇",
+                reply_markup=ReplyKeyboardRemove() # Принудительно убираем клавиатуру входа
+            )
         else:
-            WEB_APP_URL = get_web_app_url()
-            if WEB_APP_URL:
-                keyboard_button = KeyboardButton(text="Авторизоваться", web_app=WebAppInfo(url=WEB_APP_URL))
-                reply_markup = ReplyKeyboardMarkup.from_button(keyboard_button, resize_keyboard=True)
-                await update.message.reply_text(
-                    f"Добрый день, {user.first_name}! Пожалуйста, авторизуйтесь для доступа к боту.",
-                    reply_markup=reply_markup,
-                )
-            else:
-                await update.message.reply_text("Авторизация временно недоступна.")
+            # Для неавторизованных используем ReplyKeyboardMarkup, т.к. sendData работает только через нее
+            keyboard = [[KeyboardButton(text="🔑 Вход", web_app=WebAppInfo(url=get_web_app_url()))]]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            
+            await update.message.reply_text(
+                f"Добрый день, {user.first_name}! Пожалуйста, нажмите кнопку «🔑 Вход» внизу, чтобы авторизоваться.",
+                reply_markup=reply_markup
+            )
     return start
 
 def web_app_data_handler(auth_service: AuthService):
@@ -74,13 +70,13 @@ def web_app_data_handler(auth_service: AuthService):
         auth_result = await auth_service.find_and_update_user(partner_code, partner_phone, user.id)
         
         if auth_result:
-            SPA_MENU_URL = get_spa_menu_url()
-            reply_markup = None
-            if SPA_MENU_URL:
-                keyboard = [[KeyboardButton(text="👤 Личный кабинет", web_app=WebAppInfo(url=SPA_MENU_URL))]]
-                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            # Сразу меняем кнопку на "ЛК" после успешного входа
+            await set_dynamic_menu_button(context.bot, user.id, True)
             
-            await update.message.reply_text("Авторизация успешна! ✨", reply_markup=reply_markup)
+            await update.message.reply_text(
+                "Авторизация успешна! ✨\nКнопка меню обновлена на «👤 ЛК».", 
+                reply_markup=ReplyKeyboardRemove() # Убираем кнопку входа
+            )
         else:
             await update.message.reply_text("Данные не найдены. Проверьте код и номер телефона.")
             

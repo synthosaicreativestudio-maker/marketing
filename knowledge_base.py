@@ -21,6 +21,7 @@ class KnowledgeBase:
         self.ttl_minutes = 60 # Cache TTL (standard is 1 hour)
         self.is_updating = False
         self._lock = asyncio.Lock()
+        self._refresh_task = None
         
         # Feature flag: Context Caching (СAG)
         self.caching_enabled = os.getenv("ENABLE_CONTEXT_CACHING", "false").lower() == "true"
@@ -107,6 +108,29 @@ class KnowledgeBase:
                     logger.info(f"✅ Cache deleted from API: {old_cache}")
                 except Exception as e:
                     logger.warning(f"Failed to delete cache from API (already gone?): {e}")
+
+    async def start_auto_refresh(self, interval_hours: int = 6):
+        """Starts a background task to refresh the knowledge base periodically."""
+        if self._refresh_task and not self._refresh_task.done():
+            logger.info("Knowledge Base auto-refresh is already running.")
+            return
+
+        async def _refresh_loop():
+            logger.info(f"Starting Knowledge Base auto-refresh loop (every {interval_hours} hours)")
+            while True:
+                try:
+                    # Ждем 30 секунд перед первым запуском, чтобы дать боту полностью загрузиться
+                    await asyncio.sleep(30)
+                    await self.refresh_cache()
+                    logger.info(f"Knowledge Base auto-refresh successful. Next refresh in {interval_hours} hours.")
+                except Exception as e:
+                    logger.error(f"Error during Knowledge Base auto-refresh: {e}")
+                
+                await asyncio.sleep(interval_hours * 3600)
+
+        # Создаем задачу через task_tracker для мониторинга
+        from task_tracker import task_tracker
+        self._refresh_task = task_tracker.create_tracked_task(_refresh_loop(), "kb_auto_refresh")
 
     async def refresh_cache(self, system_instruction: Optional[str] = None, tools: Optional[List[types.Tool]] = None):
         """Refreshes the knowledge base files and optionally the cache."""

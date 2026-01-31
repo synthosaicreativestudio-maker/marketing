@@ -22,6 +22,13 @@ def register_chat_handlers(application, auth_service, ai_service, appeals_servic
         chat_handler(auth_service, ai_service, appeals_service, profile_manager)
     ))
 
+    # Регистрация команды обновления базы знаний
+    from telegram.ext import CommandHandler
+    application.add_handler(CommandHandler(
+        "refresh_kb", 
+        refresh_kb_handler(ai_service)
+    ))
+
 def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_service: AppealsService, profile_manager=None):
     """Основной обработчик общения с ИИ."""
     @safe_handler
@@ -237,3 +244,34 @@ async def _safe_background_log(user_id, text, reply, appeals_service):
             await appeals_service.add_ai_response(user_id, reply)
         except Exception as e:
             logger.debug(f"_safe_background_log (Sheets): {e}", exc_info=True)
+
+def refresh_kb_handler(ai_service: AIService):
+    """Обработчик команды /refresh_kb."""
+    @safe_handler
+    async def handle_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user_id = update.effective_user.id
+        admin_id = int(os.getenv("ADMIN_TELEGRAM_ID", 0))
+        
+        if user_id != admin_id:
+            await update.message.reply_text("⛔ У вас нет прав для выполнения этой команды.")
+            return
+            
+        status_msg = await update.message.reply_text("🔄 Обновляю базу знаний... Это может занять пару минут.")
+        
+        try:
+            success = await ai_service.refresh_knowledge_base()
+            if success:
+                # Даем немного времени на завершение фоновых задач загрузки в Gemini
+                await update.message.reply_text("✅ База знаний успешно обновлена! Новые файлы теперь доступны ИИ.")
+            else:
+                await update.message.reply_text("❌ Ошибка при обновлении базы знаний (AIService не активен).")
+        except Exception as e:
+            logger.error(f"Error in refresh_kb_handler: {e}")
+            await update.message.reply_text(f"❌ Произошла ошибка: {str(e)}")
+        finally:
+            try:
+                await status_msg.delete()
+            except:
+                pass
+
+    return handle_refresh

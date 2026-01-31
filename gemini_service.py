@@ -189,7 +189,11 @@ class GeminiService:
         """Async init for Knowledge Base with Rules and Tools."""
         if self.knowledge_base:
             await self.knowledge_base.initialize()
-            # ПРИНУДИТЕЛЬНО запускаем обновление кэша с нашими правилами
+            
+            # Запускаем фоновое автообновление каждые 6 часов
+            await self.knowledge_base.start_auto_refresh(interval_hours=6)
+            
+            # ПРИНУДИТЕЛЬНО запускаем первое обновление кэша с нашими правилами
             asyncio.create_task(self.knowledge_base.refresh_cache(
                 system_instruction=self.system_instruction,
                 tools=self.tools

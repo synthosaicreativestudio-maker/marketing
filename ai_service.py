@@ -63,3 +63,13 @@ class AIService:
         if self.gemini_service.gemini_clients:
             active.append(f"Gemini({self.gemini_service.gemini_model})")
         return " + ".join(active) if active else "None"
+
+    async def refresh_knowledge_base(self):
+        """Ручное обновление базы знаний."""
+        if self.gemini_service and self.gemini_service.knowledge_base:
+            await self.gemini_service.knowledge_base.refresh_cache(
+                system_instruction=self.gemini_service.system_instruction,
+                tools=self.gemini_service.tools
+            )
+            return True
+        return False
