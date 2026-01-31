@@ -377,6 +377,7 @@ def _run_bot_main():
                     """Периодическая проверка памяти с алертами."""
                     while True:
                         await asyncio.sleep(300)  # Каждые 5 минут
+                        if not memory_monitor.check_memory():
                             server_name = socket.gethostname()
                             await alert_admin(
                                 application.bot,
