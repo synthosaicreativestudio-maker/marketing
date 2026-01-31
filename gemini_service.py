@@ -286,6 +286,17 @@ class GeminiService:
             yield "Сервис ИИ временно недоступен."
             return
 
+        # --- UNIVERSAL RAG CONTEXT ---
+        rag_context = ""
+        if self.knowledge_base:
+            try:
+                # Получаем топ-5 релевантных фрагментов
+                rag_context = self.knowledge_base.get_relevant_context(content, top_k=5)
+                if rag_context:
+                    logger.info(f"Universal RAG: Found relevant context (len: {len(rag_context)})")
+            except Exception as e:
+                logger.error(f"Error getting RAG context: {e}")
+
         # --- MULTI-PROVIDER FALLBACK LOGIC ---
         # 1. OpenRouter (Pool of models)
         if self.or_client:
@@ -293,7 +304,7 @@ class GeminiService:
                 try:
                     logger.info(f"Trying OpenRouter model: {model_id}")
                     has_content = False
-                    async for chunk in self._ask_stream_openrouter_model(user_id, content, model_id, external_history):
+                    async for chunk in self._ask_stream_openrouter_model(user_id, content, model_id, external_history, rag_context):
                         if chunk:
                             if not has_content:
                                 logger.info(f"Model {model_id} started responding")
@@ -304,12 +315,12 @@ class GeminiService:
                     logger.warning(f"OpenRouter model {model_id} failed: {e}")
                     continue
 
-        # 2. Groq (Ultra-fast LPU)
+        # 2. Groq (High-speed fallback)
         if self.groq_client:
             try:
-                logger.info(f"Trying Groq model: {self.groq_model}")
+                logger.info(f"Trying Groq fallback: {self.groq_model}")
                 has_content = False
-                async for chunk in self._ask_stream_groq(user_id, content, external_history):
+                async for chunk in self._ask_stream_groq(user_id, content, external_history, rag_context):
                     if chunk:
                         if not has_content:
                             logger.info(f"Groq model {self.groq_model} started responding")
@@ -319,13 +330,13 @@ class GeminiService:
             except Exception as e:
                 logger.warning(f"Groq failed: {e}")
 
-        # 3. Gemini (Pool of keys)
+        # 4. Gemini Backup Keys
         if self.gemini_clients:
             for i, client in enumerate(self.gemini_clients):
                 try:
-                    logger.info(f"Trying Gemini client #{i+1}")
+                    logger.info(f"Trying Gemini Backup Client #{i+1}")
                     has_content = False
-                    async for chunk in self._ask_stream_gemini_client(user_id, content, client, external_history):
+                    async for chunk in self._ask_stream_gemini_client(user_id, content, client, external_history, rag_context):
                         if chunk:
                             if not has_content:
                                 logger.info(f"Gemini client #{i+1} started responding")
@@ -341,12 +352,17 @@ class GeminiService:
         yield "\n[Ошибка: Все ИИ-сервисы временно недоступны. Попробуйте позже.]"
 
 
-    async def _ask_stream_openrouter_model(self, user_id: int, content: str, model_id: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
+    async def _ask_stream_openrouter_model(self, user_id: int, content: str, model_id: str, external_history: Optional[str] = None, rag_context: str = "") -> AsyncGenerator[str, None]:
         """Внутренний метод для стриминга через конкретную модель OpenRouter."""
         try:
             messages = []
-            if self.system_instruction:
-                messages.append({"role": "system", "content": self.system_instruction})
+            system_msg = self.system_instruction or ""
+            
+            if rag_context:
+                system_msg += f"\n\n### ДАННЫЕ ИЗ БАЗЫ ЗНАНИЙ (ИСПОЛЬЗУЙ ПРИ ОТВЕТЕ):\n{rag_context}\n"
+
+            if system_msg:
+                messages.append({"role": "system", "content": system_msg})
             
             if self.knowledge_base:
                 links = self.knowledge_base.get_file_links()
@@ -379,12 +395,17 @@ class GeminiService:
         except Exception as e:
             raise e
 
-    async def _ask_stream_groq(self, user_id: int, content: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
+    async def _ask_stream_groq(self, user_id: int, content: str, external_history: Optional[str] = None, rag_context: str = "") -> AsyncGenerator[str, None]:
         """Внутренний метод для стриминга через Groq (сверхбыстрый LPU)."""
         try:
             messages = []
-            if self.system_instruction:
-                messages.append({"role": "system", "content": self.system_instruction})
+            system_msg = self.system_instruction or ""
+            
+            if rag_context:
+                system_msg += f"\n\n### ДАННЫЕ ИЗ БАЗЫ ЗНАНИЙ (ИСПОЛЬЗУЙ ПРИ ОТВЕТЕ):\n{rag_context}\n"
+
+            if system_msg:
+                messages.append({"role": "system", "content": system_msg})
             
             if self.knowledge_base:
                 links = self.knowledge_base.get_file_links()
@@ -417,9 +438,13 @@ class GeminiService:
         except Exception as e:
             raise e
 
-    async def _ask_stream_gemini_client(self, user_id: int, content: str, client: genai.Client, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
+    async def _ask_stream_gemini_client(self, user_id: int, content: str, client: genai.Client, external_history: Optional[str] = None, rag_context: str = "") -> AsyncGenerator[str, None]:
         """Внутренний метод для стриминга через конкретного клиента Gemini."""
-        # Инъекция истории из Таблицы (если она не пуста)
+        # 1. Инъекция контекста из RAG (если есть)
+        if rag_context:
+            content = f"### ДАННЫЕ ИЗ БАЗЫ ЗНАНИЙ:\n{rag_context}\n\n### ВОПРОС ПОЛЬЗОВАТЕЛЯ:\n{content}"
+
+        # 2. Инъекция истории из Таблицы
         history_injection = ""
         if external_history and external_history.strip():
             history_injection = f"\n\n### ИСТОРИЯ ПРЕДЫДУЩИХ ДИАЛОГОВ (УЧИТЫВАЙ ПРИ ОТВЕТЕ):\n{external_history[-15000:]}\n### КОНЕЦ ИСТОРИИ ###\n\n"

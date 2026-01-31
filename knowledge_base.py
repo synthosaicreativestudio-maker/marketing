@@ -7,6 +7,8 @@ from google import genai
 from google.genai import types
 
 from drive_service import DriveService
+from rag.document_processor import DocumentProcessor
+from rag.search_engine import SearchEngine
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,11 @@ class KnowledgeBase:
         self.caching_enabled = os.getenv("ENABLE_CONTEXT_CACHING", "false").lower() == "true"
         self.active_files = [] # Список активных файлов Gemini для RAG без кэша
         self.file_links = {}   # Mapping of filename -> Drive webViewLink
+        
+        # New: Universal RAG components
+        self.doc_processor = DocumentProcessor()
+        self.search_engine = SearchEngine()
+        self.local_context_ready = False
         
         # Initialize Gemini Client with Proxy Support
         proxy_key = os.getenv("PROXYAPI_KEY")
@@ -144,31 +151,22 @@ class KnowledgeBase:
             
             self.is_updating = True
         logger.info("🔄 Starting Knowledge Base Refresh (Non-blocking)...")
-        
         try:
-            # 1. List files from Drive (Sync operation -> Thread)
+            # 1. List files from Drive
             files_meta = await asyncio.to_thread(self.drive_service.list_files, self.folder_id)
             if not files_meta:
                 logger.warning("No files found in Knowledge Base folder.")
                 self.is_updating = False
                 return
 
-            # Store links mapping
-            new_links = {}
-            for f in files_meta:
-                if 'name' in f and 'webViewLink' in f:
-                    new_links[f['name']] = f['webViewLink']
+            new_links = {f['name']: f['webViewLink'] for f in files_meta if 'name' in f and 'webViewLink' in f}
             self.file_links = new_links
-            logger.info(f"Indexed {len(self.file_links)} file links for Knowledge Base")
+            logger.info(f"Indexed {len(self.file_links)} file links")
 
-            # 2. Download files locally (Sync operation -> Thread)
+            # 2. Download files locally
             local_files = []
             for f in files_meta:
-                # Wrap each download in a thread to keep event loop free
-                path = await asyncio.to_thread(
-                    self.drive_service.download_file, 
-                    f['id'], f['name'], f['mimeType']
-                )
+                path = await asyncio.to_thread(self.drive_service.download_file, f['id'], f['name'], f['mimeType'])
                 if path:
                     local_files.append(path)
             
@@ -177,78 +175,54 @@ class KnowledgeBase:
                 self.is_updating = False
                 return
 
-            # 3. Upload to Gemini File API (Using Async Client)
-            gemini_files = []
-            import mimetypes
-            
+            # 3. Universal RAG: Local Indexing
+            logger.info("Universal RAG: Starting local indexing...")
+            all_chunks = []
             for path in local_files:
-                try:
-                    # Guess mime type (Lightweight but good for thread)
-                    mime_type, _ = await asyncio.to_thread(mimetypes.guess_type, path)
-                    
-                    # Upload file using AIO client
-                    logger.info(f"Uploading {path} (type: {mime_type}) to Gemini Async...")
-                    with open(path, 'rb') as f_data:
-                        file_upload = await self.client.aio.files.upload(
-                            file=f_data,
-                            config={
-                                'display_name': os.path.basename(path),
-                                'mime_type': mime_type
-                            }
-                        )
-                    
-                    # Wait for processing (Non-blocking sleep)
-                    while file_upload.state.name == "PROCESSING":
-                        logger.info(f"Waiting for {file_upload.name} to process...")
-                        await asyncio.sleep(2) 
-                        file_upload = await self.client.aio.files.get(name=file_upload.name)
+                chunks = self.doc_processor.process_file(path)
+                if chunks:
+                    all_chunks.extend(chunks)
+            
+            if all_chunks:
+                self.search_engine.clear()
+                self.search_engine.add_chunks(all_chunks)
+                self.local_context_ready = True
+                logger.info(f"✅ Universal RAG: Indexed {len(all_chunks)} chunks.")
+            else:
+                logger.warning("Universal RAG: No text chunks extracted.")
+
+            # 4. Gemini-specific: Upload to File API (Optional)
+            gemini_files = []
+            if self.client:
+                import mimetypes
+                for path in local_files:
+                    try:
+                        mime_type, _ = await asyncio.to_thread(mimetypes.guess_type, path)
+                        logger.info(f"Uploading {path} to Gemini...")
+                        with open(path, 'rb') as f_data:
+                            file_upload = await self.client.aio.files.upload(
+                                file=f_data,
+                                config={'display_name': os.path.basename(path), 'mime_type': mime_type}
+                            )
                         
-                    if file_upload.state.name != "ACTIVE":
-                        logger.error(f"File {file_upload.name} failed processing: {file_upload.state.name}")
-                        continue
-                        
-                    gemini_files.append(file_upload)
-                    logger.info(f"File {file_upload.display_name} is ACTIVE.")
-                    
-                    # Инкрементальное обновление для RAG без кэша
-                    self.active_files = list(gemini_files) # Создаем копию списка
-                    
-                except Exception as e:
-                    logger.error(f"Error uploading {path}: {e}")
-                
-                # Small delay to avoid rate limits/geo-checks
-                await asyncio.sleep(4)
+                        while file_upload.state.name == "PROCESSING":
+                            await asyncio.sleep(2) 
+                            file_upload = await self.client.aio.files.get(name=file_upload.name)
+                            
+                        if file_upload.state.name == "ACTIVE":
+                            gemini_files.append(file_upload)
+                    except Exception as e:
+                        logger.warning(f"Optional Gemini upload failed: {e}")
+                self.active_files = gemini_files
 
-            if not gemini_files:
-                logger.error("No files successfully uploaded to Gemini.")
-                await asyncio.to_thread(self.drive_service.cleanup_tmp_files)
-                self.is_updating = False
-                return
-
-            # Обновляем список активных файлов для RAG без кэша
-            self.active_files = gemini_files
-
-            # 4. Create Context Cache (CAG) only if enabled
-            if self.caching_enabled:
+            # 5. Create Context Cache (CAG)
+            if self.caching_enabled and gemini_files:
                 try:
-                    logger.info("Creating CachedContent (CAG) with instructions and tools (Async)...")
-                    
-                    content_parts = []
-                    for gf in gemini_files:
-                        content_parts.append(types.Part.from_uri(
-                            file_uri=gf.uri,
-                            mime_type=gf.mime_type
-                        ))
-                    
+                    logger.info("Creating Gemini Context Cache (CAG)...")
+                    content_parts = [types.Part.from_uri(file_uri=gf.uri, mime_type=gf.mime_type) for gf in gemini_files]
                     ttl_seconds = self.ttl_minutes * 60
-                    
-                    # Подготовка system_instruction для кэша
-                    si_content = None
-                    if system_instruction:
-                        si_content = types.Content(parts=[types.Part(text=system_instruction)])
-
-                    # Create cache using AIO client
-                    model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
+                    si_content = types.Content(parts=[types.Part(text=system_instruction)]) if system_instruction else None
+                    model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro-preview-02-05")
                     cached_content = await self.client.aio.caches.create(
                         model=model_name, 
                         config=types.CreateCachedContentConfig(
@@ -259,24 +233,33 @@ class KnowledgeBase:
                             display_name="marketing_knowledge_base"
                         )
                     )
-
                     self.cached_content_name = cached_content.name
-                    self.last_update_time = time.time()
-                    logger.info(f"✅ Cache Created Successfully (Async): {self.cached_content_name}")
                 except Exception as e:
-                    logger.error(f"Failed to create cache: {e}")
-            else:
-                logger.info("KnowledgeBase: Files uploaded, CAG skipped (disabled in .env)")
-                self.cached_content_name = None
-                self.last_update_time = time.time() # Помечаем обновление как успешное
-                
-            # Cleanup local files (Thread)
+                    logger.error(f"Failed to create Gemini cache: {e}")
+            
+            self.last_update_time = time.time()
             await asyncio.to_thread(self.drive_service.cleanup_tmp_files)
             
         except Exception as e:
             logger.error(f"Error during cache refresh: {e}")
         finally:
             self.is_updating = False
+
+    def get_relevant_context(self, query: str, top_k: int = 5) -> str:
+        """Returns the most relevant chunks formatted for the LLM prompt."""
+        if not self.local_context_ready:
+            return ""
+            
+        chunks = self.search_engine.search(query, top_k=top_k)
+        if not chunks:
+            return ""
+            
+        context_parts = []
+        for i, chunk in enumerate(chunks):
+            source = chunk['metadata'].get('source', 'Unknown')
+            context_parts.append(f"--- Fragment {i+1} (Source: {source}) ---\n{chunk['content']}")
+            
+        return "\n\n".join(context_parts)
 
     async def get_active_files(self) -> List[types.File]:
         """Returns the list of active files in Gemini for RAG without cache."""
