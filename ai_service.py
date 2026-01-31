@@ -55,5 +55,10 @@ class AIService:
         return await self.gemini_service.generate_image(prompt)
 
     def get_provider_name(self) -> str:
-        """Возвращает имя активного провайдера."""
-        return "Gemini"
+        """Возвращает имя активных провайдеров."""
+        active = []
+        if self.gemini_service.or_client:
+            active.append(f"OpenRouter({self.gemini_service.or_model})")
+        if self.gemini_service.client:
+            active.append("Gemini")
+        return " + ".join(active) if active else "None"

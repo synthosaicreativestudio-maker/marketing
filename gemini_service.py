@@ -262,26 +262,52 @@ class GeminiService:
             yield "Сервис ИИ временно недоступен."
             return
 
-        # ПРИОРИТЕТ: OpenRouter (DeepSeek R1) если включен
+        # --- MULTI-PROVIDER FALLBACK LOGIC ---
+        providers = []
         if self.or_client:
-            async for chunk in self._ask_stream_openrouter(user_id, content, external_history):
-                yield chunk
-            return
+            providers.append(("OpenRouter", self._ask_stream_openrouter))
+        if self.client:
+            providers.append(("Gemini", self._ask_stream_gemini))
 
-        # ОТКАТ (Fallback): Google Gemini
+        last_error = None
+        for name, provider_func in providers:
+            try:
+                logger.info(f"Trying AI provider: {name}")
+                has_content = False
+                async for chunk in provider_func(user_id, content, external_history):
+                    if chunk:
+                        if not has_content:
+                            logger.info(f"Provider {name} started responding")
+                            has_content = True
+                        yield chunk
+                
+                if has_content:
+                    # Успешно получили ответ от одного из провайдеров
+                    return
+                else:
+                    logger.warning(f"Provider {name} returned empty response, trying next...")
 
+            except Exception as e:
+                last_error = e
+                logger.error(f"Provider {name} failed: {e}")
+                # Если провайдер упал ДО того как начал выдавать чанки — идем к следующему
+                continue
+
+        # Если дошли сюда — все провайдеры упали
+        error_msg = f"\n[Ошибка всех ИИ-сервисов: {str(last_error)[:100]}]"
+        logger.error(f"All AI providers failed for user {user_id}")
+        yield error_msg
+
+    async def _ask_stream_gemini(self, user_id: int, content: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Внутренний метод для стриминга через Google Gemini (оригинальная логика)."""
         # Инъекция истории из Таблицы (если она не пуста)
+        history_injection = ""
         if external_history and external_history.strip():
-            # Ограничиваем длину для безопасности (последние ~15к символов)
-            clean_history = external_history[-15000:]
-            logger.info(f"Injecting external history from Table for {user_id} (len: {len(clean_history)})")
-            
-            # Вставляем как системный контекст в начало диалога
-            context_msg = f"Здесь краткая история нашего недавнего общения из оперативной памяти базы данных:\n{clean_history}\n\nПожалуйста, используй эту информацию для продолжения диалога."
+            history_injection = f"\n\n### ИСТОРИЯ ПРЕДЫДУЩИХ ДИАЛОГОВ (УЧИТЫВАЙ ПРИ ОТВЕТЕ):\n{external_history[-15000:]}\n### КОНЕЦ ИСТОРИИ ###\n\n"
             # Очищаем временную историю в памяти, если пришел свежий дамп из Таблицы
             # Это гарантирует, что Таблица — главный источник правды.
             self.clear_history(user_id)
-            self._add_to_history(user_id, "user", context_msg)
+            self._add_to_history(user_id, "user", f"Пожалуйста, учти следующую историю диалога: {external_history[-15000:]}")
             self._add_to_history(user_id, "model", "Поняла. Я прочитала историю из базы данных и готова продолжать обсуждение с учетом предыдущих деталей.")
 
         # Добавляем сообщение пользователя в историю
@@ -331,7 +357,7 @@ class GeminiService:
                     links_block += "\n**ПРАВИЛО:** Если ты используешь данные из файла выше, в конце ответа ОБЯЗАТЕЛЬНО напиши: 'Подробнее см. в документе: [Название документа](ссылка)'."
                     effective_system_instruction += links_block
 
-            config_params['system_instruction'] = effective_system_instruction
+            config_params['system_instruction'] = effective_system_instruction + history_injection
             config_params['tools'] = tools
             
             # Внедряем файлы из KnowledgeBase в историю, если кэш не используется (простой RAG)
@@ -374,7 +400,7 @@ class GeminiService:
             has_started_response = False # Флаг: начали ли мы уже отдавать данные
             
             try:
-                logger.info(f"Starting stream for user {user_id} (Attempt {attempt+1}/{MAX_RETRIES+1})")
+                logger.info(f"Starting Gemini stream for user {user_id} (Attempt {attempt+1}/{MAX_RETRIES+1})")
                 
                 # Таймаут на инициализацию стрима (60 секунд)
                 STREAM_INIT_TIMEOUT = 60.0
@@ -491,14 +517,12 @@ class GeminiService:
                 if attempt < MAX_RETRIES:
                     # Exponential Backoff: 1s, 2s, 4s...
                     wait_time = (2 ** attempt) + 0.1
-                    logger.info(f"🔄 Retrying in {wait_time}s (fallback/retry mode)")
+                    logger.info(f"🔄 Retrying Gemini in {wait_time}s")
                     await asyncio.sleep(wait_time) 
                     continue # Идем на следующий круг
                 else:
-                    # Все попытки исчерпаны
+                    # Все попытки для Gemini исчерпаны
                     logger.error(f"All {MAX_RETRIES+1} attempts failed for user {user_id}")
-                    # Не нужно делать yield ошибки, пусть вызывающий код (chat_handler) покажет заглушку "Извините..."
-                    # или мы можем сами кинуть ошибку чтобы chat_handler ее поймал
                     raise e
 
         # --- FINALIZATION (Success case) ---
