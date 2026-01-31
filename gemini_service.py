@@ -83,6 +83,22 @@ class GeminiService:
             except Exception as e:
                 logger.error(f"Failed to initialize OpenRouter: {e}")
         
+        # 3. Резервный провайдер Groq (сверхбыстрый LPU)
+        self.groq_client = None
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
+        self.groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        
+        if self.groq_api_key:
+            try:
+                self.groq_client = AsyncOpenAI(
+                    base_url="https://api.groq.com/openai/v1",
+                    api_key=self.groq_api_key
+                )
+                logger.info(f"Groq client initialized. Model: {self.groq_model}")
+            except Exception as e:
+                logger.error(f"Failed to initialize Groq: {e}")
+
+        
         # Загрузка системного промпта
         system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
         self.system_instruction = None
@@ -265,7 +281,22 @@ class GeminiService:
                     logger.warning(f"OpenRouter model {model_id} failed: {e}")
                     continue
 
-        # 2. Gemini (Pool of keys)
+        # 2. Groq (Ultra-fast LPU)
+        if self.groq_client:
+            try:
+                logger.info(f"Trying Groq model: {self.groq_model}")
+                has_content = False
+                async for chunk in self._ask_stream_groq(user_id, content, external_history):
+                    if chunk:
+                        if not has_content:
+                            logger.info(f"Groq model {self.groq_model} started responding")
+                            has_content = True
+                        yield chunk
+                if has_content: return
+            except Exception as e:
+                logger.warning(f"Groq failed: {e}")
+
+        # 3. Gemini (Pool of keys)
         if self.gemini_clients:
             for i, client in enumerate(self.gemini_clients):
                 try:
@@ -285,6 +316,7 @@ class GeminiService:
         # Если дошли сюда — все провайдеры и ключи упали
         logger.error(f"All AI providers and keys failed for user {user_id}")
         yield "\n[Ошибка: Все ИИ-сервисы временно недоступны. Попробуйте позже.]"
+
 
     async def _ask_stream_openrouter_model(self, user_id: int, content: str, model_id: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Внутренний метод для стриминга через конкретную модель OpenRouter."""
@@ -310,6 +342,44 @@ class GeminiService:
 
             response = await self.or_client.chat.completions.create(
                 model=model_id,
+                messages=messages,
+                stream=True,
+                temperature=0.7
+            )
+
+            full_reply = ""
+            async for chunk in response:
+                if chunk.choices[0].delta.content:
+                    text = chunk.choices[0].delta.content
+                    full_reply += text
+                    yield text
+        except Exception as e:
+            raise e
+
+    async def _ask_stream_groq(self, user_id: int, content: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Внутренний метод для стриминга через Groq (сверхбыстрый LPU)."""
+        try:
+            messages = []
+            if self.system_instruction:
+                messages.append({"role": "system", "content": self.system_instruction})
+            
+            if self.knowledge_base:
+                links = self.knowledge_base.get_file_links()
+                if links:
+                    links_block = "\n### ССЫЛКИ НА ДОКУМЕНТЫ БАЗЫ ЗНАНИЙ:\n"
+                    for fname, url in links.items():
+                        links_block += f"- {fname}: {url}\n"
+                    messages[0]["content"] += links_block
+
+            if external_history and external_history.strip():
+                clean_history = external_history[-10000:]
+                messages.append({"role": "user", "content": f"Краткая история диалога:\n{clean_history}"})
+                messages.append({"role": "assistant", "content": "Понял, учитываю историю."})
+
+            messages.append({"role": "user", "content": content})
+
+            response = await self.groq_client.chat.completions.create(
+                model=self.groq_model,
                 messages=messages,
                 stream=True,
                 temperature=0.7
