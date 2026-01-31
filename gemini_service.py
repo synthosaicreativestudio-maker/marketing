@@ -740,6 +740,18 @@ class GeminiService:
                 if self.system_instruction:
                     messages.append({"role": "system", "content": self.system_instruction})
                 
+                # --- Rate Limiter (Basic) ---
+                # Даем паузу перед запросами к OpenRouter чтобы не ловить 429
+                # Особенно важно для бесплатных моделей
+                last_req_time = getattr(self, '_last_request_time', 0)
+                time_since_last = time.time() - last_req_time
+                if time_since_last < 2.0: # Минимум 2 секунды между запросами
+                    sleep_time = 2.0 - time_since_last
+                    logger.info(f"Rate limit protection: sleeping {sleep_time:.2f}s")
+                    await asyncio.sleep(sleep_time)
+                self._last_request_time = time.time()
+                # -----------------------------
+
                 if self.knowledge_base:
                     links = self.knowledge_base.get_file_links()
                     if links:
