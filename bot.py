@@ -14,6 +14,7 @@ import sys
 import atexit
 import asyncio
 import time
+import socket
 from dotenv import load_dotenv
 from telegram.ext import Application
 from telegram.error import TelegramError
@@ -376,13 +377,13 @@ def _run_bot_main():
                     """Периодическая проверка памяти с алертами."""
                     while True:
                         await asyncio.sleep(300)  # Каждые 5 минут
-                        if not memory_monitor.check_memory():
+                            server_name = socket.gethostname()
                             await alert_admin(
                                 application.bot,
-                                f"Критическое потребление памяти: {memory_monitor.get_memory_mb():.0f}MB!",
+                                f"🖥 Сервер: {server_name}\nКритическое потребление памяти: {memory_monitor.get_memory_mb():.0f}MB!",
                                 "CRITICAL"
                             )
-                            logger.critical("Memory limit exceeded, triggering restart...")
+                            logger.critical(f"Memory limit exceeded on {server_name}, triggering restart...")
                             os._exit(1)  # Systemd перезапустит
                 
                 task_tracker.create_tracked_task(check_memory_periodically(), "memory_monitor")
@@ -407,7 +408,8 @@ def _run_bot_main():
                 except Exception:
                     stats = f"Uptime: {uptime_hours:.1f}h"
                 
-                await alert_admin(application.bot, f"💓 Heartbeat: {stats}", "INFO")
+                server_name = socket.gethostname()
+                await alert_admin(application.bot, f"💓 Heartbeat ({server_name}): {stats}", "INFO")
         
         task_tracker.create_tracked_task(heartbeat_alert(), "heartbeat_alert")
         logger.info("Heartbeat алерты запущены (каждые 6 часов)")
