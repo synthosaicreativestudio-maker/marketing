@@ -304,12 +304,28 @@ class GeminiService:
                 try:
                     logger.info(f"Trying OpenRouter model: {model_id}")
                     has_content = False
-                    async for chunk in self._ask_stream_openrouter_model(user_id, content, model_id, external_history, rag_context):
+                    
+                    # Создаем генератор
+                    gen = self._ask_stream_openrouter_model(user_id, content, model_id, external_history, rag_context)
+                    
+                    # Ждем первый чанк с таймаутом
+                    try:
+                        first_chunk = await asyncio.wait_for(gen.__anext__(), timeout=15.0)
+                        if first_chunk:
+                            logger.info(f"Model {model_id} started responding")
+                            has_content = True
+                            yield first_chunk
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Timeout waiting for first chunk from {model_id}")
+                        continue
+                    except StopAsyncIteration:
+                        continue
+                    
+                    # Продолжаем стриминг остальных чанков без таймаута (или с большим)
+                    async for chunk in gen:
                         if chunk:
-                            if not has_content:
-                                logger.info(f"Model {model_id} started responding")
-                                has_content = True
                             yield chunk
+                    
                     if has_content: return
                 except Exception as e:
                     logger.warning(f"OpenRouter model {model_id} failed: {e}")
@@ -320,15 +336,27 @@ class GeminiService:
             try:
                 logger.info(f"Trying Groq fallback: {self.groq_model}")
                 has_content = False
-                async for chunk in self._ask_stream_groq(user_id, content, external_history, rag_context):
+                gen = self._ask_stream_groq(user_id, content, external_history, rag_context)
+                
+                try:
+                    first_chunk = await asyncio.wait_for(gen.__anext__(), timeout=15.0)
+                    if first_chunk:
+                        logger.info(f"Groq model {self.groq_model} started responding")
+                        has_content = True
+                        yield first_chunk
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout waiting for Groq {self.groq_model}")
+                    continue # Try next provider if Groq times out
+                except StopAsyncIteration:
+                    continue # Generator was empty, try next provider
+                    
+                async for chunk in gen:
                     if chunk:
-                        if not has_content:
-                            logger.info(f"Groq model {self.groq_model} started responding")
-                            has_content = True
                         yield chunk
                 if has_content: return
             except Exception as e:
                 logger.warning(f"Groq failed: {e}")
+                # Continue to next provider if Groq fails
 
         # 4. Gemini Backup Keys
         if self.gemini_clients:
