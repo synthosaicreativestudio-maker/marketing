@@ -299,6 +299,7 @@ class GeminiService:
 
         # --- MULTI-PROVIDER FALLBACK LOGIC ---
         # 1. OpenRouter (Pool of models)
+        logger.info(f"DEBUG: Checking OpenRouter... Client: {bool(self.or_client)}, Models: {self.or_models}")
         if self.or_client:
             for model_id in self.or_models:
                 try:
@@ -748,7 +749,7 @@ class GeminiService:
                         messages[0]["content"] += links_block
 
                 if external_history and external_history.strip():
-                    clean_history = external_history[-10000:]
+                    clean_history = external_history[-3000:]
                     messages.append({"role": "user", "content": f"Краткая история диалога:\n{clean_history}"})
                     messages.append({"role": "assistant", "content": "Понял, учитываю историю."})
 

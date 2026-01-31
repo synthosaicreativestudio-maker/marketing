@@ -173,16 +173,36 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
         clean_response = full_response.replace("[ESCALATE_ACTION]", "").strip()
         markup = create_specialist_button() if is_esc else None
         
-        # Пытаемся отправить с Markdown, при ошибке парсинга - без форматирования
-        try:
-            await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode='Markdown')
-        except Exception as parse_error:
-            if "Can't parse entities" in str(parse_error) or "parse" in str(parse_error).lower():
-                logger.warning(f"Markdown parsing error, sending as plain text: {parse_error}")
-                # Отправляем без Markdown форматирования
-                await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode=None)
-            else:
-                raise
+        # Разделение длинных сообщений (Telegram limit 4096)
+        if len(clean_response) > 4096:
+            from telegram.constants import ParseMode
+            # Разбиваем на части по 4000 символов для безопасности
+            parts = [clean_response[i:i+4000] for i in range(0, len(clean_response), 4000)]
+            
+            # Первая часть редактирует сообщение с "печатает..."
+            try:
+                await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup, parse_mode=ParseMode.MARKDOWN)
+            except Exception:
+                await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup, parse_mode=None)
+            
+            # Остальные части отправляем новыми сообщениями
+            for i, part in enumerate(parts[1:]):
+                # Кнопки только к последнему сообщению
+                current_markup = markup if i == len(parts) - 2 else None
+                try:
+                    await update.message.reply_text(part, reply_markup=current_markup, parse_mode=ParseMode.MARKDOWN)
+                except Exception:
+                    await update.message.reply_text(part, reply_markup=current_markup, parse_mode=None)
+        else:
+            # Штатный режим (короткое сообщение)
+            try:
+                await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode='Markdown')
+            except Exception as parse_error:
+                if "Can't parse entities" in str(parse_error) or "parse" in str(parse_error).lower():
+                    logger.warning(f"Markdown parsing error, sending as plain text: {parse_error}")
+                    await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode=None)
+                else:
+                    raise
         
         # Фоновое логирование
         if settings.LOG_TO_SHEETS:
