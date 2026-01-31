@@ -29,31 +29,45 @@ class GeminiService:
     def __init__(self, promotions_gateway: Optional[AsyncGoogleSheetsGateway] = None) -> None:
         self.promotions_gateway = promotions_gateway
         
-        # Вариант Б (предпочтительно): только Gemini через американский сервер (reverse proxy)
+        # 1. Пул клиентов Gemini
+        self.gemini_clients = []
+        gemini_keys_str = os.getenv("GEMINI_API_KEYS", "")
+        gemini_keys = [k.strip() for k in gemini_keys_str.split(",") if k.strip()]
+        
+        # Если старый ключ тоже есть, добавим его в начало (или используем если нет новых)
+        old_gemini_key = os.getenv("GEMINI_API_KEY")
+        if old_gemini_key and old_gemini_key not in gemini_keys:
+            gemini_keys.insert(0, old_gemini_key)
+            
         proxyapi_key = os.getenv("PROXYAPI_KEY")
         proxyapi_base_url = os.getenv("PROXYAPI_BASE_URL")
         
-        if proxyapi_key and proxyapi_base_url:
-            logger.info(f"Using custom Gemini endpoint: {proxyapi_base_url}")
+        for key in gemini_keys:
             try:
-                # v1beta is required for context caching and tools
-                api_version = os.getenv("PROXYAPI_VERSION", "v1beta")
-                self.client = genai.Client(
-                    api_key=proxyapi_key,
-                    http_options={
-                        'base_url': proxyapi_base_url,
-                        'api_version': api_version
-                    }
-                )
-                logger.info(f"GeminiService initialized via proxy ({api_version})")
+                if proxyapi_key and proxyapi_base_url:
+                    # Вариант Б: через прокси
+                    api_version = os.getenv("PROXYAPI_VERSION", "v1beta")
+                    client = genai.Client(
+                        api_key=key,
+                        http_options={'base_url': proxyapi_base_url, 'api_version': api_version}
+                    )
+                else:
+                    # Вариант А: напрямую (с поддержкой системного прокси)
+                    client = genai.Client(api_key=key)
+                
+                self.gemini_clients.append(client)
+                logger.info(f"Gemini client initialized with key ...{key[-4:]}")
             except Exception as e:
-                logger.error(f"Failed to initialize GeminiService via ProxyAPI: {e}", exc_info=True)
-                self.client = None
+                logger.error(f"Failed to init Gemini client with key ...{key[-4:]}: {e}")
         
-        # Интеграция OpenRouter (DeepSeek R1)
+        self.client = self.gemini_clients[0] if self.gemini_clients else None
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+        # 2. Пул моделей OpenRouter
         self.or_client = None
         self.or_api_key = os.getenv("OPENROUTER_API_KEY")
-        self.or_model = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-r1:free")
+        or_models_str = os.getenv("OPENROUTER_MODELS", "qwen/qwen-2.5-72b-instruct:free,meta-llama/llama-3.3-70b-instruct:free,deepseek/deepseek-r1-0528:free")
+        self.or_models = [m.strip() for m in or_models_str.split(",") if m.strip()]
         
         if self.or_api_key:
             try:
@@ -65,30 +79,9 @@ class GeminiService:
                         "X-Title": "MarketingBot"
                     }
                 )
-                logger.info(f"OpenRouter client initialized (Model: {self.or_model})")
+                logger.info(f"OpenRouter client initialized. Models pool: {self.or_models}")
             except Exception as e:
                 logger.error(f"Failed to initialize OpenRouter: {e}")
-        
-        # Вариант А: Стандартный API (с поддержкой HTTP_PROXY из окружения)
-        else:
-            api_key = os.getenv("GEMINI_API_KEY")
-            if not api_key:
-                logger.warning("GeminiService disabled: missing GEMINI_API_KEY")
-                self.client = None
-            else:
-                try:
-                    # В google-genai SDK прокси подхватывается автоматически из окружения (HTTP_PROXY/HTTPS_PROXY)
-                    # Переменные уже прописаны в .env и подгружаются systemd.
-                    # Явное указание в HttpOptions вызывало ошибку валидации.
-                    self.client = genai.Client(api_key=api_key)
-                    http_proxy = os.getenv("HTTP_PROXY")
-                    if http_proxy:
-                        logger.info(f"GeminiService initialized with HTTP_PROXY: {http_proxy}")
-                    else:
-                        logger.info("GeminiService initialized (direct connection)")
-                except Exception as e:
-                    logger.error(f"Failed to initialize GeminiService: {e}", exc_info=True)
-                    self.client = None
         
         # Загрузка системного промпта
         system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
@@ -134,19 +127,8 @@ class GeminiService:
         else:
             logger.warning(f"System prompt file not found: {system_prompt_path}")
         
-        # Инструменты (Function Calling)
-        self.tools = [
-            types.Tool(
-                function_declarations=[types.FunctionDeclaration(
-                    name='get_promotions',
-                    description='Получить список текущих акций, скидок и условий ипотеки из базы данных. ПРИОРИТЕТНЫЙ ИСТОЧНИК для вопросов о выгоде.',
-                    parameters=types.Schema(
-                        type='OBJECT',
-                        properties={}
-                    )
-                )]
-            )
-        ]
+        # Helper for rotation
+        self.current_or_model_index = 0
         
         # Хранилище истории диалогов: user_id -> list of Content objects
         self.user_histories: Dict[int, List[types.Content]] = {}
@@ -263,43 +245,84 @@ class GeminiService:
             return
 
         # --- MULTI-PROVIDER FALLBACK LOGIC ---
-        providers = []
+        # 1. OpenRouter (Pool of models)
         if self.or_client:
-            providers.append(("OpenRouter", self._ask_stream_openrouter))
-        if self.client:
-            providers.append(("Gemini", self._ask_stream_gemini))
+            for model_id in self.or_models:
+                try:
+                    logger.info(f"Trying OpenRouter model: {model_id}")
+                    has_content = False
+                    async for chunk in self._ask_stream_openrouter_model(user_id, content, model_id, external_history):
+                        if chunk:
+                            if not has_content:
+                                logger.info(f"Model {model_id} started responding")
+                                has_content = True
+                            yield chunk
+                    if has_content: return
+                except Exception as e:
+                    logger.warning(f"OpenRouter model {model_id} failed: {e}")
+                    continue
 
-        last_error = None
-        for name, provider_func in providers:
-            try:
-                logger.info(f"Trying AI provider: {name}")
-                has_content = False
-                async for chunk in provider_func(user_id, content, external_history):
-                    if chunk:
-                        if not has_content:
-                            logger.info(f"Provider {name} started responding")
-                            has_content = True
-                        yield chunk
-                
-                if has_content:
-                    # Успешно получили ответ от одного из провайдеров
-                    return
-                else:
-                    logger.warning(f"Provider {name} returned empty response, trying next...")
+        # 2. Gemini (Pool of keys)
+        if self.gemini_clients:
+            for i, client in enumerate(self.gemini_clients):
+                try:
+                    logger.info(f"Trying Gemini client #{i+1}")
+                    has_content = False
+                    async for chunk in self._ask_stream_gemini_client(user_id, content, client, external_history):
+                        if chunk:
+                            if not has_content:
+                                logger.info(f"Gemini client #{i+1} started responding")
+                                has_content = True
+                            yield chunk
+                    if has_content: return
+                except Exception as e:
+                    logger.error(f"Gemini client #{i+1} failed: {e}")
+                    continue
 
-            except Exception as e:
-                last_error = e
-                logger.error(f"Provider {name} failed: {e}")
-                # Если провайдер упал ДО того как начал выдавать чанки — идем к следующему
-                continue
+        # Если дошли сюда — все провайдеры и ключи упали
+        logger.error(f"All AI providers and keys failed for user {user_id}")
+        yield "\n[Ошибка: Все ИИ-сервисы временно недоступны. Попробуйте позже.]"
 
-        # Если дошли сюда — все провайдеры упали
-        error_msg = f"\n[Ошибка всех ИИ-сервисов: {str(last_error)[:100]}]"
-        logger.error(f"All AI providers failed for user {user_id}")
-        yield error_msg
+    async def _ask_stream_openrouter_model(self, user_id: int, content: str, model_id: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Внутренний метод для стриминга через конкретную модель OpenRouter."""
+        try:
+            messages = []
+            if self.system_instruction:
+                messages.append({"role": "system", "content": self.system_instruction})
+            
+            if self.knowledge_base:
+                links = self.knowledge_base.get_file_links()
+                if links:
+                    links_block = "\n### ССЫЛКИ НА ДОКУМЕНТЫ БАЗЫ ЗНАНИЙ:\n"
+                    for fname, url in links.items():
+                        links_block += f"- {fname}: {url}\n"
+                    messages[0]["content"] += links_block
 
-    async def _ask_stream_gemini(self, user_id: int, content: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
-        """Внутренний метод для стриминга через Google Gemini (оригинальная логика)."""
+            if external_history and external_history.strip():
+                clean_history = external_history[-10000:]
+                messages.append({"role": "user", "content": f"Краткая история диалога:\n{clean_history}"})
+                messages.append({"role": "assistant", "content": "Понял, учитываю историю."})
+
+            messages.append({"role": "user", "content": content})
+
+            response = await self.or_client.chat.completions.create(
+                model=model_id,
+                messages=messages,
+                stream=True,
+                temperature=0.7
+            )
+
+            full_reply = ""
+            async for chunk in response:
+                if chunk.choices[0].delta.content:
+                    text = chunk.choices[0].delta.content
+                    full_reply += text
+                    yield text
+        except Exception as e:
+            raise e
+
+    async def _ask_stream_gemini_client(self, user_id: int, content: str, client: genai.Client, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Внутренний метод для стриминга через конкретного клиента Gemini."""
         # Инъекция истории из Таблицы (если она не пуста)
         history_injection = ""
         if external_history and external_history.strip():
@@ -406,7 +429,7 @@ class GeminiService:
                 STREAM_INIT_TIMEOUT = 60.0
                 try:
                     stream = await asyncio.wait_for(
-                        self.client.aio.models.generate_content_stream(**generate_kwargs),
+                        client.aio.models.generate_content_stream(**generate_kwargs),
                         timeout=STREAM_INIT_TIMEOUT
                     )
                 except asyncio.TimeoutError:
@@ -551,61 +574,75 @@ class GeminiService:
 
     async def ask(self, user_id: int, content: str, external_history: Optional[str] = None) -> Optional[str]:
         """Отправляет запрос в Gemini и возвращает полный ответ (через стриминг)."""
-        return "".join(full_reply) if full_reply else None
+        full_reply_parts = []
+        async for part in self.ask_stream(user_id, content, external_history):
+            full_reply_parts.append(part)
+        return "".join(full_reply_parts) if full_reply_parts else None
 
     async def _ask_stream_openrouter(self, user_id: int, content: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Внутренний метод для стриминга через OpenRouter."""
-        try:
-            # 1. Подготовка промпта (пока без истории в OpenRouter для простоты первой итерации)
-            # В будущем добавим скользящее окно как в Gemini
-            messages = []
-            if self.system_instruction:
-                messages.append({"role": "system", "content": self.system_instruction})
-            
-            # Добавляем ссылки на базу знаний в системный промпт для OpenRouter
-            if self.knowledge_base:
-                links = self.knowledge_base.get_file_links()
-                if links:
-                    links_block = "\n### ССЫЛКИ НА ДОКУМЕНТЫ БАЗЫ ЗНАНИЙ:\n"
-                    for fname, url in links.items():
-                        links_block += f"- {fname}: {url}\n"
-                    messages[0]["content"] += links_block
+        MAX_OR_RETRIES = len(self.or_models)
+        full_reply = ""
+        current_or_model = "unknown"
+        
+        for attempt in range(MAX_OR_RETRIES):
+            try:
+                messages = []
+                if self.system_instruction:
+                    messages.append({"role": "system", "content": self.system_instruction})
+                
+                if self.knowledge_base:
+                    links = self.knowledge_base.get_file_links()
+                    if links:
+                        links_block = "\n### ССЫЛКИ НА ДОКУМЕНТЫ БАЗЫ ЗНАНИЙ:\n"
+                        for fname, url in links.items():
+                            links_block += f"- {fname}: {url}\n"
+                        messages[0]["content"] += links_block
 
-            # История из таблицы (как в Gemini)
-            if external_history and external_history.strip():
-                clean_history = external_history[-10000:]
-                messages.append({"role": "user", "content": f"Краткая история диалога:\n{clean_history}"})
-                messages.append({"role": "assistant", "content": "Понял, учитываю историю."})
+                if external_history and external_history.strip():
+                    clean_history = external_history[-10000:]
+                    messages.append({"role": "user", "content": f"Краткая история диалога:\n{clean_history}"})
+                    messages.append({"role": "assistant", "content": "Понял, учитываю историю."})
 
-            messages.append({"role": "user", "content": content})
+                messages.append({"role": "user", "content": content})
 
-            response = await self.or_client.chat.completions.create(
-                model=self.or_model,
-                messages=messages,
-                stream=True,
-                temperature=0.7
-            )
+                current_or_model = self.or_models[self.current_or_model_index]
+                logger.info(f"OpenRouter stream for user {user_id} with model {current_or_model} (Attempt {attempt+1}/{MAX_OR_RETRIES})")
 
-            full_reply = ""
-            async for chunk in response:
-                if chunk.choices[0].delta.content:
-                    text = chunk.choices[0].delta.content
-                    full_reply += text
-                    yield text
-            
-            # Сохранение в память (архиватор)
-            if self.memory_archiver and full_reply:
-                # Адаптируем формат для архиватора (он ждет объекты Gemini)
-                # Для простоты пока создадим минимальную структуру
-                fake_history = [
-                    types.Content(role="user", parts=[types.Part(text=content)]),
-                    types.Content(role="model", parts=[types.Part(text=full_reply)])
-                ]
-                asyncio.create_task(self.memory_archiver.archive_user_history(user_id, fake_history))
+                response = await self.or_client.chat.completions.create(
+                    model=current_or_model,
+                    messages=messages,
+                    stream=True,
+                    temperature=0.7
+                )
 
-        except Exception as e:
-            logger.error(f"OpenRouter Error: {e}")
-            raise e
+                async for chunk in response:
+                    if chunk.choices[0].delta.content:
+                        text = chunk.choices[0].delta.content
+                        full_reply += text
+                        yield text
+                
+                if full_reply:
+                    break
+                else:
+                    raise ValueError("Received empty response from OpenRouter model")
+
+            except Exception as e:
+                logger.error(f"OpenRouter Error with model {current_or_model}: {e}")
+                if attempt < MAX_OR_RETRIES - 1:
+                    logger.warning(f"Rotating OpenRouter index and retrying (attempt {attempt+1}/{MAX_OR_RETRIES})")
+                    self.current_or_model_index = (self.current_or_model_index + 1) % len(self.or_models)
+                    await asyncio.sleep(1) 
+                else:
+                    logger.error(f"All {MAX_OR_RETRIES} OpenRouter models failed")
+                    raise e 
+
+        if self.memory_archiver and full_reply:
+            fake_history = [
+                types.Content(role="user", parts=[types.Part(text=content)]),
+                types.Content(role="model", parts=[types.Part(text=full_reply)])
+            ]
+            asyncio.create_task(self.memory_archiver.archive_user_history(user_id, fake_history))
 
     def clear_history(self, user_id: int) -> None:
         """Очищает историю диалога для пользователя."""
