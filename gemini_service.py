@@ -346,9 +346,8 @@ class GeminiService:
                         yield first_chunk
                 except asyncio.TimeoutError:
                     logger.warning(f"Timeout waiting for Groq {self.groq_model}")
-                    continue # Try next provider if Groq times out
                 except StopAsyncIteration:
-                    continue # Generator was empty, try next provider
+                    pass
                     
                 async for chunk in gen:
                     if chunk:
