@@ -270,9 +270,12 @@ def refresh_kb_handler(ai_service: AIService):
     @safe_handler
     async def handle_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user_id = update.effective_user.id
-        admin_id = int(os.getenv("ADMIN_TELEGRAM_ID", 0))
         
-        if user_id != admin_id:
+        # Support multiple admin IDs (comma-separated)
+        admin_ids_str = os.getenv("ADMIN_TELEGRAM_IDS", os.getenv("ADMIN_TELEGRAM_ID", ""))
+        admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip().isdigit()]
+        
+        if user_id not in admin_ids:
             await update.message.reply_text("⛔ У вас нет прав для выполнения этой команды.")
             return
             
