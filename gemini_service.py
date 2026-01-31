@@ -83,20 +83,39 @@ class GeminiService:
             except Exception as e:
                 logger.error(f"Failed to initialize OpenRouter: {e}")
         
-        # 3. Резервный провайдер Groq (сверхбыстрый LPU)
+        # 3. Резервный провайдер Groq (сверхбыстрый LPU) — через прокси для обхода геоблокировки
         self.groq_client = None
         self.groq_api_key = os.getenv("GROQ_API_KEY")
         self.groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
         
         if self.groq_api_key:
             try:
-                self.groq_client = AsyncOpenAI(
-                    base_url="https://api.groq.com/openai/v1",
-                    api_key=self.groq_api_key
-                )
-                logger.info(f"Groq client initialized. Model: {self.groq_model}")
+                # Используем тот же прокси что и для Gemini (американский сервер)
+                groq_proxy_url = os.getenv("GROQ_PROXY_URL", os.getenv("PROXYAPI_BASE_URL"))
+                
+                if groq_proxy_url:
+                    # Настраиваем httpx клиент с прокси
+                    import httpx
+                    http_client = httpx.AsyncClient(
+                        proxy="http://root:LEJ6U5chSK@37.1.212.51:8080",
+                        timeout=60.0
+                    )
+                    self.groq_client = AsyncOpenAI(
+                        base_url="https://api.groq.com/openai/v1",
+                        api_key=self.groq_api_key,
+                        http_client=http_client
+                    )
+                    logger.info(f"Groq client initialized via US proxy. Model: {self.groq_model}")
+                else:
+                    # Без прокси (напрямую)
+                    self.groq_client = AsyncOpenAI(
+                        base_url="https://api.groq.com/openai/v1",
+                        api_key=self.groq_api_key
+                    )
+                    logger.info(f"Groq client initialized (direct). Model: {self.groq_model}")
             except Exception as e:
                 logger.error(f"Failed to initialize Groq: {e}")
+
 
         
         # Загрузка системного промпта
