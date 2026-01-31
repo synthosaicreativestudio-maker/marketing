@@ -1,0 +1,151 @@
+# 🔒 КОНФИДЕНЦИАЛЬНЫЕ ФАЙЛЫ (НИКОГДА НЕ КОММИТИТЬ!)
+# Переменные окружения
+.env
+.env.local
+.env.production
+.env.staging
+.env.backup
+.env.enc
+env.server.txt
+cloudflare_tunnel_token.txt
+
+# Файлы credentials и приватные ключи
+*.json
+!.env.example
+!package.json
+!pyproject.toml
+!.env.example
+service-account*.json
+credentials*.json
+secrets*.json
+
+# Приватные ключи и сертификаты
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# 🐍 PYTHON
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+*.egg
+
+# 🔧 ВИРТУАЛЬНЫЕ ОКРУЖЕНИЯ
+.venv/
+.venv*/
+venv/
+ENV/
+env/
+# Exclusion for generic folder names that might be environments
+bin/
+include/
+share/
+
+# 📝 ЛОГИ И ВРЕМЕННЫЕ ФАЙЛЫ
+logs/
+*.log
+*.tmp
+*.temp
+*.bak
+.cache/
+.pytest_cache/
+.coverage
+.nyc_output
+
+# 🎛️ РЕДАКТОРЫ И IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# 🔍 ИНСТРУМЕНТЫ АНАЛИЗА
+.mypy_cache/
+.ruff_cache/
+.bandit
+.tox/
+
+# 📦 ЗАВИСИМОСТИ
+node_modules/
+.npm
+.yarn-integrity
+
+# 🐳 DOCKER
+.dockerignore
+
+# 🚨 ВРЕМЕННЫЕ ФАЙЛЫ АУДИТА И ДОКУМЕНТАЦИИ
+DOCS_ANALYSIS.md
+DOCS_OPTIMIZATION_REPORT.md
+AUDIT_REPORT*.md
+ULTRA_SIMPLE_PLAN.md
+OPTIMIZATION_PLAN.md
+SIMPLIFICATION_CHECKLIST.md
+FIX_*.md
+CHECK_*.md
+DEBUG_*.md
+FINAL_*.md
+*_ПРОВЕРКА*.md
+*_ПРОВЕРКА_*.md
+РЕШЕНИЕ_*.md
+APPLIED_*.md
+DEPLOY_FIXES.md
+UPDATE_EXISTING_SCRIPT.md
+RESTORE_POINTS.md
+DNS_WAIT_*.md
+HOW_TO_*.md
+
+# Файлы с учетными данными Google Cloud
+credentials.json
+sheet_summary*.json
+service-account*.json
+
+# База данных
+*.db
+*.sqlite
+*.sqlite3
+db/*.db
+db/*.sqlite
+db/*.sqlite3
+
+# Audit files
+full_audit_dump.txt
+server_stats.txt
+audit_collector.py
+full_project_code.txt
+GOOGLE_APPS_SCRIPT_FULL.js
+project_auditor.py
+
+# Extended audit files
+extended_audit.zip
+TOTAL_DUMP.txt
+server_health.txt
+kill_test_results.txt
+total_audit.py
+EXTENDED_AUDIT_REPORT.md
+AUDIT_README.md
+audit-dump.txt
+server-stats.txt
+audit-files/
+audit-results/
+ALL_CREDENTIALS.md
+.agent/
