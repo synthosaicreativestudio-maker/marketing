@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from auth_service import AuthService
 from error_handler import safe_handler
-from utils import get_web_app_url, set_dynamic_menu_button
+from utils import get_web_app_url, get_spa_menu_url, set_dynamic_menu_button
 
 logger = logging.getLogger(__name__)
 
