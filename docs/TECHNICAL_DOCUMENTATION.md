@@ -8,14 +8,14 @@
 
 ## 1. High-Level Architecture
 
-The project is a resilient **Telegram Bot** built with Python, designed for high availability (24/7) and fault tolerance. It operates as a monolithic application with modular services, using **Google Sheets** as its primary database and **OpenAI Assistants API** for AI capabilities.
+The project is a resilient **Telegram Bot** built with Python, designed for high availability (24/7) and fault tolerance. It operates as a monolithic application with modular services, using **Google Sheets** as its primary database and an **Advanced Multi-AI System** (Gemini 2.0 Flash + OpenRouter) for AI capabilities.
 
 ### Technology Stack
 *   **Runtime:** Python 3.10+
 *   **Core Framework:** `python-telegram-bot` (v20+, Async)
 *   **Database:** Google Sheets (via `gspread` + `tenacity` for retries)
-*   **AI Engine:** OpenAI Assistants API (Threads)
-*   **Web Integration:** Flask/FastAPI (for Webhooks & Mini Apps)
+*   **AI Engine:** Advanced Multi-AI (Gemini 2.0 Flash + OpenRouter Model Pool)
+*   **Web Integration:** Flask (for Webhooks & Mini Apps)
 *   **Deployment:** Systemd Service (Linux/Ubuntu)
 
 ### Architecture Diagram (Logical)
@@ -28,7 +28,8 @@ graph TD
     subgraph "Core Services"
         Bot --> AuthService[Auth Service]
         Bot --> AppealsService[Appeals Service]
-        Bot --> OpenAIService[OpenAI Service]
+        Bot --> AIService[Unified AI Service]
+        AIService <--> GeminiService[Advanced Multi-AI Service]
         Bot --> Notifier[Promotions Notifier]
     end
     
@@ -40,7 +41,7 @@ graph TD
     end
     
     subgraph "External Integrations"
-        OpenAIService <-->|Assistants API| OpenAI[OpenAI Platform]
+        GeminiService <-->|API Pool| MultiAI[Gemini / OpenRouter]
     end
 ```
 
@@ -48,7 +49,7 @@ graph TD
 1.  **Gateway Pattern:** All interactions with Google Sheets go through `AsyncGoogleSheetsGateway`. This layer handles rate limiting, retries (exponential backoff), and connection stability.
 2.  **Circuit Breaker:** Implemented to prevent cascading failures. If Google Sheets becomes unresponsive, the bot temporarily degrades functionality rather than crashing.
 3.  **Graceful Shutdown:** The bot handles `SIGINT`/`SIGTERM` to safely close network connections and save state before exiting.
-4.  **No Local Database:** The system is stateless regarding persistent data; all business data resides in Google Sheets. Runtime state (like OpenAI Thread IDs) is in-memory.
+4.  **No Local Database:** The system is stateless regarding persistent data; all business data resides in Google Sheets. Runtime state is in-memory.
 
 ---
 
@@ -111,7 +112,7 @@ Stores support tickets and chat history.
 3.  **Check Status:** Is current ticket status `В работе` (In Work)?
     *   *Yes:* Silence AI. Log message to Sheet (Col E). Wait for human reply.
 4.  **AI Execution:**
-    *   Send text to **OpenAI Assistant** (Thread persistence in-ram).
+    *   Send text to **Advanced Multi-AI System** (Rotation: DeepSeek -> Gemini -> Qwen -> Llama).
     *   Receive response.
     *   **Post-Processing:** Check if AI suggests escalation ("Shall I connect you?").
     *   **Send:** Reply to user + Log to Sheet (Col E) + Set Status `Ответ ИИ`.
@@ -132,9 +133,10 @@ Stores support tickets and chat history.
 
 ### 4.1 Internal Services
 *   **Google Sheets API:** Authenticated via Service Account JSON (`GCP_SA_FILE`).
-*   **OpenAI API:** Uses `OPENAI_API_KEY`.
-    *   **Proxy Support:** Configurable via `OPENAI_PROXY` (essential for servers with restricted access, like Yandex Cloud).
-    *   **Model:** Defined by `OPENAI_ASSISTANT_ID` (Assistant preset).
+*   **Advanced Multi-AI System:**
+    *   **Gemini API:** Uses `GEMINI_API_KEYS` (rotation pool) and `gemini-2.0-flash` model.
+    *   **OpenRouter API:** Accesses varied LLMs (DeepSeek, Llama, Qwen) via `OPENROUTER_API_KEY`.
+    *   **Proxy Support:** Configurable via `PROXYAPI_BASE_URL` for bypass regional restrictions.
 
 ### 4.2 Webhooks & Mini App
 *   **Endpoint:** `/webhook/promotions` (Flask/Werkzeug).
@@ -158,7 +160,7 @@ For a beginner developer, here is what each file does:
 *   `auth_service.py`: **Security**. Handles checking user permissions in Google Sheets.
 *   `appeals_service.py`: **Support Ticket System**. Logic for creating/updating tickets in Sheets.
 *   `sheets_gateway.py`: **Database Driver**. Low-level connector to Google Sheets with retry protection.
-*   `openai_service.py`: **AI Connector**. Handles sending messages to OpenAI Assistants.
+*   `gemini_service.py`: **AI Connector**. Handles pooling, rotation, and falling back between Gemini and OpenRouter.
 
 ### 5.2 Setting Up Your Local Environment (Step-by-Step)
 1.  **Install Python 3.10+**.
@@ -175,7 +177,7 @@ For a beginner developer, here is what each file does:
 5.  **Configure Secrets**:
     *   Copy `.env.example` to `.env`.
     *   Fill in `TELEGRAM_TOKEN`, `SHEET_ID`, etc.
-    *   **Important:** If running on Yandex Cloud, set `OPENAI_PROXY`.
+    *   **Important:** If running in Russia, set `PROXYAPI_BASE_URL`.
     *   Ensure `credentials.json` (Google Service Account) is in the project folder.
 6.  **Run the Bot**:
     ```bash

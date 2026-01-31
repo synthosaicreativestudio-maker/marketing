@@ -79,13 +79,13 @@ ConnectionError: Failed to establish connection
 
 **Причины и решения:**
 
-**A. Проблемы с OpenAI:**
+**A. Проблемы с ИИ (Gemini/OpenRouter):**
 ```bash
-# Проверить proxy
-grep OPENAI_PROXY ~/.env
+# Проверить proxy для Gemini
+grep PROXYAPI_BASE_URL ~/.env
 
-# Убедиться, что proxy работает
-curl -x http://37.1.212.51:8080 https://api.openai.com/v1/models
+# Убедиться, что proxy-сервер доступен
+curl http://37.1.212.51:8443
 ```
 
 **B. Проблемы с Google Sheets:**
@@ -108,8 +108,8 @@ nslookup api.telegram.org
 
 **Решение - увеличить таймауты:**
 ```python
-# В openai_service.py или bot.py
-timeout = httpx.Timeout(60.0, connect=10.0)  # Было 30.0
+# В gemini_service.py или ai_service.py
+# Найти STREAM_INIT_TIMEOUT или аналоги
 ```
 
 ---

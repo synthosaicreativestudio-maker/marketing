@@ -12,9 +12,9 @@ def list_models():
         response = requests.get("https://openrouter.ai/api/v1/models")
         if response.status_code == 200:
             models = response.json().get('data', [])
-            deepseek_models = [m['id'] for m in models if 'deepseek' in m['id'].lower()]
-            print(f"Найдено моделей DeepSeek: {len(deepseek_models)}")
-            for model_id in deepseek_models:
+            free_models = [m['id'] for m in models if m['id'].endswith(':free')]
+            print(f"Найдено бесплатных моделей: {len(free_models)}")
+            for model_id in sorted(free_models):
                 print(f" - {model_id}")
         else:
             print(f"Ошибка {response.status_code}: {response.text}")
