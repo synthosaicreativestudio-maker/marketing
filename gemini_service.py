@@ -146,6 +146,9 @@ class GeminiService:
         self._promotions_cache = None
         self._promotions_cache_time = 0
         self._promotions_cache_ttl = 600  # 10 минут
+        
+        # Tools (Google Search, etc) - будут загружены в initialize()
+        self.tools = None
 
     async def initialize(self):
         """Async init for Knowledge Base with Rules and Tools."""
