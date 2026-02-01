@@ -174,7 +174,7 @@ class GeminiService:
         
         # Настройки модели
         # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview") 
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro") 
         self.max_history_messages = 12  # Оптимально для быстрого скользящего окна (6 пар)
         
         # Кэш для акций (Simple TTL Cache)
@@ -479,12 +479,22 @@ class GeminiService:
         # 2. Инъекция истории из Таблицы
         history_injection = ""
         if external_history and external_history.strip():
-            history_injection = f"\n\n### ИСТОРИЯ ПРЕДЫДУЩИХ ДИАЛОГОВ (УЧИТЫВАЙ ПРИ ОТВЕТЕ):\n{external_history[-15000:]}\n### КОНЕЦ ИСТОРИИ ###\n\n"
+            # Очистка истории от фраз-паразитов эскалации и системных логов
+            clean_external_history = external_history[-15000:]
+            bad_phrases = [
+                "Передаю ваш запрос специалисту",
+                "свяжется с вами в ближайшее время",
+                "[SYSTEM: Продолжение диалога]",
+                "[SYSTEM: Новая сессия]"
+            ]
+            for phrase in bad_phrases:
+                clean_external_history = clean_external_history.replace(phrase, "")
+            
             # Очищаем временную историю в памяти, если пришел свежий дамп из Таблицы
             # Это гарантирует, что Таблица — главный источник правды.
             self.clear_history(user_id)
-            self._add_to_history(user_id, "user", f"Пожалуйста, учти следующую историю диалога: {external_history[-15000:]}")
-            self._add_to_history(user_id, "model", "Поняла. Я прочитала историю из базы данных и готова продолжать обсуждение с учетом предыдущих деталей.")
+            self._add_to_history(user_id, "user", f"Вот история наших предыдущих обсуждений (учитывай её, но не повторяй системные ошибки): {clean_external_history}")
+            self._add_to_history(user_id, "model", "Поняла. Я вспомнила детали прошлых диалогов и готова продолжать общение.")
 
         # Добавляем сообщение пользователя в историю
         if content:
@@ -533,7 +543,7 @@ class GeminiService:
                     links_block += "\n**ПРАВИЛО:** Если ты используешь данные из файла выше, в конце ответа ОБЯЗАТЕЛЬНО напиши: 'Подробнее см. в документе: [Название документа](ссылка)'."
                     effective_system_instruction += links_block
 
-            config_params['system_instruction'] = effective_system_instruction + history_injection
+            config_params['system_instruction'] = effective_system_instruction
             config_params['tools'] = tools
             
             # Внедряем файлы из KnowledgeBase в историю, если кэш не используется (простой RAG)
