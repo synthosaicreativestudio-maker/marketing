@@ -294,7 +294,7 @@ def refresh_kb_handler(ai_service: AIService):
         finally:
             try:
                 await status_msg.delete()
-            except:
+            except Exception:
                 pass
 
     return handle_refresh

@@ -187,6 +187,10 @@ class GeminiService:
 
     async def initialize(self):
         """Async init for Knowledge Base with Rules and Tools."""
+        # Активация инструментов (Google Search)
+        self.tools = [types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())]
+        logger.info("Google Search Grounding activated in GeminiService tools pool.")
+
         if self.knowledge_base:
             await self.knowledge_base.initialize()
             
@@ -668,14 +672,12 @@ class GeminiService:
                     return # Прерываем стрим
                 
                 # Обнаружение ошибки истекшего кэша или устаревшего API
-                is_cache_error = False
                 error_str = str(e)
                 # Проверка на ошибки кэша: истекший, невалидный, или устаревший API
                 if ('CachedContent' in error_str and ('403' in error_str or 'PERMISSION_DENIED' in error_str)) or \
                    'google_search' in error_str or \
                    'not supported' in error_str.lower():
                     logger.warning(f"❌ Cache error or outdated API: {e}")
-                    is_cache_error = True
                     # Инвалидировать кэш в Knowledge Base
                     await self.knowledge_base.invalidate_cache()
                     # Пересоздать config БЕЗ кэша для повтора

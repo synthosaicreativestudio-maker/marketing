@@ -1,6 +1,6 @@
 import logging
 import json
-from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update, WebAppInfo, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
 from auth_service import AuthService

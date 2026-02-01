@@ -208,25 +208,37 @@ class AppealsService:
 
     async def get_raw_history(self, telegram_id: int) -> str:
         """
-        Получает сырой текст всей истории переписки из ячейки 'текст_обращений'.
+        Получает сырой текст всей истории переписки из всех ячеек 'текст_обращений' для данного пользователя.
         
         Args:
             telegram_id: ID пользователя в Telegram
             
         Returns:
-            str: текст из ячейки E или пустая строка
+            str: склеенный текст из всех найденных строк или пустая строка
         """
         if not self.is_available():
             return ""
 
         try:
             records = await self.gateway.get_all_records(self.worksheet)
+            all_history = []
+            
             for i, record in enumerate(records, start=2):
                 if str(record.get('telegram_id', '')) == str(telegram_id):
                     history = record.get('текст_обращений', '')
-                    logger.info(f"Получена история из таблицы для {mask_telegram_id(telegram_id)} (длина: {len(history)})")
-                    return history
-            return ""
+                    if history.strip():
+                        all_history.append(history)
+            
+            if not all_history:
+                return ""
+            
+            # Склеиваем историю от новых к старым (или наоборот?)
+            # Сейчас create_appeal добавляет новые сверху, так что просто склеиваем блоки.
+            # Но если у нас несколько строк, логично разделить их визуально для ИИ.
+            combined = "\n\n--- СЛЕДУЮЩИЙ БЛОК ИСТОРИИ ---\n\n".join(all_history)
+            logger.info(f"Получена полная история из {len(all_history)} строк для {mask_telegram_id(telegram_id)} (длина: {len(combined)})")
+            return combined
+            
         except Exception as e:
             logger.error(f"Ошибка получения истории из таблицы: {e}")
             return ""

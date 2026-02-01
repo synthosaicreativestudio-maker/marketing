@@ -1,7 +1,7 @@
 import os
 import logging
 from urllib.parse import urlparse
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonWebApp, MenuButtonDefault, WebAppInfo
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonDefault
 
 logger = logging.getLogger(__name__)
 
