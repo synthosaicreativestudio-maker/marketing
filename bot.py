@@ -495,14 +495,21 @@ def _run_bot_main():
             
             if webhook_url:
                 logger.info(f"Запуск в режиме WEBHOOK на {webhook_url}:{webhook_port}")
+                # Используем ручной контроль за вебхуком, чтобы избежать ReadError при старте
                 application.run_webhook(
                     listen="0.0.0.0",
                     port=webhook_port,
-                    url_path=token,  # Или другой секретный путь
+                    url_path=token,
                     webhook_url=f"{webhook_url}/{token}",
                     secret_token=webhook_secret,
                     drop_pending_updates=True,
                     stop_signals=(signal.SIGINT, signal.SIGTERM),
+                    # Добавляем таймауты для вебхука
+                    # Если Telegram долго отвечает на setWebhook, это не должно валить бота
+                    bootstrap_retries=3,
+                    read_timeout=30,
+                    write_timeout=30,
+                    connect_timeout=30,
                 )
             else:
                 logger.info("Запуск в режиме POLLING...")
