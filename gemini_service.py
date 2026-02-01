@@ -174,7 +174,7 @@ class GeminiService:
         
         # Настройки модели
         # ВАЖНО: Для Context Caching имя модели при генерации должно совпадать с тем, где создан кэш.
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro") 
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash") 
         self.max_history_messages = 12  # Оптимально для быстрого скользящего окна (6 пар)
         
         # Кэш для акций (Simple TTL Cache)
