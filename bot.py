@@ -485,19 +485,36 @@ def _run_bot_main():
     
     while restart_count < max_restart_attempts:
         try:
-            logger.info("Начинается polling для получения обновлений от Telegram...")
-            application.run_polling(
-                poll_interval=1.0,  # Интервал между запросами (1 секунда - баланс скорости и нагрузки)
-                timeout=30,  # Таймаут long polling запроса (увеличен с 10 до 30)
-                read_timeout=30,  # Таймаут чтения ответа от Telegram API
-                write_timeout=20,  # Таймаут записи запроса к Telegram API
-                connect_timeout=10,  # Таймаут установки соединения
-                pool_timeout=10,  # Таймаут ожидания свободного соединения в пуле
-                stop_signals=(signal.SIGINT, signal.SIGTERM),
-                allowed_updates=None,  # Принимаем все типы обновлений
-                drop_pending_updates=True,  # Сбрасываем устаревшие обновления при старте
-                close_loop=False  # Не закрываем loop при остановке
-            )
+            # --- Режим запуска (Webhook или Polling) ---
+            webhook_url = os.getenv("WEBHOOK_URL")
+            webhook_port = int(os.getenv("WEBHOOK_PORT", "8001"))
+            webhook_secret = os.getenv("WEBHOOK_SECRET")
+            
+            if webhook_url:
+                logger.info(f"Запуск в режиме WEBHOOK на {webhook_url}:{webhook_port}")
+                application.run_webhook(
+                    listen="0.0.0.0",
+                    port=webhook_port,
+                    url_path=token,  # Или другой секретный путь
+                    webhook_url=f"{webhook_url}/{token}",
+                    secret_token=webhook_secret,
+                    drop_pending_updates=True,
+                    stop_signals=(signal.SIGINT, signal.SIGTERM),
+                )
+            else:
+                logger.info("Запуск в режиме POLLING...")
+                application.run_polling(
+                    poll_interval=1.0,
+                    timeout=30,
+                    read_timeout=30,
+                    write_timeout=20,
+                    connect_timeout=10,
+                    pool_timeout=10,
+                    stop_signals=(signal.SIGINT, signal.SIGTERM),
+                    allowed_updates=None,
+                    drop_pending_updates=True,
+                    close_loop=False
+                )
             logger.info("Polling завершен нормально")
             # Если polling завершился нормально, выходим
             break
