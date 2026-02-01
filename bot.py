@@ -203,7 +203,10 @@ def _run_bot_main():
     # --- Создание и настройка приложения ---
     try:
         logger.info("Создание экземпляра бота...")
-        application = Application.builder().token(token).build()
+        # Увеличиваем таймауты для работы через прокси
+        from telegram.request import HTTPXRequest
+        request_config = HTTPXRequest(connection_pool_size=10, read_timeout=60.0, write_timeout=60.0, connect_timeout=60.0, http_version="1.1")
+        application = Application.builder().token(token).request(request_config).build()
         application_instance = application
     except Exception as e:
         logger.critical(f"Критическая ошибка создания приложения: {e}", exc_info=True)
@@ -538,7 +541,9 @@ def _run_bot_main():
                 
                 # Пересоздаем приложение
                 try:
-                    application = Application.builder().token(token).build()
+                    from telegram.request import HTTPXRequest
+                    request_config = HTTPXRequest(connection_pool_size=10, read_timeout=60.0, write_timeout=60.0, connect_timeout=60.0, http_version="1.1")
+                    application = Application.builder().token(token).request(request_config).build()
                     application_instance = application
                     # Переинициализируем AI сервис с актуальным gateway
                     ai_service = AIService(promotions_gateway=promotions_gateway)
