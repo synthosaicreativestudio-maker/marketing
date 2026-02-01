@@ -500,11 +500,8 @@ def _run_bot_main():
                     listen="0.0.0.0",
                     port=webhook_port,
                     url_path=token,
-                    webhook_url=None,  # Вебхук установлен вручную, чтобы избежать ReadError через прокси
+                    webhook_url=None,  # Вебхук установлен вручную
                     secret_token=webhook_secret,
-                    drop_pending_updates=True,
-                    stop_signals=(signal.SIGINT, signal.SIGTERM),
-                    bootstrap_retries=3,
                 )
             else:
                 logger.info("Запуск в режиме POLLING...")
