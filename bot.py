@@ -495,12 +495,11 @@ def _run_bot_main():
             
             if webhook_url:
                 logger.info(f"Запуск в режиме WEBHOOK на {webhook_url}:{webhook_port}")
-                # Используем ручной контроль за вебхуком, чтобы избежать ReadError при старте
                 application.run_webhook(
                     listen="0.0.0.0",
                     port=webhook_port,
                     url_path=token,
-                    webhook_url=None,  # Вебхук установлен вручную
+                    webhook_url=None,
                     secret_token=webhook_secret,
                 )
             else:
@@ -517,65 +516,30 @@ def _run_bot_main():
                     drop_pending_updates=True,
                     close_loop=False
                 )
-            logger.info("Бот завершил работу нормально")
-            break # Успешный выход
             
-        except Exception as e:
+            logger.info("Бот завершил работу нормально (run_polling/webhook returned)")
+            break # Успешный выход из while-цикла при ручной остановке
+            
+        except (TelegramError, ConnectionError, TimeoutError, socket.error) as e:
             restart_count += 1
-            wait_time = min(60, 2 ** restart_count)
-            logger.error(f"⚠️ Ошибка при запуске бота (попытка {restart_count}/{max_restart_attempts}): {e}")
+            wait_time = min(30, 5 * restart_count)
+            logger.error(f"⚠️ Сетевая ошибка (попытка {restart_count}/{max_restart_attempts}): {e}")
             if restart_count < max_restart_attempts:
                 logger.info(f"Ожидание {wait_time}с перед перезапуском...")
-                import time
                 time.sleep(wait_time)
             else:
-                logger.critical("❌ Достигнут лимит попыток перезапуска. Бот остановлен.")
+                logger.critical("❌ Достигнут лимит попыток перезапуска при сетевых ошибках.")
                 sys.exit(1)
-            # Если polling завершился нормально, выходим
-            break
-            
-        except KeyboardInterrupt:
-            logger.info("Получен сигнал прерывания, выполняется остановка...")
-            break
-            
-        except (TelegramError, ConnectionError, TimeoutError) as e:
-            restart_count += 1
-            logger.error(
-                f"Критическая ошибка при работе бота (попытка {restart_count}/{max_restart_attempts}): {e}",
-                exc_info=True
-            )
-            
-            if restart_count < max_restart_attempts:
-                wait_time = min(30, 5 * restart_count)  # Экспоненциальная задержка до 30 сек
-                logger.info(f"Перезапуск бота через {wait_time} секунд...")
-                # Задержка удалена - в асинхронной архитектуре не нужна
-                # Если нужна задержка, использовать await asyncio.sleep() в async контексте
-                
-                # Пересоздаем приложение
-                try:
-                    from telegram.request import HTTPXRequest
-                    request_config = HTTPXRequest(connection_pool_size=10, read_timeout=60.0, write_timeout=60.0, connect_timeout=60.0, http_version="1.1")
-                    application = Application.builder().token(token).request(request_config).build()
-                    application_instance = application
-                    # Переинициализируем AI сервис с актуальным gateway
-                    ai_service = AIService(promotions_gateway=promotions_gateway)
-                    setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway, profile_manager)
-                    application.post_init = post_init
-                    application.post_stop = post_stop
-                    application.add_error_handler(error_handler)
-                    logger.info("Приложение пересоздано, повторный запуск...")
-                except Exception as recreate_error:
-                    logger.critical(f"Не удалось пересоздать приложение: {recreate_error}", exc_info=True)
-                    break
-            else:
-                logger.critical(f"Достигнут лимит попыток перезапуска ({max_restart_attempts}). Завершение работы.")
-                break
                 
         except Exception as e:
-            logger.critical(f"Критическая неожиданная ошибка при запуске бота: {e}", exc_info=True)
-            # Для неожиданных ошибок не перезапускаем - это может быть проблема в коде
+            logger.critical(f"Критическая неожиданная ошибка: {e}", exc_info=True)
+            # Для неизвестных ошибок лучше упасть, чтобы systemd перезапустил весь процесс
+            sys.exit(1)
+        
+        except KeyboardInterrupt:
+            logger.info("Прерывание пользователем.")
             break
-    
+            
     logger.info("Бот завершил работу")
 
 
