@@ -56,14 +56,12 @@ class SingleInstanceGuard:
                     try:
                         proc = psutil.Process(old_pid)
                         # Проверяем, что это действительно наш бот
-                        if 'python' in proc.name().lower() and 'bot.py' in ' '.join(proc.cmdline()):
+                        if 'python' in proc.name().lower() and any(x in ' '.join(proc.cmdline()) for x in ['bot.py', 'main.py']):
                             logger.critical(
                                 f"❌ КРИТИЧЕСКАЯ ОШИБКА: Lock-файл указывает на живой процесс (PID: {old_pid})\n"
                                 f"Это приведет к 409 Conflict ошибкам!\n"
                                 f"Остановите предыдущий экземпляр: kill {old_pid}"
                             )
-                            # Socket lock должен был сработать раньше, но если файл остался от
-                            # процесса, который не держит порт (например, завис), то выходим
                             sys.exit(1)
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         pass
@@ -75,6 +73,23 @@ class SingleInstanceGuard:
             except (ValueError, IOError) as e:
                 logger.warning(f"Ошибка чтения lock-файла: {e}, удаляю его")
                 self.lockfile_path.unlink()
+
+        # 3. Агрессивный поиск клонов по имени процесса (на случай, если они не создали lock)
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['pid'] == self.pid:
+                    continue
+                cmdline = ' '.join(proc.info['cmdline'] or [])
+                # Ищем процессы, которые выглядят как наш бот
+                if 'python' in proc.info['name'].lower() and 'bot.py' in cmdline:
+                    logger.critical(
+                        f"⚠️ ОБНАРУЖЕН КЛОН БОТА! PID: {proc.info['pid']}, CMD: {cmdline}\n"
+                        f"Это приведет к конфликту API. Завершите этот процесс перез запуском нового."
+                    )
+                    # Мы не убиваем его сами (это опасно), но выходим с ошибкой
+                    sys.exit(1)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
         
         # Создаем новый lock-файл
         with open(self.lockfile_path, 'w') as f:

@@ -517,7 +517,20 @@ def _run_bot_main():
                     drop_pending_updates=True,
                     close_loop=False
                 )
-            logger.info("Polling завершен нормально")
+            logger.info("Бот завершил работу нормально")
+            break # Успешный выход
+            
+        except Exception as e:
+            restart_count += 1
+            wait_time = min(60, 2 ** restart_count)
+            logger.error(f"⚠️ Ошибка при запуске бота (попытка {restart_count}/{max_restart_attempts}): {e}")
+            if restart_count < max_restart_attempts:
+                logger.info(f"Ожидание {wait_time}с перед перезапуском...")
+                import time
+                time.sleep(wait_time)
+            else:
+                logger.critical("❌ Достигнут лимит попыток перезапуска. Бот остановлен.")
+                sys.exit(1)
             # Если polling завершился нормально, выходим
             break
             

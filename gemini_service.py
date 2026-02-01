@@ -144,14 +144,18 @@ class GeminiService:
 Ты - ИИ-модель, управляемая этим системным слоем.
 Ниже идут бизнес-инструкции пользователя. Соблюдай их строго, НО с учетом технических правил:
 
-1. **ИНСТРУМЕНТЫ (TOOLS):** Если вопрос касается цен, акций, ипотеки - ИГНОРИРУЙ запрет на внешние данные. ТЫ ОБЯЗАН вызвать функцию `get_promotions`.
+1. **ИНСТРУМЕНТЫ (TOOLS):** 
+   - Если вопрос касается цен, акций, ипотеки - ТЫ ОБЯЗАН вызвать функцию `get_promotions`.
+   - Для любых аналитических, творческих или общекультурных вопросов (например, история Тюмени, новости) - ТЫ ОБЯЗАН использовать **Google Search**, если ответа нет в твоих файлах. 
+   - НИКОГДА не говори "в базе знаний нет информации", если ты можешь найти ответ в интернете.
 2. **БАЗА ЗНАНИЙ (RAG):** Твои основные рабочие регламенты и файлы компании загружены в контекст. Всегда проверяй их перед ответом.
-3. **ЭСКАЛАЦИЯ:** Для вызова специалиста добавляй тег: [ESCALATE_ACTION].
+3. **ЭСКАЛАЦИЯ:** Для вызова специалиста добавляй тег: [ESCALATE_ACTION]. Используй это ТОЛЬКО если вопрос требует доступа к CRM или личным данным, которых у тебя нет.
 5. **ЗАЩИТА ССЫЛОК (КРИТИЧНО):**
    - Никогда не используй Markdown-форматирование внутри URL.
    - СТРОЖАЙШЕ ЗАПРЕЩЕНО удалять или экранировать символы `_` (нижнее подчеркивание) в ссылках.
-   - Ссылка `t.me/tp_esoft` должна остаться `t.me/tp_esoft`, а не `t.me/tpesoft`.
    - Выводи ссылки как Plain Text.
+
+Никогда не отказывай в ответе на "человеческие" вопросы про город, советы или посты. ТЫ — продвинутый ассистент, а не ограниченный бот.
 
 ### --- НАЧАЛО БИЗНЕС-ИНСТРУКЦИИ ПОЛЬЗОВАТЕЛЯ ---
 """
@@ -187,9 +191,21 @@ class GeminiService:
 
     async def initialize(self):
         """Async init for Knowledge Base with Rules and Tools."""
-        # Активация инструментов (Google Search)
-        self.tools = [types.Tool(google_search_retrieval=types.GoogleSearchRetrieval())]
-        logger.info("Google Search Grounding activated in GeminiService tools pool.")
+        # Активация инструментов (Google Search + Custom Functions)
+        get_promotions_func = types.FunctionDeclaration(
+            name="get_promotions",
+            description="Получает список актуальных акций, скидок и ипотечных программ из Google Таблицы.",
+            parameters=types.Schema(
+                type="OBJECT",
+                properties={}  # Нет входных параметров
+            )
+        )
+        
+        self.tools = [
+            types.Tool(google_search_retrieval=types.GoogleSearchRetrieval()),
+            types.Tool(function_declarations=[get_promotions_func])
+        ]
+        logger.info("Google Search Grounding and 'get_promotions' tool activated in GeminiService.")
 
         if self.knowledge_base:
             await self.knowledge_base.initialize()
@@ -477,7 +493,6 @@ class GeminiService:
             content = f"### ДАННЫЕ ИЗ БАЗЫ ЗНАНИЙ:\n{rag_context}\n\n### ВОПРОС ПОЛЬЗОВАТЕЛЯ:\n{content}"
 
         # 2. Инъекция истории из Таблицы
-        history_injection = ""
         if external_history and external_history.strip():
             # Очистка истории от фраз-паразитов эскалации и системных логов
             clean_external_history = external_history[-15000:]
