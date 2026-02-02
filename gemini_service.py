@@ -207,10 +207,10 @@ class GeminiService:
         )
         
         self.tools = [
-            types.Tool(google_search_retrieval=types.GoogleSearchRetrieval()),
+            types.Tool(google_search=types.GoogleSearch()),
             types.Tool(function_declarations=[get_promotions_func])
         ]
-        logger.info("Google Search Grounding and 'get_promotions' tool activated in GeminiService.")
+        logger.info("Google Search and 'get_promotions' tool activated in GeminiService.")
 
         if self.knowledge_base:
             await self.knowledge_base.initialize()
