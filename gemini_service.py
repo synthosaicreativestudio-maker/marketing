@@ -61,7 +61,14 @@ class GeminiService:
                 logger.error(f"Failed to init Gemini client with key ...{key[-4:]}: {e}")
         
         self.client = self.gemini_clients[0] if self.gemini_clients else None
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        
+        # Пул моделей Gemini с ротацией (приоритет: от мощной к легкой)
+        gemini_models_str = os.getenv("GEMINI_MODELS", "gemini-3-flash-preview,gemini-2.5-flash,gemini-2.5-flash-lite,gemini-flash-latest")
+        self.gemini_models = [m.strip() for m in gemini_models_str.split(",") if m.strip()]
+        self.gemini_model = self.gemini_models[0] if self.gemini_models else os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.current_gemini_model_index = 0
+        logger.info(f"Gemini models pool: {self.gemini_models}")
+        
 
         # 2. Пул моделей OpenRouter
         self.or_client = None
@@ -324,23 +331,25 @@ class GeminiService:
 
         # --- MULTI-PROVIDER FALLBACK LOGIC (Priority: Gemini → OpenRouter → Groq) ---
         
-        # 1. GEMINI PRIMARY (5 keys with rotation, context caching enabled)
-        if self.gemini_clients:
-            for i, client in enumerate(self.gemini_clients):
-                try:
-                    logger.info(f"Trying Gemini Client #{i+1}/{len(self.gemini_clients)}")
-                    has_content = False
-                    async for chunk in self._ask_stream_gemini_client(user_id, content, client, external_history, rag_context):
-                        if chunk:
-                            if not has_content:
-                                logger.info(f"✅ Gemini client #{i+1} started responding")
-                                has_content = True
-                            yield chunk
-                    if has_content:
-                        return
-                except Exception as e:
-                    logger.warning(f"Gemini client #{i+1} failed: {e}")
-                    continue
+        # 1. GEMINI PRIMARY (model rotation + key rotation)
+        # Стратегия: пробуем все ключи с моделью #1, затем все ключи с моделью #2, и т.д.
+        if self.gemini_clients and self.gemini_models:
+            for model_idx, model_name in enumerate(self.gemini_models):
+                for key_idx, client in enumerate(self.gemini_clients):
+                    try:
+                        logger.info(f"Trying Gemini Model '{model_name}' with Key #{key_idx+1}/{len(self.gemini_clients)}")
+                        has_content = False
+                        async for chunk in self._ask_stream_gemini_client(user_id, content, client, external_history, rag_context, model_name):
+                            if chunk:
+                                if not has_content:
+                                    logger.info(f"✅ Gemini '{model_name}' + key #{key_idx+1} started responding")
+                                    has_content = True
+                                yield chunk
+                        if has_content:
+                            return
+                    except Exception as e:
+                        logger.warning(f"Gemini '{model_name}' + key #{key_idx+1} failed: {e}")
+                        continue
 
         # 2. OpenRouter FALLBACK (Pool of free models)
         if self.or_client:
@@ -491,8 +500,10 @@ class GeminiService:
         except Exception as e:
             raise e
 
-    async def _ask_stream_gemini_client(self, user_id: int, content: str, client: genai.Client, external_history: Optional[str] = None, rag_context: str = "") -> AsyncGenerator[str, None]:
-        """Внутренний метод для стриминга через конкретного клиента Gemini."""
+    async def _ask_stream_gemini_client(self, user_id: int, content: str, client: genai.Client, external_history: Optional[str] = None, rag_context: str = "", model_name: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Внутренний метод для стриминга через конкретного клиента Gemini с указанной моделью."""
+        # Используем переданную модель или дефолтную
+        effective_model = model_name or self.gemini_model
         # 1. Инъекция контекста из RAG (если есть)
         structured_content = ""
         if rag_context:
@@ -584,7 +595,7 @@ class GeminiService:
         
         config = types.GenerateContentConfig(**config_params)
         generate_kwargs = {
-            'model': self.model_name,
+            'model': effective_model,
             'contents': history,
             'config': config
         }
