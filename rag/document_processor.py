@@ -1,6 +1,7 @@
 import os
 import logging
 import csv
+import re
 import pdfplumber
 from docx import Document
 from typing import List, Dict
@@ -8,14 +9,14 @@ from typing import List, Dict
 logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
-    """Processes various document types and extracts text chunks."""
+    """Processes various document types with semantic chunking and parent document retrieval."""
     
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
+    def __init__(self, max_chunk_size: int = 1500, min_chunk_size: int = 100):
+        self.max_chunk_size = max_chunk_size
+        self.min_chunk_size = min_chunk_size
 
     def process_file(self, file_path: str) -> List[Dict[str, str]]:
-        """Extracts text from a file and returns a list of chunks with metadata."""
+        """Extracts text from a file and returns semantically chunked pieces with parent context."""
         ext = os.path.splitext(file_path)[1].lower()
         text = ""
         
@@ -35,21 +36,23 @@ class DocumentProcessor:
             if not text.strip():
                 logger.warning(f"No text extracted from {file_path}")
                 return []
-                
-            chunks = self._split_text(text)
             
-            # Return chunks with metadata
+            # Semantic chunking with parent context
+            chunks = self._semantic_split(text)
+            
+            # Return chunks with metadata and parent context
             file_name = os.path.basename(file_path)
-            return [
-                {
+            result = []
+            for i, (chunk, parent) in enumerate(chunks):
+                result.append({
                     "content": chunk,
                     "metadata": {
                         "source": file_name,
-                        "chunk_index": i
+                        "chunk_index": i,
+                        "parent_content": parent  # Parent Document Retrieval
                     }
-                }
-                for i, chunk in enumerate(chunks)
-            ]
+                })
+            return result
             
         except Exception as e:
             logger.error(f"Error processing file {file_path}: {e}")
@@ -80,23 +83,50 @@ class DocumentProcessor:
                 text.append(" ".join(row))
         return "\n".join(text)
 
-    def _split_text(self, text: str) -> List[str]:
-        """Splits text into overlapping chunks."""
-        if not text:
-            return []
-            
-        chunks = []
-        start = 0
-        text_len = len(text)
+    def _semantic_split(self, text: str) -> List[tuple]:
+        """
+        Semantic Chunking: splits text by paragraphs first, then by sentences if needed.
+        Returns list of (chunk, parent_context) tuples for Parent Document Retrieval.
+        """
+        # Step 1: Split by double newlines (paragraphs)
+        paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
         
-        while start < text_len:
-            end = start + self.chunk_size
-            chunk = text[start:end]
-            chunks.append(chunk)
-            
-            # Move start forward but stay within overlap
-            if end >= text_len:
-                break
-            start += (self.chunk_size - self.chunk_overlap)
-            
-        return chunks
+        chunks_with_parents = []
+        
+        for para in paragraphs:
+            if len(para) <= self.max_chunk_size:
+                # Paragraph fits, use it as-is
+                # Parent = the paragraph itself (or could be expanded)
+                chunks_with_parents.append((para, para))
+            else:
+                # Paragraph too long, split by sentences
+                sentences = self._split_sentences(para)
+                current_chunk = ""
+                
+                for sentence in sentences:
+                    if len(current_chunk) + len(sentence) <= self.max_chunk_size:
+                        current_chunk += sentence + " "
+                    else:
+                        if current_chunk.strip():
+                            # Parent = full paragraph for context
+                            chunks_with_parents.append((current_chunk.strip(), para))
+                        current_chunk = sentence + " "
+                
+                if current_chunk.strip():
+                    chunks_with_parents.append((current_chunk.strip(), para))
+        
+        # Filter out too small chunks
+        chunks_with_parents = [
+            (c, p) for c, p in chunks_with_parents 
+            if len(c) >= self.min_chunk_size
+        ]
+        
+        logger.info(f"Semantic chunking: {len(paragraphs)} paragraphs -> {len(chunks_with_parents)} chunks")
+        return chunks_with_parents
+
+    def _split_sentences(self, text: str) -> List[str]:
+        """Splits text into sentences (handles Russian and English)."""
+        # Simple sentence splitter for RU/EN
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        return [s.strip() for s in sentences if s.strip()]
+
