@@ -3,23 +3,23 @@ import re
 import numpy as np
 from typing import List, Dict, Optional, Any
 from rank_bm25 import BM25Okapi
-import faiss
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
 
 class SearchEngine:
-    """Hybrid search engine using BM25 and Vector (FAISS) search."""
+    """Lightweight Hybrid search engine using BM25 + TF-IDF (no heavy dependencies)."""
     
-    def __init__(self, model_name: str = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'):
+    def __init__(self):
         self.chunks: List[Dict[str, Any]] = []
         self.bm25: Optional[BM25Okapi] = None
-        self.index: Optional[faiss.IndexFlatL2] = None
-        self.model = SentenceTransformer(model_name)
+        self.tfidf_vectorizer: Optional[TfidfVectorizer] = None
+        self.tfidf_matrix = None
         self.is_indexed = False
 
     def add_chunks(self, new_chunks: List[Dict[str, Any]]):
-        """Adds new text chunks and re-initializes both BM25 and FAISS indexes."""
+        """Adds new text chunks and re-initializes both BM25 and TF-IDF indexes."""
         if not new_chunks:
             return
             
@@ -31,7 +31,8 @@ class SearchEngine:
         """Clears all data."""
         self.chunks = []
         self.bm25 = None
-        self.index = None
+        self.tfidf_vectorizer = None
+        self.tfidf_matrix = None
         self.is_indexed = False
 
     def _tokenize(self, text: str) -> List[str]:
@@ -41,30 +42,34 @@ class SearchEngine:
         return tokens
 
     def _build_indexes(self):
-        """Builds BM25 and FAISS indexes from all current chunks."""
+        """Builds BM25 and TF-IDF indexes from all current chunks."""
         if not self.chunks:
             self.bm25 = None
-            self.index = None
+            self.tfidf_vectorizer = None
+            self.tfidf_matrix = None
             self.is_indexed = False
             return
             
-        # 1. BM25 Index
+        # 1. BM25 Index (keyword search)
         tokenized_corpus = [self._tokenize(c['content']) for c in self.chunks]
         self.bm25 = BM25Okapi(tokenized_corpus)
         
-        # 2. FAISS Vector Index
+        # 2. TF-IDF Index (lightweight semantic-like search)
         contents = [c['content'] for c in self.chunks]
-        embeddings = self.model.encode(contents, convert_to_numpy=True)
-        
-        dimension = embeddings.shape[1]
-        self.index = faiss.IndexFlatL2(dimension)
-        self.index.add(embeddings.astype('float32'))
+        self.tfidf_vectorizer = TfidfVectorizer(
+            lowercase=True,
+            token_pattern=r'[a-zа-яё0-9]+',
+            max_features=5000,
+            ngram_range=(1, 2)  # Unigrams + bigrams for better context
+        )
+        self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(contents)
         
         self.is_indexed = True
+        logger.info(f"Indexes built: BM25 + TF-IDF ({self.tfidf_matrix.shape[1]} features)")
 
     def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """Hybrid Search: Combines keyword (BM25) and Semantic (FAISS) scores."""
-        if not self.is_indexed or not self.bm25 or not self.index:
+        """Hybrid Search: Combines keyword (BM25) and TF-IDF scores."""
+        if not self.is_indexed or not self.bm25 or self.tfidf_matrix is None:
             logger.warning("Search query received but index is empty or not built.")
             return []
             
@@ -72,33 +77,22 @@ class SearchEngine:
         tokenized_query = self._tokenize(query)
         bm25_scores = self.bm25.get_scores(tokenized_query)
         
-        # 2. Semantic search (FAISS)
-        query_embedding = self.model.encode([query], convert_to_numpy=True).astype('float32')
-        distances, indices = self.index.search(query_embedding, k=min(len(self.chunks), 20))
+        # 2. TF-IDF similarity search
+        query_vec = self.tfidf_vectorizer.transform([query])
+        tfidf_scores = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
         
-        # 3. Reranking / Fusion (Simple Reciprocal Rank Fusion or Normalized Weighted Sum)
-        # For MVP, we use a simple top_k union with priority to vector search
-        semantic_results = [self.chunks[idx] for idx in indices[0] if idx != -1]
+        # 3. Combine scores (Reciprocal Rank Fusion style)
+        # Normalize both score arrays to 0-1 range
+        bm25_norm = (bm25_scores - bm25_scores.min()) / (bm25_scores.max() - bm25_scores.min() + 1e-8)
+        tfidf_norm = tfidf_scores  # Already 0-1 from cosine similarity
         
-        # Get top from BM25 as well
-        bm25_top_indices = np.argsort(bm25_scores)[-top_k:][::-1]
-        keyword_results = [self.chunks[idx] for idx in bm25_top_indices]
+        # Weighted combination (60% TF-IDF, 40% BM25)
+        combined_scores = 0.6 * tfidf_norm + 0.4 * bm25_norm
         
-        # Combine and deduplicate by content
-        seen_content = set()
-        combined_results = []
+        # Get top-k indices
+        top_indices = np.argsort(combined_scores)[-top_k:][::-1]
         
-        # Add semantic results first (usually higher quality for chat)
-        for res in semantic_results:
-            if res['content'] not in seen_content:
-                combined_results.append(res)
-                seen_content.add(res['content'])
-        
-        # Then add keyword results if missing
-        for res in keyword_results:
-            if res['content'] not in seen_content:
-                combined_results.append(res)
-                seen_content.add(res['content'])
-                
-        return combined_results[:top_k]
+        results = [self.chunks[idx] for idx in top_indices]
+        logger.debug(f"Hybrid search for '{query[:50]}...' returned {len(results)} chunks")
+        return results
 
