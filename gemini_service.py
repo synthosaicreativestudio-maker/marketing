@@ -513,14 +513,19 @@ class GeminiService:
 
         # 2. Инъекция истории из Таблицы
         if external_history and external_history.strip():
-            # Очистка истории
-            clean_external_history = external_history[-20000:]
+            # Оптимизация: инъектируем внешнюю историю только если внутренняя история пуста 
+            # (содержит только 2 начальных сообщения: системное и подтверждение)
+            history_exists = user_id in self.user_histories and len(self.user_histories[user_id]) > 2
             
-            # Мы вставляем историю как специальное системное сообщение в начало сессии, 
-            # чтобы ИИ понимал контекст, но не путал его с текущим вопросом.
-            self.clear_history(user_id)
-            self._add_to_history(user_id, "user", f"ВСПОМНИ КОНТЕКСТ ПРОШЛЫХ ДИАЛОГОВ:\n{clean_external_history}")
-            self._add_to_history(user_id, "model", "Я восстановила память о наших прошлых беседах. Готова помочь на основе этого контекста.")
+            if not history_exists:
+                logger.info(f"Injecting external history for user {user_id} (len: {len(external_history)})")
+                # Очистка для свежей инъекции
+                self.clear_history(user_id)
+                # Внешняя история уже усечена в AppealsService до 5000 символов
+                self._add_to_history(user_id, "user", f"ВСПОМНИ КОНТЕКСТ ПРОШЛЫХ ДИАЛОГОВ:\n{external_history}")
+                self._add_to_history(user_id, "model", "Я восстановила память о наших прошлых беседах. Готова помочь на основе этого контекста.")
+            else:
+                logger.debug(f"Skipping external history injection for user {user_id} (internal history active)")
 
         # Добавляем сообщение пользователя в историю
         self._add_to_history(user_id, "user", structured_content)

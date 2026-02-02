@@ -232,11 +232,14 @@ class AppealsService:
             if not all_history:
                 return ""
             
-            # Склеиваем историю от новых к старым (или наоборот?)
-            # Сейчас create_appeal добавляет новые сверху, так что просто склеиваем блоки.
-            # Но если у нас несколько строк, логично разделить их визуально для ИИ.
+            # Склеиваем историю от новых к старым
             combined = "\n\n--- СЛЕДУЮЩИЙ БЛОК ИСТОРИИ ---\n\n".join(all_history)
-            logger.info(f"Получена полная история из {len(all_history)} строк для {mask_telegram_id(telegram_id)} (длина: {len(combined)})")
+            
+            # ОГРАНИЧЕНИЕ: Берем только последние 5000 символов для экономии токенов и ускорения
+            if len(combined) > 5000:
+                combined = "[...] " + combined[-5000:]
+                
+            logger.info(f"Получена история для {mask_telegram_id(telegram_id)} (длина: {len(combined)})")
             return combined
             
         except Exception as e:

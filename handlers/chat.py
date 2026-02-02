@@ -126,22 +126,25 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     instruction = "\n\n[SYSTEM: Продолжение диалога]" if (now - last) < 28800 else "\n\n[SYSTEM: Новая сессия]"
     instruction += profile_context
     
+    # Запускаем получение истории из таблицы параллельно с показом статуса "печатает"
+    # Это экономит ~1-2 секунды сетевых задержек
+    table_history_task = asyncio.create_task(appeals_service.get_raw_history(user.id)) if appeals_service and appeals_service.is_available() else None
+    
     status_msg = await update.message.reply_text("⏳ *Синта печатает...*", parse_mode='Markdown')
     
-    full_response = ""
-    last_update = 0
-    STREAM_TOTAL_TIMEOUT = 120  # 2 минуты на весь ответ
-    stream_start_time = time.time()
-    
-    # Получение истории из Google Таблицы (ячейка E) для восстановления контекста
     table_history = ""
-    if appeals_service and appeals_service.is_available():
+    if table_history_task:
         try:
-            table_history = await appeals_service.get_raw_history(user.id)
+            table_history = await table_history_task
             if table_history:
                 logger.info(f"Context recovered from Table for {user.id} (len: {len(table_history)})")
         except Exception as e:
             logger.error(f"Error recovering history from Table: {e}")
+
+    full_response = ""
+    last_update = 0
+    STREAM_TOTAL_TIMEOUT = 120  # 2 минуты на весь ответ
+    stream_start_time = time.time()
 
     try:
         async for chunk in ai_service.ask_stream(user.id, text + instruction, external_history=table_history):

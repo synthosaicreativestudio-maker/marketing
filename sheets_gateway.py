@@ -222,6 +222,10 @@ class AsyncGoogleSheetsGateway:
         self._get_circuit_breaker()
         self._loop = None
         self._write_lock = asyncio.Lock()  # Защита от race conditions при записи
+        
+        # TTL Cache для записей
+        self._records_cache: Dict[str, Dict[str, Any]] = {}
+        self.cache_ttl = int(os.environ.get('SHEETS_CACHE_TTL', '60'))  # По умолчанию 1 минута
     
     def _get_circuit_breaker(self):
         """Получает соответствующий Circuit Breaker."""
@@ -304,17 +308,36 @@ class AsyncGoogleSheetsGateway:
             lambda: self._retry_exec(func, *args, **kwargs)
         )
     
-    async def get_all_records(self, worksheet: gspread.Worksheet) -> List[Dict]:
+    async def get_all_records(self, worksheet: gspread.Worksheet, use_cache: bool = True) -> List[Dict]:
         """
-        Получает все записи из worksheet.
+        Получает все записи из worksheet с поддержкой TTL-кэширования.
         
         Args:
             worksheet: Worksheet объект из gspread
+            use_cache: Использовать ли кэш (по умолчанию True)
             
         Returns:
             Список словарей с данными записей
         """
-        return await self._run_in_executor(worksheet.get_all_records)
+        import time
+        cache_key = f"{worksheet.spreadsheet.id}_{worksheet.id}"
+        
+        if use_cache and cache_key in self._records_cache:
+            cache_entry = self._records_cache[cache_key]
+            if time.time() - cache_entry['timestamp'] < self.cache_ttl:
+                logger.debug(f"Returning cached records for {worksheet.title} (age: {int(time.time() - cache_entry['timestamp'])}s)")
+                return cache_entry['data']
+
+        records = await self._run_in_executor(worksheet.get_all_records)
+        
+        # Обновляем кэш
+        if use_cache:
+            self._records_cache[cache_key] = {
+                'data': records,
+                'timestamp': time.time()
+            }
+        
+        return records
     
     async def append_row(self, worksheet: gspread.Worksheet, values: List[Any]) -> None:
         """
