@@ -191,14 +191,14 @@ class KnowledgeBase:
             else:
                 logger.warning("Universal RAG: No text chunks extracted.")
 
-            # 4. Gemini-specific: Upload to File API (Optional)
+            # 4. Gemini-specific: Upload to File API (ONLY if Context Caching is enabled)
             gemini_files = []
-            if self.client:
+            if self.client and self.caching_enabled:
                 import mimetypes
                 for path in local_files:
                     try:
                         mime_type, _ = await asyncio.to_thread(mimetypes.guess_type, path)
-                        logger.info(f"Uploading {path} to Gemini...")
+                        logger.info(f"Uploading {path} to Gemini for Cache...")
                         with open(path, 'rb') as f_data:
                             file_upload = await self.client.aio.files.upload(
                                 file=f_data,
@@ -214,6 +214,13 @@ class KnowledgeBase:
                     except Exception as e:
                         logger.warning(f"Optional Gemini upload failed: {e}")
                 self.active_files = gemini_files
+            else:
+                self.active_files = []
+                if self.caching_enabled:
+                    logger.warning("KnowledgeBase: client missing, cannot upload to Gemini")
+                else:
+                    logger.info("KnowledgeBase: Gemini file upload skipped (caching disabled)")
+
 
             # 5. Create Context Cache (CAG)
             if self.caching_enabled and gemini_files:
