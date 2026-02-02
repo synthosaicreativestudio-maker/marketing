@@ -204,6 +204,8 @@ class GeminiService:
     async def initialize(self):
         """Async init for Knowledge Base with Rules and Tools."""
         # Активация инструментов (Google Search + Custom Functions)
+        enable_search = os.getenv("ENABLE_GOOGLE_SEARCH", "false").lower() == "true"
+        
         get_promotions_func = types.FunctionDeclaration(
             name="get_promotions",
             description="Получает список актуальных акций, скидок и ипотечных программ из Google Таблицы.",
@@ -213,11 +215,15 @@ class GeminiService:
             )
         )
         
-        self.tools = [
-            types.Tool(google_search=types.GoogleSearch()),
-            types.Tool(function_declarations=[get_promotions_func])
-        ]
-        logger.info("Google Search and 'get_promotions' tool activated in GeminiService.")
+        self.tools = []
+        if enable_search:
+            self.tools.append(types.Tool(google_search=types.GoogleSearch()))
+            logger.info("Google Search tool activated in GeminiService.")
+        else:
+            logger.info("Google Search tool is DISABLED (via env).")
+            
+        self.tools.append(types.Tool(function_declarations=[get_promotions_func]))
+        logger.info("'get_promotions' tool activated in GeminiService.")
 
         if self.knowledge_base:
             await self.knowledge_base.initialize()
@@ -699,6 +705,17 @@ class GeminiService:
                 
                 # Обнаружение ошибки истекшего кэша или устаревшего API
                 error_str = str(e)
+                
+                # Специфичная обработка ошибки квоты (429) - не ждать, если лимит исчерпан
+                if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
+                    logger.error(f"❌ Quota exceeded (429) for Gemini: {error_str}")
+                    if attempt < MAX_RETRIES:
+                        logger.warning("Quota hit, skipping backoff and trying next key/model immediately.")
+                        # Мы НЕ ждем, так как 429 обычно не проходит за секунды
+                        continue 
+                    else:
+                        raise e # Пробрасываем выше для перехода к OpenRouter
+
                 # Проверка на ошибки кэша: истекший, невалидный, или устаревший API
                 if ('CachedContent' in error_str and ('403' in error_str or 'PERMISSION_DENIED' in error_str)) or \
                    'google_search' in error_str or \
