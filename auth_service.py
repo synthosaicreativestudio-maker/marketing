@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 
 class AuthService:
+    """
+    Сервис для управления авторизацией пользователей через Google Sheets.
+    
+    ВАЖНО: Синхронизация данных между общей базой сотрудников и таблицей авторизации
+    осуществляется через Google Apps Script. 
+    Исходный код скрипта сохранен в файле: AUTHORIZATION_SHEET_SCRIPT.js
+    """
     def __init__(self, gateway: Optional[AsyncGoogleSheetsGateway] = None):
         """Инициализация сервиса авторизации."""
         self.worksheet = None
