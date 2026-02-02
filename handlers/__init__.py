@@ -28,6 +28,7 @@ def setup_handlers(application, auth_service, ai_service, appeals_service, promo
         register_appeals_handlers(application, auth_service, appeals_service)
         logger.info("Модуль Appeals подключен")
 
+
     # 4. Акции
     if settings.ENABLE_PROMOTIONS:
         register_promotions_handlers(application, auth_service, promotions_gateway)

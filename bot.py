@@ -212,6 +212,7 @@ def _run_bot_main():
         logger.critical(f"Критическая ошибка создания приложения: {e}", exc_info=True)
         sys.exit(1)
 
+
     # Инициализация уведомлений о акциях
     try:
         logger.info("Инициализация PromotionsNotifier с Gateway...")
@@ -328,7 +329,7 @@ def _run_bot_main():
             except Exception as e:
                 logger.error(f"Ошибка запуска мониторинга ответов: {e}", exc_info=True)
 
-        # Запуск мониторинга акций
+        # Запуск мониторинг акций
         if promotions_notifier:
             logger.info("Запуск мониторинга новых акций...")
             try:
@@ -336,6 +337,7 @@ def _run_bot_main():
                 logger.info("Мониторинг акций запущен (проверка каждые 15 минут)")
             except Exception as e:
                 logger.error(f"Ошибка запуска мониторинга акций: {e}", exc_info=True)
+
 
         # Запуск PollingWatchdog
         if watchdog:
@@ -444,6 +446,7 @@ def _run_bot_main():
                 logger.info("Мониторинг акций остановлен")
             except Exception as e:
                 logger.error(f"Ошибка остановки мониторинга акций: {e}")
+
 
         # Остановка PollingWatchdog
         if watchdog:

@@ -837,67 +837,7 @@ class GeminiService:
         if user_id in self.user_histories:
             del self.user_histories[user_id]
             logger.info(f"Cleared chat history for user {user_id}")
-    async def generate_image_prompt(self, text_context: str) -> Optional[str]:
-        """Генерирует промпт для изображения на основе текста ответа (Арт-директор)."""
-        if not self.is_enabled():
-            return None
-            
-        try:
-            # Используем быструю модель-лайт для создания промпта
-            model = "gemini-2.0-flash-lite-preview-02-05"
-            prompt = (
-                f"Analyze this text and write ONE detailed, cinematic English prompt "
-                f"for high-end photorealistic image generation (8k, highly detailed) "
-                f"that perfectly illustrates the context. Return ONLY the prompt.\n\n"
-                f"Context: {text_context[:1000]}"
-            )
-            
-            response = await self.client.aio.models.generate_content(
-                model=model,
-                contents=prompt
-            )
-            
-            if response.text:
-                logger.info(f"Image prompt generated: {response.text[:50]}...")
-                return response.text.strip()
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error generating image prompt: {e}")
-            return None
-
-    async def generate_image(self, prompt: str) -> Optional[bytes]:
-        """Генерирует изображение по промпту (Художник)."""
-        if not self.is_enabled():
-            return None
-            
-        try:
-            # Используем Gemini 3 Pro Image (Preview) по требованию пользователя
-            # ID из списка моделей: models/gemini-3-pro-image-preview
-            model = "models/gemini-3-pro-image-preview"
-            
-            # Конфигурация для генерации
-            config = types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="16:9",
-                person_generation="allow_adult", # Разрешаем людей (бизнес-контекст)
-                safety_filter_level="block_only_high"
-            )
-            
-            response = await self.client.aio.models.generate_images(
-                model=model,
-                prompt=prompt,
-                config=config
-            )
-            
-            if response.generated_images:
-                image = response.generated_images[0]
-                logger.info("Image generated successfully")
-                return image.image_bytes
-            
-            logger.warning("Models returned no images")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error generating image: {e}")
-            return None
+    async def wait_for_ready(self):
+        """Ожидает инициализации базы знаний."""
+        while self._initializing:
+            await asyncio.sleep(0.5)

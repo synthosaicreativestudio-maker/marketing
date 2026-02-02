@@ -769,19 +769,19 @@
         // API Configuration
         // Определяем API_BASE_URL в зависимости от окружения
         // Приоритет: Google Apps Script > Cloudflare Tunnel > локальный сервер
-        
+
         // Google Apps Script URL
         // ВАЖНО: После развертывания Google Apps Script скопируйте URL из окна развертывания
         // и вставьте его здесь. URL будет вида: https://script.google.com/macros/s/.../exec
         const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxLWWXHpDinqz0F6-Nkf1OBXv0IpHx66J3D-P_4MA5N5qSO8QmaJh5JlUjTYJuLUt0BBg/exec';
-        
+
         // Проверяем, открыто ли мини-приложение через Telegram WebApp
         const isTelegramWebApp = window.Telegram && window.Telegram.WebApp;
-        const isGitHubPages = window.location.hostname.includes('github.io') || 
-                              window.location.hostname.includes('github.com');
-        
+        const isGitHubPages = window.location.hostname.includes('github.io') ||
+            window.location.hostname.includes('github.com');
+
         let API_BASE_URL;
-        
+
         if (isGitHubPages) {
             // Мини-приложение на GitHub Pages
             // Используем только Google Apps Script (локальный API недоступен)
@@ -790,7 +790,7 @@
             // Мини-приложение на том же сервере - используем относительный путь
             API_BASE_URL = window.location.origin;
         }
-        
+
         console.log('API_BASE_URL установлен:', API_BASE_URL);
         console.log('Google Apps Script URL:', GOOGLE_APPS_SCRIPT_URL || 'не настроен');
         console.log('Hostname:', window.location.hostname);
@@ -853,7 +853,7 @@
         async function fetchPromotions() {
             // Список URL для попыток загрузки (в порядке приоритета)
             const urlsToTry = [];
-            
+
             // 1. Google Apps Script (основной источник)
             if (GOOGLE_APPS_SCRIPT_URL && GOOGLE_APPS_SCRIPT_URL.trim()) {
                 urlsToTry.push({
@@ -865,7 +865,7 @@
             } else {
                 console.warn('⚠️ Google Apps Script URL не настроен или пуст');
             }
-            
+
             // 2. Локальный API (только если мини-приложение на том же сервере)
             if (API_BASE_URL && !isGitHubPages) {
                 urlsToTry.push({
@@ -874,16 +874,16 @@
                     name: 'Local API'
                 });
             }
-            
+
             console.log(`📡 Попытка загрузить акции с ${urlsToTry.length} источников:`, urlsToTry.map(u => `${u.name}: ${u.url}`));
-            
+
             for (let i = 0; i < urlsToTry.length; i++) {
                 const { url, isGas, name } = urlsToTry[i];
                 const isLast = i === urlsToTry.length - 1;
-                
+
                 try {
                     console.log(`🔄 [${i + 1}/${urlsToTry.length}] Попытка загрузить акции с: ${name} (${url})`);
-                    
+
                     // Для Google Apps Script используем специальные настройки
                     // Google Apps Script делает редирект на script.googleusercontent.com
                     // Это нормально, но может вызвать проблемы с CORS
@@ -894,12 +894,12 @@
                         redirect: 'follow', // Следуем редиректам (Google Apps Script редиректит на googleusercontent.com)
                         credentials: 'omit', // Не отправляем cookies
                     };
-                    
+
                     // Добавляем timeout только если поддерживается
                     if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
                         fetchOptions.signal = AbortSignal.timeout(40000); // Увеличен до 40 секунд для мобильных устройств
                     }
-                    
+
                     let response;
                     try {
                         console.log(`🌐 Начинаем запрос к ${name}...`);
@@ -910,7 +910,7 @@
                         console.error(`❌ Ошибка сети при запросе к ${name}:`, fetchError);
                         console.error(`   Тип ошибки: ${fetchError.name}`);
                         console.error(`   Сообщение: ${fetchError.message}`);
-                        
+
                         // Если это CORS ошибка, даем более понятное сообщение
                         if (fetchError.name === 'TypeError' && fetchError.message.includes('Failed to fetch')) {
                             if (isGas) {
@@ -925,31 +925,31 @@
                                 console.error(`   💡 Ошибка сети при обращении к ${name}`);
                             }
                         }
-                        
+
                         if (!isLast) {
                             console.log(`⏭️ Пробуем следующий источник...`);
                             continue;
                         }
                         throw fetchError;
                     }
-                    
+
                     // Проверяем статус ответа
                     console.log(`📊 ${name} - Response status: ${response.status}, ok: ${response.ok}, type: ${response.type}, redirected: ${response.redirected}`);
-                    
+
                     // Для Google Apps Script редирект на googleusercontent.com - это нормально
                     if (isGas && response.redirected) {
                         console.log(`✅ ${name} - Редирект выполнен успешно (это нормально для Google Apps Script)`);
                     }
-                    
+
                     // Проверяем Content-Type
                     const contentType = response.headers.get('content-type') || '';
                     console.log(`📋 ${name} - Content-Type: ${contentType}`);
-                    
+
                     // Для Google Apps Script проверяем, что Content-Type правильный
                     if (isGas && contentType && !contentType.includes('json') && !contentType.includes('text')) {
                         console.warn(`⚠️ ${name} - Неожиданный Content-Type: ${contentType}. Ожидался JSON.`);
                     }
-                    
+
                     // Для Google Apps Script, даже если статус не ok, пробуем прочитать ответ
                     // (GAS может возвращать 200 с редиректом или другие статусы)
                     // Но если это явная ошибка (4xx, 5xx) и не GAS, то пробуем следующий источник
@@ -964,7 +964,7 @@
                             throw new Error(`HTTP error! status: ${response.status}`);
                         }
                     }
-                    
+
                     // Получаем текст ответа для отладки
                     let responseText;
                     try {
@@ -977,9 +977,9 @@
                         }
                         throw textError;
                     }
-                    
+
                     console.log(`📥 ${name} - Ответ получен (${responseText.length} символов)`);
-                    
+
                     // Проверяем, что ответ не пустой
                     if (!responseText || responseText.trim().length === 0) {
                         console.warn(`⚠️ ${name} вернул пустой ответ`);
@@ -989,7 +989,7 @@
                         }
                         throw new Error('Empty response');
                     }
-                    
+
                     // Проверяем, что это не HTML страница (GAS может вернуть HTML при ошибке авторизации)
                     const trimmedText = responseText.trim();
                     if (trimmedText.startsWith('<') || trimmedText.startsWith('<!DOCTYPE') || trimmedText.startsWith('<html')) {
@@ -1004,9 +1004,9 @@
                         }
                         throw new Error('Received HTML instead of JSON. Check Google Apps Script deployment settings.');
                     }
-                    
+
                     console.log(`📄 ${name} - Первые 500 символов:`, responseText.substring(0, 500));
-                    
+
                     // Парсим JSON
                     let data;
                     try {
@@ -1014,16 +1014,16 @@
                     } catch (parseError) {
                         console.error(`❌ Ошибка парсинга JSON от ${name}:`, parseError);
                         console.error(`📄 Полный текст ответа (первые 2000 символов):`, responseText.substring(0, 2000));
-                        
+
                         if (!isLast) {
                             console.log(`⏭️ Пробуем следующий источник...`);
                             continue;
                         }
                         throw new Error(`Invalid JSON response: ${parseError.message}`);
                     }
-                    
+
                     console.log(`✅ ${name} - Данные получены:`, data);
-                    
+
                     // Проверяем, что данные в правильном формате
                     if (Array.isArray(data)) {
                         if (data.length === 0) {
@@ -1064,7 +1064,7 @@
                     if (error.stack) {
                         console.error(`   Stack:`, error.stack);
                     }
-                    
+
                     // Пробуем следующий URL, если это не последний
                     if (!isLast) {
                         console.log(`⏭️ Пробуем следующий источник...`);
@@ -1075,7 +1075,7 @@
                     return { error: error.message || 'Не удалось загрузить акции' };
                 }
             }
-            
+
             return { error: 'Не удалось загрузить акции: все источники недоступны' };
         }
 
@@ -1125,7 +1125,7 @@
                     const lower = content.toLowerCase();
                     const isDataImage = lower.startsWith('data:image/');
                     const isHttp = lower.startsWith('http://') || lower.startsWith('https://');
-                    
+
                     // Проверка на известные хостинги изображений (Google Drive, Imgur, etc.)
                     const isImageHosting = isHttp && (
                         lower.includes('googleusercontent.com') ||  // Google Drive конвертированные ссылки
@@ -1135,25 +1135,25 @@
                         lower.includes('imgbb.com') ||             // ImgBB
                         lower.includes('cloudinary.com')           // Cloudinary
                     );
-                    
+
                     // Проверка по расширению файла
                     const hasImageExtension = isHttp && (
-                        lower.endsWith('.jpg') || 
-                        lower.endsWith('.jpeg') || 
-                        lower.endsWith('.png') || 
-                        lower.endsWith('.gif') || 
+                        lower.endsWith('.jpg') ||
+                        lower.endsWith('.jpeg') ||
+                        lower.endsWith('.png') ||
+                        lower.endsWith('.gif') ||
                         lower.endsWith('.webp') ||
                         lower.endsWith('.svg')
                     );
-                    
+
                     // Проверка на видео
                     const isVideoUrl = isHttp && (
-                        lower.endsWith('.mp4') || 
-                        lower.endsWith('.webm') || 
+                        lower.endsWith('.mp4') ||
+                        lower.endsWith('.webm') ||
                         lower.endsWith('.mov') ||
                         lower.endsWith('.avi')
                     );
-                    
+
                     // Если это HTTP ссылка и не видео, и (имеет расширение изображения ИЛИ известный хостинг изображений)
                     // То считаем это изображением
                     const isImageUrl = isHttp && !isVideoUrl && (hasImageExtension || isImageHosting);
@@ -1167,7 +1167,7 @@
 
                 const dateText = (start || end) ? `${start}${start && end ? ' — ' : ''}${end}` : 'Без даты';
                 const link = (p.link || '').toString().trim();
-                
+
                 // Кнопка со ссылкой (если есть)
                 const linkButtonHtml = link ? `
                     <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--glass-border);">
@@ -1230,7 +1230,7 @@
                     const lower = content.toLowerCase();
                     const isDataImage = lower.startsWith('data:image/');
                     const isHttp = lower.startsWith('http://') || lower.startsWith('https://');
-                    
+
                     // Проверка на известные хостинги изображений (Google Drive, Imgur, etc.)
                     const isImageHosting = isHttp && (
                         lower.includes('googleusercontent.com') ||
@@ -1240,25 +1240,25 @@
                         lower.includes('imgbb.com') ||
                         lower.includes('cloudinary.com')
                     );
-                    
+
                     // Проверка по расширению файла
                     const hasImageExtension = isHttp && (
-                        lower.endsWith('.jpg') || 
-                        lower.endsWith('.jpeg') || 
-                        lower.endsWith('.png') || 
-                        lower.endsWith('.gif') || 
+                        lower.endsWith('.jpg') ||
+                        lower.endsWith('.jpeg') ||
+                        lower.endsWith('.png') ||
+                        lower.endsWith('.gif') ||
                         lower.endsWith('.webp') ||
                         lower.endsWith('.svg')
                     );
-                    
+
                     // Проверка на видео
                     const isVideoUrl = isHttp && (
-                        lower.endsWith('.mp4') || 
-                        lower.endsWith('.webm') || 
+                        lower.endsWith('.mp4') ||
+                        lower.endsWith('.webm') ||
                         lower.endsWith('.mov') ||
                         lower.endsWith('.avi')
                     );
-                    
+
                     const isImageUrl = isHttp && !isVideoUrl && (hasImageExtension || isImageHosting);
 
                     if (isDataImage || isImageUrl) {
@@ -1269,7 +1269,7 @@
                 }
 
                 const dateText = (start || end) ? `${start}${start && end ? ' — ' : ''}${end}` : 'Без даты';
-                
+
                 // Кнопка со ссылкой (если есть)
                 const linkButtonHtml = link ? `
                     <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--glass-border);">
@@ -1333,12 +1333,12 @@
                         return dateB - dateA; // От новых к старым
                     });
                 }
-                
+
                 promotionsCache = sortedData;
-                
+
                 // Главная страница: только последняя акция (первая после сортировки)
                 renderPromotions(sortedData[0] ? [sortedData[0]] : [], container, true);
-                
+
                 // Страница "Все акции": все акции в аккордеонах
                 renderPromotionsAccordion(sortedData, allContainer);
             } else {
@@ -1354,13 +1354,13 @@
                 console.error('Контейнер не найден!');
                 return;
             }
-            
+
             // Улучшенное сообщение для пользователя
             let userMessage = message;
             if (message.includes('Failed to fetch') || message.includes('CORS')) {
                 userMessage = 'Проблема с доступом к данным. Проверьте настройки Google Apps Script: доступ должен быть установлен на "Все" (Anyone).';
             }
-            
+
             container.innerHTML = `
                 <div class="glass-card error-state">
                     <p>❌ Не удалось загрузить акции</p>
