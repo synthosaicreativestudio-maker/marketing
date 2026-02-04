@@ -15,12 +15,12 @@ source "$(dirname "$0")/yandex_vm_config.sh"
 
 echo "==> Настраиваю systemd-сервисы на ${VM_USER}@${VM_HOST}"
 
-ssh -i "$SSH_KEY" "${VM_USER}@${VM_HOST}" bash <<'EOF'
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$SSH_KEY" "${VM_USER}@${VM_HOST}" bash <<EOF
 set -e
 
-REMOTE_DIR="/home/ubuntu/marketingbot"
-VENV_DIR="${REMOTE_DIR}/.venv"
-PYTHON="${VENV_DIR}/bin/python"
+REMOTE_DIR="${REMOTE_DIR:-/home/${VM_USER}/marketingbot}"
+VENV_DIR="\${REMOTE_DIR}/.venv"
+PYTHON="\${VENV_DIR}/bin/python"
 
 if [ ! -d "${REMOTE_DIR}" ]; then
   echo "❌ Каталог ${REMOTE_DIR} не найден. Сначала выполните deploy_yandex.sh"
@@ -58,10 +58,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=${REMOTE_DIR}
-EnvironmentFile=${REMOTE_DIR}/.env
-ExecStart=${PYTHON} bot.py
+User=${VM_USER}
+WorkingDirectory=\${REMOTE_DIR}
+EnvironmentFile=\${REMOTE_DIR}/.env
+ExecStart=\${PYTHON} bot.py
 Restart=always
 RestartSec=5
 
@@ -77,10 +77,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=${REMOTE_DIR}
-EnvironmentFile=${REMOTE_DIR}/.env
-ExecStart=${PYTHON} webhook_handler.py
+User=${VM_USER}
+WorkingDirectory=\${REMOTE_DIR}
+EnvironmentFile=\${REMOTE_DIR}/.env
+ExecStart=\${PYTHON} webhook_handler.py
 Restart=always
 RestartSec=5
 
@@ -103,4 +103,3 @@ echo "  sudo systemctl status marketingbot-web.service"
 EOF
 
 echo "==> Настройка systemd на ВМ завершена."
-

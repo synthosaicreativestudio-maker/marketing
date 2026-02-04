@@ -41,6 +41,10 @@ class GeminiService:
             
         proxyapi_key = os.getenv("PROXYAPI_KEY")
         proxyapi_base_url = os.getenv("PROXYAPI_BASE_URL")
+        if not proxyapi_base_url:
+            raise RuntimeError(
+                "Proxy-only mode enforced: PROXYAPI_BASE_URL is required for Gemini access."
+            )
         
         for key in gemini_keys:
             try:
@@ -52,8 +56,9 @@ class GeminiService:
                         http_options={'base_url': proxyapi_base_url, 'api_version': api_version}
                     )
                 else:
-                    # Вариант А: напрямую (с поддержкой системного прокси)
-                    client = genai.Client(api_key=key)
+                    raise RuntimeError(
+                        "Proxy-only mode enforced: direct Gemini client is disabled."
+                    )
                 
                 self.gemini_clients.append(client)
                 logger.info(f"Gemini client initialized with key ...{key[-4:]}")

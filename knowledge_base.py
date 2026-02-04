@@ -24,9 +24,10 @@ class KnowledgeBase:
         self.is_updating = False
         self._lock = asyncio.Lock()
         self._refresh_task = None
+        self._files_signature = None
         
-        # Feature flag: Context Caching (СAG)
-        self.caching_enabled = os.getenv("ENABLE_CONTEXT_CACHING", "false").lower() == "true"
+        # Feature flag: Context Caching (CAG) — принудительно выключено в proxy-only режиме
+        self.caching_enabled = False
         self.active_files = [] # Список активных файлов Gemini для RAG без кэша
         self.file_links = {}   # Mapping of filename -> Drive webViewLink
         
@@ -52,13 +53,7 @@ class KnowledgeBase:
                     }
                 )
             else:
-                # FIX: Использовать GEMINI_API_KEY вместо несуществующего self.api_key
-                api_key = os.getenv("GEMINI_API_KEY")
-                if api_key:
-                    logger.info("KnowledgeBase using Direct API")
-                    self.client = genai.Client(api_key=api_key)
-                else:
-                    logger.warning("KnowledgeBase: No API key found (GEMINI_API_KEY or PROXYAPI_KEY)")
+                logger.error("KnowledgeBase proxy-only mode: PROXYAPI_BASE_URL is required.")
         except Exception as e:
              logger.error(f"Failed to initialize Gemini Client in KnowledgeBase: {e}")
 
@@ -158,6 +153,39 @@ class KnowledgeBase:
                 logger.warning("No files found in Knowledge Base folder.")
                 self.is_updating = False
                 return
+
+            # Skip refresh if nothing changed (by id/modifiedTime/size/mimeType)
+            signature_items = []
+            for f in files_meta:
+                signature_items.append((
+                    f.get('id'),
+                    f.get('modifiedTime'),
+                    f.get('size'),
+                    f.get('mimeType')
+                ))
+            signature = tuple(sorted(signature_items))
+            if self._files_signature == signature and self.local_context_ready:
+                logger.info("Knowledge Base refresh skipped: no file changes detected.")
+                self.last_update_time = time.time()
+                self.is_updating = False
+                return
+            self._files_signature = signature
+
+            # Filter heavy/unsupported files to reduce CPU/IO
+            max_mb = int(os.getenv("MAX_DRIVE_FILE_MB", "25"))
+            max_bytes = max_mb * 1024 * 1024
+            filtered_files = []
+            for f in files_meta:
+                mime = f.get('mimeType', '')
+                size = int(f.get('size') or 0)
+                if mime in ('image/png', 'image/jpeg'):
+                    logger.info(f"Skipping image file: {f.get('name')}")
+                    continue
+                if size and size > max_bytes:
+                    logger.info(f"Skipping large file (> {max_mb}MB): {f.get('name')}")
+                    continue
+                filtered_files.append(f)
+            files_meta = filtered_files
 
             new_links = {f['name']: f['webViewLink'] for f in files_meta if 'name' in f and 'webViewLink' in f}
             self.file_links = new_links
