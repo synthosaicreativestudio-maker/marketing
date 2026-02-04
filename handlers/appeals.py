@@ -32,7 +32,7 @@ def appeals_command_handler(auth_service: AuthService, appeals_service: AppealsS
                 await update.message.reply_text("У вас пока нет обращений.")
                 return
 
-            message = "📋 **Ваши обращения:**\n\n"
+            message = "📋 Ваши обращения:\n\n"
             for i, a in enumerate(appeals, 1):
                 status = a.get('статус', 'неизвестно').lower()
                 emoji = {'новое': '🆕', 'в обработке': '⏳', 'решено': '✅'}.get(status, '❓')
@@ -44,7 +44,7 @@ def appeals_command_handler(auth_service: AuthService, appeals_service: AppealsS
                         message += f"   📝 {line[:70]}...\n"
                 message += f"   🕒 {a.get('время_обновления', '')}\n\n"
 
-            await update.message.reply_text(message, parse_mode='Markdown')
+            await update.message.reply_text(message)
         except Exception as e:
             logger.error(f"Ошибка /appeals: {e}")
             await update.message.reply_text("Ошибка при получении списка обращений.")

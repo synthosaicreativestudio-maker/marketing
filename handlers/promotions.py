@@ -58,10 +58,10 @@ async def _send_promotions(update: Update, promotions_json: str):
         await update.message.reply_text("В данный момент активных акций нет.")
         return
 
-    message = "🎉 **Активные акции и события:**\n\n"
+    message = "🎉 Активные акции и события:\n\n"
     for i, p in enumerate(promotions_data, 1):
-        message += f"{i}. **{p.get('title', 'Без названия')}**\n"
+        message += f"{i}. {p.get('title', 'Без названия')}\n"
         message += f"   📅 {p.get('start_date', '')} - {p.get('end_date', '')}\n"
         message += f"   📝 {p.get('description', '')[:150]}\n\n"
     
-    await update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message)

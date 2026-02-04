@@ -156,8 +156,8 @@ async def send_promotion_notification(promotion_data):
         
         # Формируем сообщение для акций со статусом "Активна"
         # Webhook теперь отправляется только для статуса "Активна"
-        message = "🎉 **Новая акция!**\n\n"
-        message += f"**{title}**\n\n"
+        message = "🎉 Новая акция!\n\n"
+        message += f"{title}\n\n"
         if description:
             message += f"📝 {description}\n\n"
         if start_date and end_date:
@@ -190,10 +190,11 @@ async def send_promotion_notification(promotion_data):
                 try:
                     await bot.send_message(
                         chat_id=admin_telegram_id,
-                        text=f"⚠️ **Проблема с уведомлениями**\n\n"
-                             f"Публикация акции '{title}' прошла успешно, но нет авторизованных пользователей для отправки уведомлений.\n\n"
-                             f"Проверьте таблицу авторизации.",
-                        parse_mode='Markdown'
+                        text=(
+                            "⚠️ Проблема с уведомлениями\n\n"
+                            f"Публикация акции '{title}' прошла успешно, но нет авторизованных пользователей для отправки уведомлений.\n\n"
+                            "Проверьте таблицу авторизации."
+                        )
                     )
                     logger.info(f"📧 Уведомление о проблеме отправлено админу {admin_telegram_id}")
                 except Exception as e:
@@ -208,7 +209,6 @@ async def send_promotion_notification(promotion_data):
                 await bot.send_message(
                     chat_id=user_id,
                     text=message,
-                    parse_mode='Markdown',
                     reply_markup=keyboard
                 )
                 sent_count += 1
@@ -228,8 +228,8 @@ async def send_promotion_update_notification(promotion_data):
     try:
         title = promotion_data.get('title', 'Акция обновлена')
         
-        message = "🔄 **Акция обновлена!**\n\n"
-        message += f"**{title}**\n\n"
+        message = "🔄 Акция обновлена!\n\n"
+        message += f"{title}\n\n"
         message += "Информация об акции была изменена. Нажмите кнопку ниже, чтобы посмотреть обновления!"
         
         version = "v=20260108-2"
@@ -250,7 +250,6 @@ async def send_promotion_update_notification(promotion_data):
             await bot.send_message(
                 chat_id=admin_telegram_id,
                 text=message,
-                parse_mode='Markdown',
                 reply_markup=keyboard
             )
             logger.info(f"Уведомление об обновлении акции '{title}' отправлено админу")

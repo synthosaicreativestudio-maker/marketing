@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from urllib.parse import urlparse
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonDefault
 
@@ -28,14 +29,97 @@ async def alert_admin(bot, message: str, level: str = "ERROR") -> bool:
     try:
         await bot.send_message(
             chat_id=admin_id,
-            text=f"{emoji} **{level}**\n\n{message}",
-            parse_mode="Markdown"
+            text=f"{emoji} {level}\n\n{message}"
         )
         logger.info(f"Алерт отправлен админу: {message[:50]}...")
         return True
     except Exception as e:
         logger.error(f"Не удалось отправить алерт админу: {e}")
         return False
+
+
+def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
+    """Очищает ответ ИИ от Markdown/служебных символов и приводит ссылки к виду 'Название — URL'."""
+    if not text:
+        return text
+
+    text = _convert_markdown_links(text)
+    text = _format_links(text)
+    text = _strip_markdown(text)
+    text = _normalize_whitespace(text)
+
+    if ensure_emojis:
+        text = _ensure_emojis(text)
+
+    return text
+
+
+def _convert_markdown_links(text: str) -> str:
+    # [Текст](https://example.com) -> Текст — https://example.com
+    return re.sub(r'\[([^\]]+)\]\((https?://[^\s)]+)\)', r'\1 — \2', text)
+
+
+def _format_links(text: str) -> str:
+    url_re = re.compile(r'https?://[^\s\)\]\}>]+')
+    lines = text.splitlines()
+    out_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            out_lines.append(line)
+            continue
+
+        urls = url_re.findall(stripped)
+        if not urls:
+            out_lines.append(line)
+            continue
+
+        # Если строка — это только ссылка(и)
+        if stripped in urls or stripped.rstrip(".,;") in urls:
+            if len(urls) == 1:
+                out_lines.append(f"Ссылка — {urls[0]}")
+            else:
+                for u in urls:
+                    out_lines.append(f"Ссылка — {u}")
+            continue
+
+        # Иначе берем первую ссылку и делаем "Текст — URL"
+        url = urls[0]
+        label = stripped.replace(url, "").strip()
+        label = re.sub(r'[:—–-]+$', '', label).strip()
+        if not label:
+            label = "Ссылка"
+        out_lines.append(f"{label} — {url}")
+
+    return "\n".join(out_lines)
+
+
+def _strip_markdown(text: str) -> str:
+    # Убираем Markdown-символы и заголовки
+    text = text.replace("```", "")
+    text = text.replace("**", "").replace("__", "")
+    text = text.replace("*", "").replace("#", "")
+    text = text.replace("`", "")
+    return text
+
+
+def _normalize_whitespace(text: str) -> str:
+    lines = []
+    for line in text.splitlines():
+        line = re.sub(r"[ \t]+", " ", line).strip()
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def _ensure_emojis(text: str) -> str:
+    emoji_re = re.compile(r'[\U0001F300-\U0001FAFF\u2600-\u26FF\u2700-\u27BF]')
+    count = len(emoji_re.findall(text))
+    if count == 0:
+        return f"{text} 🙂✨"
+    if count == 1:
+        return f"{text} ✨"
+    return text
 
 
 def mask_phone(phone: str) -> str:

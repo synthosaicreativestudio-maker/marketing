@@ -10,7 +10,7 @@ from auth_service import AuthService
 from ai_service import AIService
 from appeals_service import AppealsService
 from error_handler import safe_handler
-from utils import create_specialist_button, _is_user_escalation_request
+from utils import create_specialist_button, _is_user_escalation_request, sanitize_ai_text
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     # Это экономит ~1-2 секунды сетевых задержек
     table_history_task = asyncio.create_task(appeals_service.get_raw_history(user.id)) if appeals_service and appeals_service.is_available() else None
     
-    status_msg = await update.message.reply_text("⏳ *Синта печатает...*", parse_mode='Markdown')
+    status_msg = await update.message.reply_text("⏳ Синта печатает...")
     
     table_history = ""
     if table_history_task:
@@ -157,55 +157,35 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             
             full_response += chunk
             if (time.time() - last_update) > 1.5:
+                display_text = sanitize_ai_text(full_response, ensure_emojis=False)
                 try:
-                    await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode='Markdown')
+                    await status_msg.edit_text(display_text[:3900] + " ▌")
                     last_update = time.time()
                 except Exception as e:
-                    # При ошибке парсинга Markdown пробуем без форматирования
-                    if "Can't parse entities" in str(e) or "parse" in str(e).lower():
-                        try:
-                            await status_msg.edit_text(full_response[:3900] + " ▌", parse_mode=None)
-                            last_update = time.time()
-                        except Exception as inner:
-                            logger.debug(f"Fallback edit_text (parse_mode=None): {inner}", exc_info=True)
-                    else:
-                        logger.debug(f"edit_text during stream: {e}", exc_info=True)
+                    logger.debug(f"edit_text during stream: {e}", exc_info=True)
         
         # Финализация
         is_esc = "[ESCALATE_ACTION]" in full_response
         clean_response = full_response.replace("[ESCALATE_ACTION]", "").strip()
+        clean_response = sanitize_ai_text(clean_response, ensure_emojis=True)
         markup = create_specialist_button() if is_esc else None
         
         # Разделение длинных сообщений (Telegram limit 4096)
         if len(clean_response) > 4096:
-            from telegram.constants import ParseMode
             # Разбиваем на части по 4000 символов для безопасности
             parts = [clean_response[i:i+4000] for i in range(0, len(clean_response), 4000)]
             
             # Первая часть редактирует сообщение с "печатает..."
-            try:
-                await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup, parse_mode=ParseMode.MARKDOWN)
-            except Exception:
-                await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup, parse_mode=None)
+            await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup)
             
             # Остальные части отправляем новыми сообщениями
             for i, part in enumerate(parts[1:]):
                 # Кнопки только к последнему сообщению
                 current_markup = markup if i == len(parts) - 2 else None
-                try:
-                    await update.message.reply_text(part, reply_markup=current_markup, parse_mode=ParseMode.MARKDOWN)
-                except Exception:
-                    await update.message.reply_text(part, reply_markup=current_markup, parse_mode=None)
+                await update.message.reply_text(part, reply_markup=current_markup)
         else:
             # Штатный режим (короткое сообщение)
-            try:
-                await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode='Markdown')
-            except Exception as parse_error:
-                if "Can't parse entities" in str(parse_error) or "parse" in str(parse_error).lower():
-                    logger.warning(f"Markdown parsing error, sending as plain text: {parse_error}")
-                    await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode=None)
-                else:
-                    raise
+            await status_msg.edit_text(clean_response, reply_markup=markup)
         
         # Фоновое логирование
         if settings.LOG_TO_SHEETS:
@@ -237,8 +217,8 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
         from utils import alert_admin
         error_details = str(e)[:200]
         await alert_admin(
-            context.bot, 
-            f"⚠️ **Ошибка AI Chat**\nUser: {user.id}\nError: `{error_details}`",
+            context.bot,
+            f"Ошибка AI Chat\nUser: {user.id}\nError: {error_details}",
             level="ERROR"
         )
 
