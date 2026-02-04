@@ -74,8 +74,8 @@ class KnowledgeBase:
             return
             
         logger.info("KnowledgeBase initialized. Access verified.")
-        # Trigger initial cache creation in background (Disabled for stability on 1GB RAM)
-        # asyncio.create_task(self.refresh_cache())
+        # Trigger initial cache creation in background
+        asyncio.create_task(self.refresh_cache())
 
     async def get_cache_name(self) -> Optional[str]:
         """Returns the current active cache name."""
