@@ -376,24 +376,53 @@ def _run_bot_main():
         if PREVENTIVE_GUARDS_AVAILABLE:
             try:
                 from preventive_guards import MemoryMonitor
-                memory_monitor = MemoryMonitor(max_memory_mb=500)
-                
+                import psutil
+
+                total_mb = psutil.virtual_memory().total / 1024 / 1024
+                env_limit = int(os.getenv("MEMORY_MAX_MB", "0") or 0)
+                default_limit = max(900, int(total_mb * 0.60))
+                max_memory_mb = env_limit if env_limit > 0 else default_limit
+
+                alert_cooldown = int(os.getenv("MEMORY_ALERT_COOLDOWN_SEC", "1800") or 1800)
+                breach_required = int(os.getenv("MEMORY_BREACH_REQUIRED", "2") or 2)
+                breach_window = int(os.getenv("MEMORY_BREACH_WINDOW_SEC", "1800") or 1800)
+                restart_on_breach = os.getenv("MEMORY_RESTART_ON_BREACH", "true").lower() in ("1", "true", "yes", "y")
+
+                memory_monitor = MemoryMonitor(max_memory_mb=max_memory_mb)
+                last_alert_ts = 0.0
+                breach_times = []
+
                 async def check_memory_periodically():
-                    """Периодическая проверка памяти с алертами."""
+                    """Периодическая проверка памяти с алертами и антиспамом."""
+                    nonlocal last_alert_ts, breach_times
                     while True:
                         await asyncio.sleep(300)  # Каждые 5 минут
                         if not memory_monitor.check_memory():
-                            server_name = socket.gethostname()
-                            await alert_admin(
-                                application.bot,
-                                f"🖥 Сервер: {server_name}\nКритическое потребление памяти: {memory_monitor.get_memory_mb():.0f}MB!",
-                                "CRITICAL"
-                            )
-                            logger.critical(f"Memory limit exceeded on {server_name}, triggering restart...")
-                            os._exit(1)  # Systemd перезапустит
-                
+                            now = time.time()
+                            breach_times = [t for t in breach_times if (now - t) <= breach_window]
+                            breach_times.append(now)
+
+                            if (now - last_alert_ts) >= alert_cooldown:
+                                server_name = socket.gethostname()
+                                await alert_admin(
+                                    application.bot,
+                                    f"🖥 Сервер: {server_name}\nКритическое потребление памяти: {memory_monitor.get_memory_mb():.0f}MB!",
+                                    "CRITICAL"
+                                )
+                                last_alert_ts = now
+
+                            if restart_on_breach and len(breach_times) >= breach_required:
+                                logger.critical(
+                                    f"Memory limit exceeded on {socket.gethostname()}, "
+                                    f"breaches: {len(breach_times)} in {breach_window}s. Restarting..."
+                                )
+                                os._exit(1)  # Systemd перезапустит
+
                 task_tracker.create_tracked_task(check_memory_periodically(), "memory_monitor")
-                logger.info(f"Memory monitor запущен (лимит: {memory_monitor.max_memory_mb}MB)")
+                logger.info(
+                    "Memory monitor запущен "
+                    f"(лимит: {memory_monitor.max_memory_mb}MB, cooldown: {alert_cooldown}s)"
+                )
             except Exception as e:
                 logger.error(f"Ошибка запуска Memory monitor: {e}")
         
