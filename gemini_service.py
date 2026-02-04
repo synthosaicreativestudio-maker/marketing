@@ -228,11 +228,11 @@ class GeminiService:
             # Запускаем фоновое автообновление каждые 6 часов
             await self.knowledge_base.start_auto_refresh(interval_hours=6)
             
-            # ПРИНУДИТЕЛЬНО НЕ запускаем первое обновление при старте (экономим RAM на 1ГБ сервере)
-            # asyncio.create_task(self.knowledge_base.refresh_cache(
-            #     system_instruction=self.system_instruction,
-            #     tools=self.tools
-            # ))
+            # ПРИНУДИТЕЛЬНО запускаем первое обновление кэша с нашими правилами
+            asyncio.create_task(self.knowledge_base.refresh_cache(
+                system_instruction=self.system_instruction,
+                tools=self.tools
+            ))
 
     def is_enabled(self) -> bool:
         """Проверяет, доступен ли какой-либо ИИ-сервис."""
