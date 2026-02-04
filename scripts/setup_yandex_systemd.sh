@@ -55,6 +55,8 @@ sudo tee /etc/systemd/system/marketingbot-bot.service >/dev/null <<ESVC
 [Unit]
 Description=MarketingBot Telegram bot
 After=network.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -62,7 +64,7 @@ User=${VM_USER}
 WorkingDirectory=\${REMOTE_DIR}
 EnvironmentFile=\${REMOTE_DIR}/.env
 ExecStart=\${PYTHON} bot.py
-Restart=always
+Restart=on-failure
 RestartSec=5
 
 [Install]
@@ -74,6 +76,8 @@ sudo tee /etc/systemd/system/marketingbot-web.service >/dev/null <<ESVC2
 [Unit]
 Description=MarketingBot Flask web app (webhook_handler.py)
 After=network.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -81,7 +85,7 @@ User=${VM_USER}
 WorkingDirectory=\${REMOTE_DIR}
 EnvironmentFile=\${REMOTE_DIR}/.env
 ExecStart=\${PYTHON} webhook_handler.py
-Restart=always
+Restart=on-failure
 RestartSec=5
 
 [Install]

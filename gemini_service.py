@@ -231,7 +231,11 @@ class GeminiService:
             await self.knowledge_base.initialize()
             
             # Запускаем фоновое автообновление каждые 6 часов
-            await self.knowledge_base.start_auto_refresh(interval_hours=6)
+            try:
+                kb_refresh_hours = int(os.getenv("KB_REFRESH_HOURS", "12"))
+            except ValueError:
+                kb_refresh_hours = 12
+            await self.knowledge_base.start_auto_refresh(interval_hours=kb_refresh_hours)
             
             # ПРИНУДИТЕЛЬНО запускаем первое обновление кэша с нашими правилами
             asyncio.create_task(self.knowledge_base.refresh_cache(
