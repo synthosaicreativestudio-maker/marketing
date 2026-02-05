@@ -6,13 +6,10 @@ from typing import Dict, List, Optional, AsyncGenerator
 
 from google import genai
 from google.genai import types
-from openai import AsyncOpenAI
-
 # Импорты для инструментов
 from promotions_api import get_promotions_json
 from sheets_gateway import AsyncGoogleSheetsGateway
 from structured_logging import log_llm_metrics
-from memory_manager_sqlite import SQLiteMemoryManager
 
 
 logger = logging.getLogger(__name__)
@@ -68,7 +65,7 @@ class GeminiService:
                         api_key=key,
                         http_options=types.HttpOptions(
                             api_version=api_version,
-                            base_url=proxyapi_base_url if ("proxyapi.ru" in proxyapi_base_url.lower() or "relay" in proxyapi_base_url.lower()) else None
+                            base_url=proxyapi_base_url
                         )
                     )
                 else:
@@ -118,7 +115,6 @@ class GeminiService:
         # Инициализация Knowledge Base (RAG)
         from drive_service import DriveService
         from knowledge_base import KnowledgeBase
-        from memory_archiver import MemoryArchiver
         
         self.drive_service = DriveService()
         self.knowledge_base = KnowledgeBase(self.drive_service)
@@ -967,6 +963,13 @@ class GeminiService:
         if user_id in self.user_histories:
             del self.user_histories[user_id]
             logger.info(f"Cleared chat history for user {user_id}")
+        
+        if self.sqlite_memory:
+            try:
+                asyncio.create_task(self.sqlite_memory.clear_history(user_id))
+                logger.info(f"Memory: scheduled history clearing in SQLite for {user_id}")
+            except Exception as e:
+                logger.error(f"Error scheduling SQLite history clearing: {e}")
     async def wait_for_ready(self):
         """Ожидает инициализации базы знаний."""
         while self._initializing:
