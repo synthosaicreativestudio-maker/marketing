@@ -352,6 +352,10 @@ class GeminiService:
             except Exception as e:
                 logger.error(f"Error getting RAG context: {e}")
 
+        # 3. Централизованная запись вопроса в историю (ТЗ Блок А-2: Context Pinning)
+        # Это предотвращает дублирование вопроса при ретраях и переключении ключей
+        self._add_to_history(user_id, "user", f"### КОНТЕКСТ RAG:\n{rag_context}\n\n### ВОПРОС:\n{content}")
+        
         # --- MULTI-PROVIDER FALLBACK LOGIC (Priority: Gemini → OpenRouter → Groq) ---
         
         # 1. GEMINI PRIMARY (model rotation + key rotation)
@@ -371,6 +375,9 @@ class GeminiService:
                         if has_content:
                             return
                     except Exception as e:
+                        if 'has_content' in locals() and has_content:
+                            logger.error(f"Gemini stream error AFTER yield (user {user_id}): {e}")
+                            return # Прерываем, нельзя повторять если часть ответа уже ушла
                         logger.warning(f"Gemini '{model_name}' + key #{key_idx+1} failed: {e}")
                         continue
 
@@ -403,6 +410,9 @@ class GeminiService:
                     if has_content:
                         return
                 except Exception as e:
+                    if 'has_content' in locals() and has_content:
+                        logger.error(f"OpenRouter stream error AFTER yield (user {user_id}): {e}")
+                        return
                     logger.warning(f"OpenRouter model {model_id} failed: {e}")
                     continue
 
@@ -629,8 +639,7 @@ class GeminiService:
             except Exception as e:
                 logger.error(f"Error adding message to SQLite for user {user_id}: {e}")
 
-        # Добавляем сообщение пользователя в историю
-        self._add_to_history(user_id, "user", structured_content)
+        # ПРИМЕЧАНИЕ: self._add_to_history теперь вызывается централизованно в ask_stream
         
         # Получаем всю историю для отправки
         history = self._get_or_create_history(user_id)
