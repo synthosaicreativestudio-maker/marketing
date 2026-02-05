@@ -1,0 +1,160 @@
+"""
+Двухуровневая система эскалации на специалиста.
+
+Логика:
+1. Первый запрос эскалации → уточняющий вопрос
+2. Повторный запрос или настойчивость → кнопка эскалации
+
+Использует TTL-кэш для отслеживания состояния пользователей.
+"""
+from enum import Enum
+from typing import Dict
+from cachetools import TTLCache
+
+
+class EscalationLevel(Enum):
+    """Уровни эскалации."""
+    NONE = 0        # Нет запроса эскалации
+    CLARIFYING = 1  # Первый запрос — уточняем тему
+    CONFIRMED = 2   # Повторный запрос — эскалируем
+
+
+# Кэш состояний эскалации (TTL = 10 минут, макс. 1000 пользователей)
+_escalation_state: Dict[int, EscalationLevel] = TTLCache(maxsize=1000, ttl=600)
+
+
+# Фразы первого уровня (уточнение) — мягкие запросы
+FIRST_LEVEL_PHRASES = [
+    'дай специалиста',
+    'дайте специалиста',
+    'дай мне специалиста',
+    'дайте мне специалиста',
+    'нужен специалист',
+    'хочу специалиста',
+    'мне нужен специалист',
+    'соедините с менеджером',
+    'нужен человек',
+    'хочу к человеку',
+    'позови человека',
+    'вызови специалиста',
+    'переведи на специалиста',
+    'соедини со специалистом',
+    'свяжи со специалистом',
+    'нужен маркетолог',
+    'хочу маркетолога',
+]
+
+# Фразы второго уровня (немедленная эскалация) — настойчивые запросы
+IMMEDIATE_PHRASES = [
+    'просто соедините',
+    'просто дайте',
+    'просто дай',
+    'настаиваю',
+    'хватит',
+    'надоело',
+    'достал',
+    'не хочу с ботом',
+    'не хочу с роботом',
+    'живой человек сейчас',
+    'срочно специалиста',
+    'немедленно',
+    'сейчас же',
+    'без уточнений',
+    'не надо уточнять',
+    'просто переведи',
+    'просто соедини',
+    'реальный человек',
+    'живой человек',
+    'человека дай',
+    'соедините уже',
+    'дай уже специалиста',
+]
+
+
+def check_escalation(user_id: int, text: str) -> EscalationLevel:
+    """
+    Проверяет уровень эскалации для пользователя.
+    
+    Args:
+        user_id: Telegram ID пользователя
+        text: Текст сообщения
+        
+    Returns:
+        EscalationLevel: Уровень эскалации
+    """
+    text_lower = text.lower().strip()
+    
+    # Проверяем немедленную эскалацию (Level 2)
+    for phrase in IMMEDIATE_PHRASES:
+        if phrase in text_lower:
+            _escalation_state[user_id] = EscalationLevel.CONFIRMED
+            return EscalationLevel.CONFIRMED
+    
+    # Проверяем первый уровень
+    for phrase in FIRST_LEVEL_PHRASES:
+        if phrase in text_lower:
+            current = _escalation_state.get(user_id, EscalationLevel.NONE)
+            
+            if current == EscalationLevel.CLARIFYING:
+                # Повторный запрос — эскалируем
+                _escalation_state[user_id] = EscalationLevel.CONFIRMED
+                return EscalationLevel.CONFIRMED
+            else:
+                # Первый запрос — уточняем
+                _escalation_state[user_id] = EscalationLevel.CLARIFYING
+                return EscalationLevel.CLARIFYING
+    
+    return EscalationLevel.NONE
+
+
+def reset_escalation(user_id: int) -> None:
+    """
+    Сбрасывает состояние эскалации для пользователя.
+    Вызывается после успешной эскалации или завершения диалога.
+    
+    Args:
+        user_id: Telegram ID пользователя
+    """
+    _escalation_state.pop(user_id, None)
+
+
+def get_clarification_message() -> str:
+    """
+    Возвращает сообщение для уточнения темы эскалации.
+    
+    Returns:
+        str: Текст уточняющего сообщения
+    """
+    return (
+        "Чтобы направить вас к нужному специалисту, уточните, пожалуйста, "
+        "по какому вопросу нужна помощь:\n\n"
+        "1. Выгрузка объявлений (Авито, Циан, Домклик)\n"
+        "2. Медиаконтент (фото, видео)\n"
+        "3. Техническая поддержка CRM «КОСМОС»\n"
+        "4. Маркетинговые материалы (баннеры, визитки)\n"
+        "5. Другой вопрос\n\n"
+        "Если хотите сразу связаться со специалистом — напишите «соедините»."
+    )
+
+
+def get_escalation_success_message() -> str:
+    """
+    Возвращает сообщение об успешной эскалации.
+    
+    Returns:
+        str: Текст подтверждения эскалации
+    """
+    return "Передаю ваш запрос специалисту. Он свяжется с вами в ближайшее время."
+
+
+def is_escalation_active(user_id: int) -> bool:
+    """
+    Проверяет, активен ли процесс эскалации для пользователя.
+    
+    Args:
+        user_id: Telegram ID пользователя
+        
+    Returns:
+        bool: True если пользователь в процессе эскалации
+    """
+    return user_id in _escalation_state
