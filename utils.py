@@ -28,9 +28,12 @@ async def alert_admin(bot, message: str, level: str = "ERROR") -> bool:
     emoji = {"ERROR": "⚠️", "CRITICAL": "🚨", "WARNING": "⚡"}.get(level, "ℹ️")
     
     try:
+        # Экранируем сообщение, чтобы спецсимволы (<, >, &) не ломали разметку Telegram
+        safe_message = html.escape(message)
         await bot.send_message(
             chat_id=admin_id,
-            text=f"{emoji} {level}\n\n{message}"
+            text=f"{emoji} <b>{level}</b>\n\n{safe_message}",
+            parse_mode="HTML"
         )
         logger.info(f"Алерт отправлен админу: {message[:50]}...")
         return True
