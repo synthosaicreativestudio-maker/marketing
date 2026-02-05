@@ -43,13 +43,11 @@ def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
     if not text:
         return text
 
-
-
-    # text = _convert_markdown_links(text)
-    # text = _format_links(text)
-    # text = _strip_markdown(text)
+    # Сначала конвертируем Markdown в HTML с экранированием
     text = _markdown_to_telegram_html(text)
-    # text = _normalize_whitespace(text)
+    
+    # Затем форматируем ссылки, которые ИИ мог прислать "голыми"
+    text = _format_links_safe(text)
 
     if ensure_emojis:
         text = _ensure_emojis(text)
@@ -58,29 +56,44 @@ def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
 
 
 def _markdown_to_telegram_html(text: str) -> str:
-    """Конвертирует Markdown-разметку Gemini в HTML для Telegram."""
+    """Конвертирует Markdown-разметку Gemini в HTML для Telegram с экранированием."""
     if not text:
         return ""
     
+    # 0. Экранируем спецсимволы HTML
+    text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
     # 1. Жирный текст: **text** -> <b>text</b>
-    # Используем нежадный поиск .*? чтобы не захватить весь текст
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-    
-    # 2. Жирный текст alternative: __text__ -> <b>text</b>
     text = re.sub(r'__(.*?)__', r'<b>\1</b>', text)
     
-    # 3. Курсив: *text* -> <i>text</i> (только если не внутри тега)
-    # Сначала защитим уже созданные теги, если нужно, но простой реплейс обычно работает, 
-    # если нет вложенности. Telegram не поддерживает вложенность <b><i>...</i></b> идеально, но пробуем.
+    # 2. Курсив: *text* -> <i>text</i>
     text = re.sub(r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
     
-    # 4. Ссылки: [Text](URL) -> <a href="URL">Text</a>
-    text = re.sub(r'\[([^\]]+)\]\((https?://[^\s)]+)\)', r'<a href="\2">\1</a>', text)
+    # 3. Ссылки: [Text](URL) -> <a href="URL">Text</a>
+    # Telegram требует 'href="URL"', причем URL уже содержит &amp; после шага 0.
+    text = re.sub(r'\[([^&\]]+)\]\((https?://[^\s)]+)\)', r'<a href="\2">\1</a>', text)
     
-    # 5. Заголовки: ### Header -> <b>Header</b>
+    # 4. Заголовки: ### Header -> <b>Header</b>
     text = re.sub(r'^#{1,6}\s+(.*)$', r'<b>\1</b>', text, flags=re.MULTILINE)
     
     return text
+
+def _format_links_safe(text: str) -> str:
+    """Безопасно форматирует голые URL, не ломая уже созданные <a> теги."""
+    # Регулярка для URL, которые НЕ внутри href="..."
+    url_re = re.compile(r'(?<!href=")(https?://[^\s\)\]\}>]+)')
+    
+    def repl(match):
+        url = match.group(1)
+        # Если это чистый URL в тексте, превратим его в кликабельную ссылку "Источник"
+        # или просто оставим как есть, но в HTML Telegram он должен быть внутри <a> если мы хотим анкор.
+        # Для стабильности просто обернем его в <a> если он не слишком длинный
+        if len(url) < 100:
+            return f'<a href="{url}">ссылка</a>'
+        return url
+
+    return url_re.sub(repl, text)
 
 
 def _convert_markdown_links(text: str) -> str:

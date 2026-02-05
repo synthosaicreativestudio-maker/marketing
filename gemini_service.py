@@ -12,6 +12,7 @@ from openai import AsyncOpenAI
 from promotions_api import get_promotions_json
 from sheets_gateway import AsyncGoogleSheetsGateway
 from structured_logging import log_llm_metrics
+from memory_manager_sqlite import SQLiteMemoryManager
 
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,7 @@ class GeminiService:
         self.drive_service = DriveService()
         self.knowledge_base = KnowledgeBase(self.drive_service)
         self.memory_archiver = MemoryArchiver(self.drive_service)
+        self.sqlite_memory = SQLiteMemoryManager()
         
         # Проверка существования файла промпта
         if os.path.exists(system_prompt_path):
@@ -597,21 +599,28 @@ class GeminiService:
         
         structured_content += f"### ВОПРОС ПОЛЬЗОВАТЕЛЯ:\n{content}"
 
-        # 2. Инъекция истории из Таблицы
-        if external_history and external_history.strip():
+        # 2. Инъекция истории
+        # ПРИОРИТЕТ 1: Локальная память SQLite
+        local_history = await self.sqlite_memory.get_history_text(user_id)
+        if local_history:
+            structured_content += f"### ИСТОРИЯ ПОСЛЕДНИХ СООБЩЕНИЙ (MEMORY):\n{local_history}\n\n"
+            logger.debug(f"Memory: injected local SQLite history for {user_id}")
+        elif external_history and external_history.strip():
+            # ПРИОРИТЕТ 2: Внешняя история (из Таблицы) — только если локальной нет
             # Оптимизация: инъектируем внешнюю историю только если внутренняя история пуста 
             # (содержит только 2 начальных сообщения: системное и подтверждение)
             history_exists = user_id in self.user_histories and len(self.user_histories[user_id]) > 2
             
             if not history_exists:
                 logger.info(f"Injecting external history for user {user_id} (len: {len(external_history)})")
-                # Очистка для свежей инъекции
-                self.clear_history(user_id)
                 # Внешняя история уже усечена в AppealsService до 5000 символов
-                self._add_to_history(user_id, "user", f"ВСПОМНИ КОНТЕКСТ ПРОШЛЫХ ДИАЛОГОВ:\n{external_history}")
-                self._add_to_history(user_id, "model", "Я восстановила память о наших прошлых беседах. Готова помочь на основе этого контекста.")
+                structured_content += f"### ИСТОРИЯ ПРЕДЫДУЩИХ ОБРАЩЕНИЙ:\n{external_history}\n\n"
+                logger.debug(f"Memory: recovered context from External Table for {user_id}")
             else:
                 logger.debug(f"Skipping external history injection for user {user_id} (internal history active)")
+
+        # 3. Добавление текущего вопроса в SQLite ДО запроса (чтобы он был в памяти для след. раза)
+        asyncio.create_task(self.sqlite_memory.add_message(user_id, "user", content))
 
         # Добавляем сообщение пользователя в историю
         self._add_to_history(user_id, "user", structured_content)
@@ -837,6 +846,9 @@ class GeminiService:
         if full_reply_parts:
             full_reply = "".join(full_reply_parts)
             self._add_to_history(user_id, "model", full_reply)
+            
+            # Сохраняем в SQLite (КРИТИЧНО для памяти)
+            asyncio.create_task(self.sqlite_memory.add_message(user_id, "model", full_reply))
             
             # Метрики LLM: логируем время ответа
             llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
