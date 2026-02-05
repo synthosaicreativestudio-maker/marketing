@@ -2,6 +2,7 @@ import os
 import logging
 import re
 from urllib.parse import urlparse
+import html
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonDefault
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,11 @@ def _markdown_to_telegram_html(text: str) -> str:
     """Конвертирует Markdown-разметку Gemini в HTML для Telegram."""
     if not text:
         return ""
+    
+    # Экранируем спецсимволы HTML (<, >, &) ПЕРЕД обработкой Markdown
+    # Это предотвращает ошибки "Can't parse entities", если в тексте есть < или >
+    text = html.escape(text, quote=False)
+
     
     # 1. Жирный текст: **text** -> <b>text</b>
     # Используем нежадный поиск .*? чтобы не захватить весь текст
