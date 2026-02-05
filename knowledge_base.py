@@ -175,21 +175,29 @@ class KnowledgeBase:
             max_mb = int(os.getenv("MAX_DRIVE_FILE_MB", "25"))
             max_bytes = max_mb * 1024 * 1024
             filtered_files = []
+            
+            # Предварительный сбор ссылок для всех файлов (включая картинки)
+            all_links = {f['name']: f['webViewLink'] for f in files_meta if 'name' in f and 'webViewLink' in f}
+            self.file_links = all_links
+            
             for f in files_meta:
                 mime = f.get('mimeType', '')
                 size = int(f.get('size') or 0)
-                if mime in ('image/png', 'image/jpeg'):
-                    logger.info(f"Skipping image file: {f.get('name')}")
+                name = f.get('name', '')
+                
+                # Пропускаем только "чистые" картинки, но оставляем .ocr.txt
+                if mime in ('image/png', 'image/jpeg') and not name.lower().endswith('.ocr.txt'):
+                    logger.info(f"Skipping image file: {name} (waiting for OCR version)")
                     continue
+                
                 if size and size > max_bytes:
-                    logger.info(f"Skipping large file (> {max_mb}MB): {f.get('name')}")
+                    logger.info(f"Skipping large file (> {max_mb}MB): {name}")
                     continue
+                    
                 filtered_files.append(f)
+            
             files_meta = filtered_files
-
-            new_links = {f['name']: f['webViewLink'] for f in files_meta if 'name' in f and 'webViewLink' in f}
-            self.file_links = new_links
-            logger.info(f"Indexed {len(self.file_links)} file links")
+            logger.info(f"Indexed {len(self.file_links)} file links, will download {len(files_meta)} text-based files")
 
             # 2. Download files locally
             local_files = []
@@ -292,9 +300,15 @@ class KnowledgeBase:
         
         context = []
         for res in results:
-            source = res.get('metadata', {}).get('source', 'unknown')
+            metadata = res.get('metadata', {})
+            source = metadata.get('source', 'unknown')
             content = res.get('content', '')
-            context.append(f"SOURCE: {source}\nCONTENT: {content}\n")
+            
+            # Пытаемся добавить ссылку на файл из Drive
+            link = self.file_links.get(source, "")
+            source_info = f"{source} (Link: {link})" if link else source
+            
+            context.append(f"SOURCE: {source_info}\nCONTENT: {content}\n")
             
         return "\n---\n".join(context)
 

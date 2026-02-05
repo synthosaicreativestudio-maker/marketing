@@ -26,11 +26,13 @@ class DocumentProcessor:
         text = ""
         
         try:
+            is_ocr = file_path.lower().endswith('.ocr.txt')
+            
             if ext == '.pdf':
                 text = self._extract_pdf(file_path)
             elif ext in ('.docx', '.doc'):
                 text = self._extract_docx(file_path)
-            elif ext == '.txt':
+            elif ext == '.txt' or is_ocr:
                 text = self._extract_txt(file_path)
             elif ext == '.csv':
                 text = self._extract_csv(file_path)
@@ -47,12 +49,16 @@ class DocumentProcessor:
             
             # Return chunks with metadata and parent context
             file_name = os.path.basename(file_path)
+            # Если это OCR, пытаемся получить имя оригинального файла (убираем .ocr.txt)
+            original_source = file_name.replace('.ocr.txt', '') if is_ocr else file_name
+            
             result = []
             for i, (chunk, parent) in enumerate(chunks):
                 result.append({
                     "content": chunk,
                     "metadata": {
-                        "source": file_name,
+                        "source": original_source,
+                        "is_ocr": is_ocr,
                         "chunk_index": i,  # Ключевой индекс для Sentence Window
                         "parent_content": parent,  # Parent Document Retrieval
                         "total_chunks": len(chunks)
