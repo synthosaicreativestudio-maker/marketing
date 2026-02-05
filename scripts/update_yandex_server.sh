@@ -4,7 +4,8 @@
 echo "🚀 Обновление MarketingBot на Yandex VM..."
 
 # Переходим в папку проекта
-cd /home/ubuntu/marketingbot
+source "$(dirname "$0")/yandex_vm_config.sh"
+cd "${REMOTE_DIR:-/home/marketing/marketingbot}"
 
 # Обновляем код из GitHub
 echo "📥 Обновление кода из GitHub..."
