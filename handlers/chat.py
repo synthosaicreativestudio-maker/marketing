@@ -172,6 +172,11 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
         context.user_data['last_interaction_timestamp'] = now
         
         instruction = "\n\n[SYSTEM: Продолжение диалога]" if (now - last) < 28800 else "\n\n[SYSTEM: Новая сессия]"
+        
+        # Принудительная инъекция имени (костыль, если профиль не загрузился)
+        if user.first_name:
+            instruction += f"\nИмя пользователя: {user.first_name}. Обращайся к нему по имени!"
+            
         instruction += profile_context
     
     # Для простых запросов не загружаем историю из таблицы
@@ -208,7 +213,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             if (time.time() - last_update) > 1.5:
                 display_text = sanitize_ai_text(full_response, ensure_emojis=False)
                 try:
-                    await status_msg.edit_text(display_text[:3900] + " ▌", parse_mode="Markdown")
+                    await status_msg.edit_text(display_text[:3900] + " ▌", parse_mode="HTML")
                     last_update = time.time()
                 except Exception as e:
                     logger.debug(f"edit_text during stream: {e}", exc_info=True)
@@ -225,16 +230,16 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             parts = [clean_response[i:i+4000] for i in range(0, len(clean_response), 4000)]
             
             # Первая часть редактирует сообщение с "печатает..."
-            await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup, parse_mode="Markdown")
+            await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup, parse_mode="HTML")
             
             # Остальные части отправляем новыми сообщениями
             for i, part in enumerate(parts[1:]):
                 # Кнопки только к последнему сообщению
                 current_markup = markup if i == len(parts) - 2 else None
-                await update.message.reply_text(part, reply_markup=current_markup, parse_mode="Markdown")
+                await update.message.reply_text(part, reply_markup=current_markup, parse_mode="HTML")
         else:
             # Штатный режим (короткое сообщение)
-            await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode="Markdown")
+            await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode="HTML")
         
         # Фоновое логирование
         if settings.LOG_TO_SHEETS:

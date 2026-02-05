@@ -44,14 +44,42 @@ def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
         return text
 
 
+
     # text = _convert_markdown_links(text)
     # text = _format_links(text)
-    text = _strip_markdown(text)
-    text = _normalize_whitespace(text)
+    # text = _strip_markdown(text)
+    text = _markdown_to_telegram_html(text)
+    # text = _normalize_whitespace(text)
 
     if ensure_emojis:
         text = _ensure_emojis(text)
 
+    return text
+
+
+def _markdown_to_telegram_html(text: str) -> str:
+    """Конвертирует Markdown-разметку Gemini в HTML для Telegram."""
+    if not text:
+        return ""
+    
+    # 1. Жирный текст: **text** -> <b>text</b>
+    # Используем нежадный поиск .*? чтобы не захватить весь текст
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    
+    # 2. Жирный текст alternative: __text__ -> <b>text</b>
+    text = re.sub(r'__(.*?)__', r'<b>\1</b>', text)
+    
+    # 3. Курсив: *text* -> <i>text</i> (только если не внутри тега)
+    # Сначала защитим уже созданные теги, если нужно, но простой реплейс обычно работает, 
+    # если нет вложенности. Telegram не поддерживает вложенность <b><i>...</i></b> идеально, но пробуем.
+    text = re.sub(r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
+    
+    # 4. Ссылки: [Text](URL) -> <a href="URL">Text</a>
+    text = re.sub(r'\[([^\]]+)\]\((https?://[^\s)]+)\)', r'<a href="\2">\1</a>', text)
+    
+    # 5. Заголовки: ### Header -> <b>Header</b>
+    text = re.sub(r'^#{1,6}\s+(.*)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+    
     return text
 
 
