@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 # Импорты для инструментов
 from promotions_api import get_promotions_json
 from sheets_gateway import AsyncGoogleSheetsGateway
+from structured_logging import log_llm_metrics
 
 
 logger = logging.getLogger(__name__)
@@ -106,10 +107,11 @@ class GeminiService:
                 groq_proxy_url = os.getenv("GROQ_PROXY_URL", os.getenv("PROXYAPI_BASE_URL"))
                 
                 if groq_proxy_url:
-                    # Настраиваем httpx клиент с прокси
+                    # Настраиваем httpx клиент с прокси (читаем из .env)
                     import httpx
+                    proxy_url = os.getenv("TINYPROXY_URL", "")
                     http_client = httpx.AsyncClient(
-                        proxy="http://root:LEJ6U5chSK@37.1.212.51:8080",
+                        proxy=proxy_url if proxy_url else None,
                         timeout=60.0
                     )
                     self.groq_client = AsyncOpenAI(
@@ -517,6 +519,9 @@ class GeminiService:
 
     async def _ask_stream_gemini_client(self, user_id: int, content: str, client: genai.Client, external_history: Optional[str] = None, rag_context: str = "", model_name: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Внутренний метод для стриминга через конкретного клиента Gemini с указанной моделью."""
+        # Метрики LLM: замер времени
+        llm_start_time = time.perf_counter()
+        
         # Используем переданную модель или дефолтную
         effective_model = model_name or self.gemini_model
         # 1. Инъекция контекста из RAG (если есть)
@@ -766,7 +771,16 @@ class GeminiService:
         if full_reply_parts:
             full_reply = "".join(full_reply_parts)
             self._add_to_history(user_id, "model", full_reply)
-            logger.info(f"Stream finished for user {user_id}, history updated. Sources: {len(grounding_sources)}")
+            
+            # Метрики LLM: логируем время ответа
+            llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
+            log_llm_metrics(
+                user_id=user_id,
+                model=effective_model,
+                duration_ms=llm_duration_ms,
+                success=True
+            )
+            logger.info(f"Stream finished for user {user_id}, history updated. Sources: {len(grounding_sources)}, Duration: {llm_duration_ms:.0f}ms")
             
             # Архивация истории для "памяти"
             if self.memory_archiver:
