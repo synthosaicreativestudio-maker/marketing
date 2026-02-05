@@ -43,8 +43,9 @@ def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
     if not text:
         return text
 
-    text = _convert_markdown_links(text)
-    text = _format_links(text)
+
+    # text = _convert_markdown_links(text)
+    # text = _format_links(text)
     text = _strip_markdown(text)
     text = _normalize_whitespace(text)
 
@@ -96,10 +97,9 @@ def _format_links(text: str) -> str:
 
 
 def _strip_markdown(text: str) -> str:
-    # Убираем Markdown-символы и заголовки
+    # Убираем только символы, которые могут сломать некоторые интерфейсы 
+    # (но оставляем жирный, курсив и заголовки для Телеграма)
     text = text.replace("```", "")
-    text = text.replace("**", "").replace("__", "")
-    text = text.replace("*", "").replace("#", "")
     text = text.replace("`", "")
     return text
 

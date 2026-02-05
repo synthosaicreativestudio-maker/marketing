@@ -130,6 +130,18 @@ class GeminiService:
             except Exception as e:
                 logger.error(f"Failed to initialize Groq: {e}")
 
+        # 4. Резервный провайдер OpenAI (Прямой)
+        self.oa_client = None
+        self.oa_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY") 
+        self.oa_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        
+        if self.oa_api_key and not str(self.oa_api_key).startswith("sk-or-"):
+            try:
+                self.oa_client = AsyncOpenAI(api_key=self.oa_api_key)
+                logger.info(f"OpenAI fallback client initialized. Model: {self.oa_model}")
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI fallback: {e}")
+
 
         
         # Загрузка системного промпта
@@ -168,11 +180,13 @@ class GeminiService:
 3. **ПОИСК КОНТАКТОВ:** 
    - Если пользователь просит контакт - СНАЧАЛА ищи в `system_prompt` (техподдержка), ЗАТЕМ в файле «Телефонный справочник сотрудников и партнеров компании.txt» (из БЗ), НО НИКОГДА не выводи ссылку на сам файл. Вместо этого всегда давай ссылку на актуальный онлайн-справочник: https://ecosystem.etagi.com/phonebook.
 4. **ЗАЩИТА ССЫЛОК И АТРИБУЦИЯ:** 
-   - Оформляй ссылки как текст‑ссылки в формате: «Название — URL». Не используй Markdown и не выводи «голые» ссылки отдельной строкой.
+   - Оформляй все ссылки СТРОГО через Markdown в формате: [Название](URL).
+   - ЗАПРЕЩЕНО выводить "голые" URL-адреса в тексте (например, https://example.com).
    - ОБЯЗАТЕЛЬНО указывай источник информации (например: "Согласно базе знаний «Этажи»...").
-5. **ФОРМАТИРОВАНИЕ И ЭМОДЗИ:**
-   - Не используй Markdown‑разметку и символы оформления (**, __, #, *, >).
-   - Эмодзи: 1–3 в каждом обычном ответе, без перегруза.
+5. **СТИЛЬ И ЭМОДЗИ:**
+   - Используй Markdown (жирный текст) для акцентов.
+   - Эмодзи: 2–5 в каждом ответе для создания живой и поддерживающей атмосферы.
+   - Ты — дружелюбный наставник. Обращайся к пользователю по имени из [USER PROFILE] и поддерживай его.
 
 ТЫ — продвинутый ассистент, работающий на базе знаний компании. Генерируй лучшие предложения, используя актуальные регламенты.
 
@@ -447,6 +461,36 @@ class GeminiService:
                     return
             except Exception as e:
                 logger.warning(f"Groq failed: {e}")
+
+        # 4. OpenAI FINAL FALLBACK (If configured and not already tried via OR)
+        if self.oa_client:
+            try:
+                logger.info(f"Trying OpenAI final fallback: {self.oa_model}")
+                has_content = False
+                messages = [
+                    {"role": "system", "content": self.system_instruction},
+                    {"role": "user", "content": f"### КОНТЕКСТ БАЗЫ ЗНАНИЙ:\n{rag_context}\n\n### ВОПРОС:\n{content}"}
+                ]
+                
+                response = await self.oa_client.chat.completions.create(
+                    model=self.oa_model,
+                    messages=messages,
+                    stream=True,
+                    temperature=0.7
+                )
+                
+                async for chunk in response:
+                    text = chunk.choices[0].delta.content
+                    if text:
+                        if not has_content:
+                            logger.info(f"✅ OpenAI {self.oa_model} started responding")
+                            has_content = True
+                        yield text
+                
+                if has_content:
+                    return
+            except Exception as e:
+                logger.warning(f"OpenAI fallback failed: {e}")
 
         # Если дошли сюда — все провайдеры и ключи упали
         logger.error(f"All AI providers and keys failed for user {user_id}")
