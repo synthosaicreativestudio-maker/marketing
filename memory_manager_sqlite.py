@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 class SQLiteMemoryManager:
     """Управление памятью диалогов через локальный SQLite."""
     
-    def __init__(self, db_path: str = "chat_memory.db"):
+    def __init__(self, db_path: str = "/home/marketing/marketingbot/chat_memory.db"):
         self.db_path = db_path
         self._init_db()
 

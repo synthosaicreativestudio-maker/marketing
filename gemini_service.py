@@ -1,7 +1,7 @@
 import os
-import logging
 import asyncio
 import time
+import logging
 from typing import Dict, List, Optional, AsyncGenerator
 
 from google import genai
@@ -43,29 +43,43 @@ class GeminiService:
             
         proxyapi_key = os.getenv("PROXYAPI_KEY")
         proxyapi_base_url = os.getenv("PROXYAPI_BASE_URL")
+        
+        logger.info(f"Found {len(gemini_keys)} Gemini API keys in environment.")
+        logger.info(f"Proxy config: base_url={proxyapi_base_url}, key_present={bool(proxyapi_key)}")
+        
         if not proxyapi_base_url:
             raise RuntimeError(
                 "Proxy-only mode enforced: PROXYAPI_BASE_URL is required for Gemini access."
             )
         
+        proxy_url = os.getenv("TINYPROXY_URL")
+        if proxy_url:
+            os.environ["HTTP_PROXY"] = proxy_url
+            os.environ["HTTPS_PROXY"] = proxy_url
+            logger.info("System-wide PROXY (TINYPROXY) activated for AI services")
+        
         for key in gemini_keys:
             try:
-                if proxyapi_key and proxyapi_base_url:
-                    # Вариант Б: через прокси
+                logger.info(f"Attempting to init Gemini client with key ...{key[-4:]}")
+                if proxyapi_base_url:
+                    # Вариант Б: через прокси-релей (например, ProxyAPI.ru)
                     api_version = os.getenv("PROXYAPI_VERSION", "v1beta")
                     client = genai.Client(
                         api_key=key,
-                        http_options={'base_url': proxyapi_base_url, 'api_version': api_version}
+                        http_options=types.HttpOptions(
+                            api_version=api_version,
+                            base_url=proxyapi_base_url if ("proxyapi.ru" in proxyapi_base_url.lower() or "relay" in proxyapi_base_url.lower()) else None
+                        )
                     )
                 else:
-                    raise RuntimeError(
-                        "Proxy-only mode enforced: direct Gemini client is disabled."
-                    )
-                
+                    client = genai.Client(api_key=key)
+
                 self.gemini_clients.append(client)
                 logger.info(f"Gemini client initialized with key ...{key[-4:]}")
             except Exception as e:
-                logger.error(f"Failed to init Gemini client with key ...{key[-4:]}: {e}")
+                logger.error(f"CRITICAL: Failed to init Gemini client with key ...{key[-4:]}: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
         
         self.client = self.gemini_clients[0] if self.gemini_clients else None
         
@@ -77,71 +91,23 @@ class GeminiService:
         logger.info(f"Gemini models pool: {self.gemini_models}")
         
 
-        # 2. Пул моделей OpenRouter
+        # 2. OpenRouter — ОТКЛЮЧЕН (упрощение архитектуры)
         self.or_client = None
-        self.or_api_key = os.getenv("OPENROUTER_API_KEY")
-        or_models_str = os.getenv("OPENROUTER_MODELS", "qwen/qwen-2.5-72b-instruct:free,meta-llama/llama-3.3-70b-instruct:free,deepseek/deepseek-r1-0528:free")
-        self.or_models = [m.strip() for m in or_models_str.split(",") if m.strip()]
+        self.or_api_key = None
+        self.or_models = []
+        logger.info("OpenRouter: DISABLED (simplified architecture)")
         
-        if self.or_api_key:
-            try:
-                self.or_client = AsyncOpenAI(
-                    base_url="https://openrouter.ai/api/v1",
-                    api_key=self.or_api_key,
-                    default_headers={
-                        "HTTP-Referer": "https://github.com/synthosaicreativestudio-maker/marketingbot",
-                        "X-Title": "MarketingBot"
-                    }
-                )
-                logger.info(f"OpenRouter client initialized. Models pool: {self.or_models}")
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenRouter: {e}")
-        
-        # 3. Резервный провайдер Groq (сверхбыстрый LPU) — через прокси для обхода геоблокировки
+        # 3. Groq — ОТКЛЮЧЕН (упрощение архитектуры)
         self.groq_client = None
-        self.groq_api_key = os.getenv("GROQ_API_KEY")
-        self.groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-        
-        if self.groq_api_key:
-            try:
-                # Используем тот же прокси что и для Gemini (американский сервер)
-                groq_proxy_url = os.getenv("GROQ_PROXY_URL", os.getenv("PROXYAPI_BASE_URL"))
-                
-                if groq_proxy_url:
-                    # Настраиваем httpx клиент с прокси (читаем из .env)
-                    import httpx
-                    proxy_url = os.getenv("TINYPROXY_URL", "")
-                    http_client = httpx.AsyncClient(
-                        proxy=proxy_url if proxy_url else None,
-                        timeout=60.0
-                    )
-                    self.groq_client = AsyncOpenAI(
-                        base_url="https://api.groq.com/openai/v1",
-                        api_key=self.groq_api_key,
-                        http_client=http_client
-                    )
-                    logger.info(f"Groq client initialized via US proxy. Model: {self.groq_model}")
-                else:
-                    # Без прокси (напрямую)
-                    self.groq_client = AsyncOpenAI(
-                        base_url="https://api.groq.com/openai/v1",
-                        api_key=self.groq_api_key
-                    )
-                    logger.info(f"Groq client initialized (direct). Model: {self.groq_model}")
-            except Exception as e:
-                logger.error(f"Failed to initialize Groq: {e}")
+        self.groq_api_key = None
+        self.groq_model = None
+        logger.info("Groq: DISABLED (simplified architecture)")
 
-        # 4. Резервный провайдер OpenAI (Прямой)
+        # 4. OpenAI — ОТКЛЮЧЕН (упрощение архитектуры)
         self.oa_client = None
-        self.oa_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY") 
-        self.oa_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        
-        if self.oa_api_key and not str(self.oa_api_key).startswith("sk-or-"):
-            try:
-                self.oa_client = AsyncOpenAI(api_key=self.oa_api_key)
-                logger.info(f"OpenAI fallback client initialized. Model: {self.oa_model}")
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenAI fallback: {e}")
+        self.oa_api_key = None
+        self.oa_model = None
+        logger.info("OpenAI: DISABLED (simplified architecture)")
 
 
         
@@ -156,8 +122,14 @@ class GeminiService:
         
         self.drive_service = DriveService()
         self.knowledge_base = KnowledgeBase(self.drive_service)
-        self.memory_archiver = MemoryArchiver(self.drive_service)
-        self.sqlite_memory = SQLiteMemoryManager()
+        # 5. Инициализация памяти SQLite
+        try:
+            from memory_manager_sqlite import SQLiteMemoryManager
+            self.sqlite_memory = SQLiteMemoryManager()
+            logger.info("SQLite Memory Manager integrated into GeminiService.")
+        except Exception as e:
+            logger.error(f"Failed to integrate SQLite Memory: {e}")
+            self.sqlite_memory = None
         
         # Проверка существования файла промпта
         if os.path.exists(system_prompt_path):
@@ -266,7 +238,7 @@ class GeminiService:
 
     def is_enabled(self) -> bool:
         """Проверяет, доступен ли какой-либо ИИ-сервис."""
-        return self.client is not None or self.or_client is not None
+        return self.client is not None or self.or_client is not None or (hasattr(self, 'oa_client') and self.oa_client is not None)
 
     def _cleanup_old_histories(self) -> None:
         """Очистка старых историй для предотвращения memory leak."""
@@ -583,6 +555,35 @@ class GeminiService:
                     full_reply += text
                     yield text
         except Exception as e:
+            raise e
+
+    async def _ask_stream_openai(self, user_id: int, content: str, external_history: Optional[str] = None, rag_context: str = "") -> AsyncGenerator[str, None]:
+        """Потоковая генерация ответа через OpenAI."""
+        try:
+            prompt = content
+            if rag_context:
+                prompt = f"Контекст из базы знаний:\n{rag_context}\n\nЗапрос пользователя: {content}"
+            
+            system_instruction = self.system_instruction
+            messages = [{"role": "system", "content": system_instruction}]
+            
+            # Добавляем историю если есть
+            if external_history:
+                messages.append({"role": "system", "content": f"Предыдущий контекст: {external_history}"})
+            
+            messages.append({"role": "user", "content": prompt})
+
+            response = await self.oa_client.chat.completions.create(
+                model=self.oa_model,
+                messages=messages,
+                stream=True
+            )
+
+            async for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            logger.error(f"Error in _ask_stream_openai: {e}")
             raise e
 
     async def _ask_stream_gemini_client(self, user_id: int, content: str, client: genai.Client, external_history: Optional[str] = None, rag_context: str = "", model_name: Optional[str] = None) -> AsyncGenerator[str, None]:
