@@ -280,21 +280,23 @@ class KnowledgeBase:
         finally:
             self.is_updating = False
 
-    def get_relevant_context(self, query: str, top_k: int = 5) -> str:
+    def get_relevant_context(self, query: str, top_k: int = 5, window_size: int = 1) -> str:
         """Returns the most relevant chunks formatted for the LLM prompt."""
-        if not self.local_context_ready:
+        if not self.search_engine:
             return ""
-            
-        chunks = self.search_engine.search(query, top_k=top_k)
-        if not chunks:
+        
+        # Передаем window_size в поисковый движок
+        results = self.search_engine.search(query, top_k=top_k, window_size=window_size)
+        if not results:
             return ""
+        
+        context = []
+        for res in results:
+            source = res.get('metadata', {}).get('source', 'unknown')
+            content = res.get('content', '')
+            context.append(f"SOURCE: {source}\nCONTENT: {content}\n")
             
-        context_parts = []
-        for i, chunk in enumerate(chunks):
-            source = chunk['metadata'].get('source', 'Unknown')
-            context_parts.append(f"--- Fragment {i+1} (Source: {source}) ---\n{chunk['content']}")
-            
-        return "\n\n".join(context_parts)
+        return "\n---\n".join(context)
 
     async def get_active_files(self) -> List[types.File]:
         """Returns the list of active files in Gemini for RAG without cache."""

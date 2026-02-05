@@ -53,8 +53,9 @@ class DocumentProcessor:
                     "content": chunk,
                     "metadata": {
                         "source": file_name,
-                        "chunk_index": i,
-                        "parent_content": parent  # Parent Document Retrieval
+                        "chunk_index": i,  # Ключевой индекс для Sentence Window
+                        "parent_content": parent,  # Parent Document Retrieval
+                        "total_chunks": len(chunks)
                     }
                 })
             return result

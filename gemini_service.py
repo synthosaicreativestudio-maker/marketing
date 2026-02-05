@@ -339,8 +339,30 @@ class GeminiService:
         rag_context = ""
         if self.knowledge_base:
             try:
-                # Получаем топ-5 релевантных фрагментов
-                rag_context = self.knowledge_base.get_relevant_context(content, top_k=5)
+                # 1. Query Expansion (Техника 3: Расширение запроса силами Gemini)
+                # Генерируем расширенный запрос (синонимы) только если это не пустой контент
+                search_query = content
+                if content.strip() and len(content.split()) > 1:
+                    try:
+                        # Используем легкую модель для быстрой генерации синонимов
+                        expansion_prompt = f"Действуй как эксперт по поиску. Напиши через пробел 3-4 синонима или связанных термина для поискового запроса: '{content}'. Пиши ТОЛЬКО термины. Например: 'продажа квартиры' -> 'реализация недвижимости выгрузка объектов'."
+                        
+                        # Делаем это отдельным быстрым вызовом (не стрим)
+                        expansion_resp = await self.client.aio.models.generate_content(
+                            model="gemini-2.0-flash-lite-preview-02-05", # Самая быстрая для этой задачи
+                            contents=expansion_prompt,
+                            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=50)
+                        )
+                        if expansion_resp.text:
+                            search_query = f"{content} {expansion_resp.text.strip()}"
+                            logger.info(f"Query expansion: '{content}' -> '{search_query}'")
+                    except Exception as ex_err:
+                        logger.warning(f"Query expansion failed (falling back to original): {ex_err}")
+                
+                # 2. Поиск с расширенным запросом
+                # top_k увеличен до 10 (Техника: "Широкое окно"), window_size=2 (Техника 2: Sentence Window)
+                rag_context = self.knowledge_base.get_relevant_context(search_query, top_k=10)
+                
                 if rag_context:
                     logger.info(f"Universal RAG: Found relevant context (len: {len(rag_context)})")
             except Exception as e:

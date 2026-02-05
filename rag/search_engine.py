@@ -6,6 +6,7 @@ from typing import List, Dict, Optional, Any, Set
 from rank_bm25 import BM25Okapi
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import pymorphy2
 
 from rag.persistent_cache import PersistentCache
 
@@ -59,6 +60,9 @@ class SearchEngine:
         # Metadata index for filtering
         self.source_to_indices: Dict[str, List[int]] = {}  # source -> chunk indices
         self.doc_type_to_indices: Dict[str, List[int]] = {}  # doc_type -> chunk indices
+        
+        # Morphological analyzer for Russian
+        self.morph = pymorphy2.MorphAnalyzer()
 
     def add_chunks(self, new_chunks: List[Dict[str, Any]]):
         """Adds new text chunks and re-initializes indexes."""
@@ -98,10 +102,22 @@ class SearchEngine:
         self.doc_type_to_indices = {}
 
     def _tokenize(self, text: str) -> List[str]:
-        """Simple tokenizer: lowercase, strip punctuation, split by words."""
+        """Tokenizer with Lemmatization: lowercase, strip punctuation, split, and normalize RU words."""
         text = text.lower()
+        # Keep only alphanumeric characters
         tokens = re.findall(r'[a-zа-яё0-9]+', text)
-        return tokens
+        
+        # Lemmatize Russian tokens (e.g., 'инструкции' -> 'инструкция')
+        lemmatized_tokens = []
+        for token in tokens:
+            # Check if token contains Russian characters
+            if re.search(r'[а-яё]', token):
+                p = self.morph.parse(token)[0]
+                lemmatized_tokens.append(p.normal_form)
+            else:
+                lemmatized_tokens.append(token)
+                
+        return lemmatized_tokens
 
     def _expand_query(self, query: str) -> str:
         """Query Expansion: adds synonyms to improve recall."""
@@ -171,8 +187,9 @@ class SearchEngine:
     def search(self, query: str, top_k: int = 5, use_parent: bool = True,
                sources: Optional[List[str]] = None,
                doc_types: Optional[List[str]] = None,
-               enable_reranking: bool = True) -> List[Dict[str, Any]]:
-        """Hybrid Search with Query Expansion, Metadata Filtering, BM25 Reranking, and Parent Document Retrieval.
+               enable_reranking: bool = True,
+               window_size: int = 1) -> List[Dict[str, Any]]:
+        """Hybrid Search with Query Expansion, Metadata Filtering, BM25 Reranking, and Sentence Window.
         
         Args:
             query: Поисковый запрос
@@ -180,7 +197,8 @@ class SearchEngine:
             use_parent: Включать ли родительский контекст
             sources: Фильтр по источникам
             doc_types: Фильтр по типам документов
-            enable_reranking: Включить BM25 Reranking (улучшает точность на 20-40%)
+            enable_reranking: Включить BM25 Reranking
+            window_size: Количество соседних чанков (сверху и снизу) для расширения контекста
         """
         if not self.is_indexed or not self.bm25 or self.tfidf_matrix is None:
             logger.warning("Search query received but index is empty or not built.")
@@ -248,10 +266,33 @@ class SearchEngine:
         results = []
         for idx in top_indices:
             chunk = self.chunks[idx].copy()
-            # Parent Document Retrieval: optionally include parent context
+            
+            # --- Sentence Window Retrieval ---
+            if window_size > 0:
+                source = chunk.get('metadata', {}).get('source')
+                current_idx = chunk.get('metadata', {}).get('chunk_index')
+                
+                if source and current_idx is not None:
+                    window_content = []
+                    # Собираем соседние чанки
+                    for i in range(current_idx - window_size, current_idx + window_size + 1):
+                        # Ищем индекс в общем списке chunks, который соответствует этому chunk_index в этом же файле
+                        # Для скорости: мы знаем, что чанки одного файла лежат плотно
+                        # Т.к. мы добавляем файлы целиком, смещение можно вычислить
+                        # Но проще найти по метаданным среди соседей
+                        neighbor_idx = idx + (i - current_idx)
+                        if 0 <= neighbor_idx < len(self.chunks):
+                            neighbor = self.chunks[neighbor_idx]
+                            if neighbor.get('metadata', {}).get('source') == source:
+                                window_content.append(neighbor['content'])
+                    
+                    if window_content:
+                        chunk['content'] = "\n[...]\n".join(window_content)
+            
+            # Parent Document Retrieval: optionally include parent context (fallback if window is small)
             if use_parent and 'parent_content' in chunk.get('metadata', {}):
                 parent = chunk['metadata']['parent_content']
-                if parent and parent != chunk['content']:
+                if parent and parent not in chunk['content']:
                     chunk['parent_context'] = parent
             results.append(chunk)
         
