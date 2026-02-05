@@ -602,11 +602,17 @@ class GeminiService:
 
         # 2. Инъекция истории
         # ПРИОРИТЕТ 1: Локальная память SQLite
-        local_history = await self.sqlite_memory.get_history_text(user_id)
-        if local_history:
-            structured_content += f"### ИСТОРИЯ ПОСЛЕДНИХ СООБЩЕНИЙ (MEMORY):\n{local_history}\n\n"
-            logger.debug(f"Memory: injected local SQLite history for {user_id}")
-        elif external_history and external_history.strip():
+        local_history = ""
+        if self.sqlite_memory:
+            try:
+                local_history = await self.sqlite_memory.get_history_text(user_id)
+                if local_history:
+                    structured_content += f"### ИСТОРИЯ ПОСЛЕДНИХ СООБЩЕНИЙ (MEMORY):\n{local_history}\n\n"
+                    logger.debug(f"Memory: injected local SQLite history for {user_id}")
+            except Exception as e:
+                logger.error(f"Error getting local history for user {user_id}: {e}")
+
+        if not local_history and external_history and external_history.strip():
             # ПРИОРИТЕТ 2: Внешняя история (из Таблицы) — только если локальной нет
             # Оптимизация: инъектируем внешнюю историю только если внутренняя история пуста 
             # (содержит только 2 начальных сообщения: системное и подтверждение)
@@ -621,7 +627,11 @@ class GeminiService:
                 logger.debug(f"Skipping external history injection for user {user_id} (internal history active)")
 
         # 3. Добавление текущего вопроса в SQLite ДО запроса (чтобы он был в памяти для след. раза)
-        asyncio.create_task(self.sqlite_memory.add_message(user_id, "user", content))
+        if self.sqlite_memory:
+            try:
+                asyncio.create_task(self.sqlite_memory.add_message(user_id, "user", content))
+            except Exception as e:
+                logger.error(f"Error adding message to SQLite for user {user_id}: {e}")
 
         # Добавляем сообщение пользователя в историю
         self._add_to_history(user_id, "user", structured_content)
