@@ -9,7 +9,10 @@ from google.genai import types
 from openai import AsyncOpenAI
 
 # Импорты для инструментов
+from promotions_api import get_promotions_json
 from sheets_gateway import AsyncGoogleSheetsGateway
+from structured_logging import log_llm_metrics
+from memory_manager_sqlite import SQLiteMemoryManager
 
 
 logger = logging.getLogger(__name__)
@@ -150,7 +153,6 @@ class GeminiService:
         from drive_service import DriveService
         from knowledge_base import KnowledgeBase
         from memory_archiver import MemoryArchiver
-        from memory_manager_sqlite import SQLiteMemoryManager
         
         self.drive_service = DriveService()
         self.knowledge_base = KnowledgeBase(self.drive_service)
@@ -585,151 +587,285 @@ class GeminiService:
 
     async def _ask_stream_gemini_client(self, user_id: int, content: str, client: genai.Client, external_history: Optional[str] = None, rag_context: str = "", model_name: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Внутренний метод для стриминга через конкретного клиента Gemini с указанной моделью."""
-        try:
-            # Метрики LLM: замер времени
-            llm_start_time = time.perf_counter()
-            
-            # Используем переданную модель или дефолтную
-            effective_model = model_name or self.gemini_model
-            
-            # 1. Инъекция контекста
-            structured_content = ""
-            if rag_context:
-                structured_content += f"### ДАННЫЕ ИЗ БАЗЫ ЗНАНИЙ (УРОВЕНЬ 2):\n{rag_context}\n\n"
-            
-            structured_content += f"### ВОПРОС ПОЛЬЗОВАТЕЛЯ:\n{content}"
+        # Метрики LLM: замер времени
+        llm_start_time = time.perf_counter()
+        
+        # Используем переданную модель или дефолтную
+        effective_model = model_name or self.gemini_model
+        # 1. Инъекция контекста из RAG (если есть)
+        structured_content = ""
+        if rag_context:
+            structured_content += f"### ДАННЫЕ ИЗ БАЗЫ ЗНАНИЙ (УРОВЕНЬ 2):\n{rag_context}\n\n"
+        
+        structured_content += f"### ВОПРОС ПОЛЬЗОВАТЕЛЯ:\n{content}"
 
-            # 2. Инъекция истории
-            # ПРИОРИТЕТ 1: Локальная память SQLite
-            local_history = await self.sqlite_memory.get_history_text(user_id)
-            if local_history:
-                structured_content += f"### ИСТОРИЯ ПОСЛЕДНИХ СООБЩЕНИЙ (MEMORY):\n{local_history}\n\n"
-                logger.debug(f"Memory: injected local SQLite history for {user_id}")
-            elif external_history and external_history.strip():
-                # ПРИОРИТЕТ 2: Внешняя история
-                clean_history = external_history[-15000:]
-                structured_content += f"### ИСТОРИЯ ПРЕДЫДУЩИХ ОБРАЩЕНИЙ:\n{clean_history}\n\n"
+        # 2. Инъекция истории
+        # ПРИОРИТЕТ 1: Локальная память SQLite
+        local_history = await self.sqlite_memory.get_history_text(user_id)
+        if local_history:
+            structured_content += f"### ИСТОРИЯ ПОСЛЕДНИХ СООБЩЕНИЙ (MEMORY):\n{local_history}\n\n"
+            logger.debug(f"Memory: injected local SQLite history for {user_id}")
+        elif external_history and external_history.strip():
+            # ПРИОРИТЕТ 2: Внешняя история (из Таблицы) — только если локальной нет
+            # Оптимизация: инъектируем внешнюю историю только если внутренняя история пуста 
+            # (содержит только 2 начальных сообщения: системное и подтверждение)
+            history_exists = user_id in self.user_histories and len(self.user_histories[user_id]) > 2
+            
+            if not history_exists:
+                logger.info(f"Injecting external history for user {user_id} (len: {len(external_history)})")
+                # Внешняя история уже усечена в AppealsService до 5000 символов
+                structured_content += f"### ИСТОРИЯ ПРЕДЫДУЩИХ ОБРАЩЕНИЙ:\n{external_history}\n\n"
                 logger.debug(f"Memory: recovered context from External Table for {user_id}")
-            
-            # 3. Добавление текущего вопроса в SQLite ДО запроса
-            asyncio.create_task(self.sqlite_memory.add_message(user_id, "user", content))
+            else:
+                logger.debug(f"Skipping external history injection for user {user_id} (internal history active)")
 
-            # Добавляем в историю объекта (Gemini Native History)
-            self._add_to_history(user_id, "user", structured_content)
-            history = self._get_or_create_history(user_id)
-            
-            config_params = {
-                'temperature': 0.7,
-                'max_output_tokens': 8192,
-                'top_p': 0.95,
-                'top_k': 40,
-                'safety_settings': [
-                    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
-                    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
-                    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
-                    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
-                ]
-            }
-            
-            # Внедряем инструкции и инструменты
+        # 3. Добавление текущего вопроса в SQLite ДО запроса (чтобы он был в памяти для след. раза)
+        asyncio.create_task(self.sqlite_memory.add_message(user_id, "user", content))
+
+        # Добавляем сообщение пользователя в историю
+        self._add_to_history(user_id, "user", structured_content)
+        
+        # Получаем всю историю для отправки
+        history = self._get_or_create_history(user_id)
+        
+        # Использование инструментов из self.tools (уже содержат Web Search и get_promotions)
+        tools = self.tools
+
+        # Graceful degradation: если KnowledgeBase недоступен, продолжаем без кэша
+        cache_name = None
+        try:
+            if self.knowledge_base:
+                cache_name = await self.knowledge_base.get_cache_name()
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to get cache_name (continuing without RAG): {e}")
+            cache_name = None
+        
+        config_params = {
+            'temperature': 0.7,
+            'max_output_tokens': 8192,
+            'top_p': 0.95,
+            'top_k': 40,
+            'safety_settings': [
+                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_CIVIC_INTEGRITY", threshold="BLOCK_NONE"),
+            ]
+        }
+        
+        if not cache_name:
             effective_system_instruction = self.system_instruction
+            
+            # Внедряем ссылки на документы базы знаний, чтобы ИИ мог их цитировать
             if self.knowledge_base:
                 links = self.knowledge_base.get_file_links()
                 if links:
-                    links_block = "\n### ССЫЛКИ НА ДОКУМЕНТЫ БАЗЫ ЗНАНИЙ:\n"
+                    logger.info(f"Adding {len(links)} document links to system instruction")
+                    links_block = "\n### ССЫЛКИ НА ДОКУМЕНТЫ БАЗЫ ЗНАНИЙ (ДЛЯ ЦИТИРОВАНИЯ):\n"
                     for fname, url in links.items():
                         links_block += f"- {fname}: {url}\n"
+                    links_block += "\n**ПРАВИЛО:** Если ты используешь данные из файла выше, в конце ответа ОБЯЗАТЕЛЬНО напиши: 'Подробнее см. в документе: [Название документа](ссылка)'."
                     effective_system_instruction += links_block
 
             config_params['system_instruction'] = effective_system_instruction
-            config_params['tools'] = self.tools
+            config_params['tools'] = tools
             
-            # Пытаемся использовать кэш если он есть
-            cache_name = None
-            try:
-                if self.knowledge_base:
-                    cache_name = await self.knowledge_base.get_cache_name()
-            except Exception as e:
-                logger.warning(f"Failed to get cache: {e}")
+            # Внедряем файлы из KnowledgeBase в историю, если кэш не используется (простой RAG)
+            # Внедрение полных файлов отключено для предотвращения перегрузки API и таймаутов.
+            # Вместо этого используется классический RAG (передача только релевантных фрагментов текста).
+            pass
 
-            if cache_name:
-                config_params['cached_content'] = cache_name
+        else:
+            config_params['cached_content'] = cache_name
+        
+        config = types.GenerateContentConfig(**config_params)
+        generate_kwargs = {
+            'model': effective_model,
+            'contents': history,
+            'config': config
+        }
 
-            config = types.GenerateContentConfig(**config_params)
-            
-            # Стриминг с ретраями
-            MAX_RETRIES = 2
-            full_reply_parts = []
+        # --- AUTO-RETRY LOGIC START ---
+        MAX_RETRIES = 2
+        full_reply_parts = []
+        grounding_sources = {}
+        
+        for attempt in range(MAX_RETRIES + 1):
+            full_reply_parts = [] # Сброс буферов перед новой попыткой
             grounding_sources = {}
+            has_started_response = False # Флаг: начали ли мы уже отдавать данные
             
-            for attempt in range(MAX_RETRIES + 1):
-                full_reply_parts = []
-                has_started_response = False
+            try:
+                logger.info(f"Starting Gemini stream for user {user_id} (Attempt {attempt+1}/{MAX_RETRIES+1})")
+                
+                # Таймаут на инициализацию стрима (60 секунд)
+                STREAM_INIT_TIMEOUT = 60.0
                 try:
                     stream = await asyncio.wait_for(
-                        client.aio.models.generate_content_stream(
-                            model=effective_model,
-                            contents=history,
-                            config=config
-                        ),
-                        timeout=60.0
+                        client.aio.models.generate_content_stream(**generate_kwargs),
+                        timeout=STREAM_INIT_TIMEOUT
                     )
+                except asyncio.TimeoutError:
+                    logger.error(f"Gemini stream init timeout ({STREAM_INIT_TIMEOUT}s) for user {user_id}")
+                    raise TimeoutError(f"Gemini API не ответил за {STREAM_INIT_TIMEOUT} секунд")
+                
+                async for response in stream:
                     
-                    async for response in stream:
-                        # Обработка Grounding
-                        if response.candidates and response.candidates[0].grounding_metadata:
-                            gm = response.candidates[0].grounding_metadata
-                            if gm.grounding_chunks:
-                                for chunk in gm.grounding_chunks:
-                                    if chunk.web:
-                                        grounding_sources[chunk.web.uri] = chunk.web.title
+                    # Сбор Grounding Metadata
+                    if response.candidates and response.candidates[0].grounding_metadata:
+                        gm = response.candidates[0].grounding_metadata
+                        if gm.grounding_chunks:
+                            for chunk in gm.grounding_chunks:
+                                if chunk.web and chunk.web.uri and chunk.web.title:
+                                    grounding_sources[chunk.web.uri] = chunk.web.title
 
-                        # Обработка текста
-                        if response.text:
-                            has_started_response = True
-                            full_reply_parts.append(response.text)
-                            yield response.text
+                    # Проверка на Function Call в первом чанке
+                    if response.candidates and response.candidates[0].content.parts:
+                        part = response.candidates[0].content.parts[0]
+                        
+                        if part.function_call:
+                            has_started_response = True # Технически это ответ
+                            fc = part.function_call
+                            logger.info(f"ИИ вызывает функцию (STREAM): {fc.name}")
                             
-                    if full_reply_parts:
-                        break
-                except Exception as e:
-                    if has_started_response:
-                        logger.error(f"Stream interrupted for {user_id}: {e}")
-                        yield f"\n[⚠️ Связь прервана: {str(e)[:40]}]"
-                        return
+                            yield f"__TOOL_CALL__:{fc.name}"
+                            
+                            tool_result = "Данные недоступны"
+                            if fc.name == 'get_promotions':
+                                now = time.time()
+                                if self._promotions_cache and (now - self._promotions_cache_time < self._promotions_cache_ttl):
+                                    tool_result = self._promotions_cache
+                                    logger.info("Using TTLCache for promotions")
+                                else:
+                                    if self.promotions_gateway:
+                                        try:
+                                            tool_result = await get_promotions_json(self.promotions_gateway)
+                                            self._promotions_cache = tool_result
+                                            self._promotions_cache_time = now
+                                            logger.info(f"Promotions cache updated (len: {len(tool_result)})")
+                                        except Exception as te:
+                                            logger.error(f"Error calling promotion tool in stream: {te}")
+                                    
+                            # Добавляем в историю
+                            self.user_histories[user_id].append(response.candidates[0].content)
+                            function_response_part = types.Part(
+                                function_response=types.FunctionResponse(
+                                    name=fc.name,
+                                    response={'output': tool_result}
+                                )
+                            )
+                            self.user_histories[user_id].append(types.Content(role="tool", parts=[function_response_part]))
+                            
+                            # RECURSION: Перезапускаем стрим для получения ответа на функцию
+                            # Здесь важно: рекурсивный вызов ask_stream будет иметь свой собственный цикл retries!
+                            async for sub_part in self.ask_stream(user_id, ""): 
+                                if sub_part:
+                                    yield sub_part
+                            return # Полный выход из текущего генератора (успех)
+
+                        # Если это обычный текст
+                        if response.text:
+                            text_chunk = response.text
+                            # Если текст пришел, значит это не пустой ответ
+                            has_started_response = True
+                            full_reply_parts.append(text_chunk)
+                            yield text_chunk
+
+                # Конец цикла стриминга для данной попытки
+                
+                # Ключевая проверка: Был ли получен какой-то текст?
+                if not full_reply_parts:
+                    # Если стрим завершился без текста и без function call -> Это "Empty Response"
+                    raise ValueError("Received empty stream response from Gemini model")
+                
+                # Если мы здесь, значит ответ получен (full_reply_parts не пуст), выходим из цикла retry
+                break 
+
+            except Exception as e:
+                # Обработка ошибки
+                if has_started_response:
+                    # Если мы уже начали стримить текст пользователю, мы НЕ МОЖЕМ делать ретрай
+                    # иначе пользователь увидит дублирование текста или кашу.
+                    # Просто логируем и прерываем.
+                    logger.error(f"Stream error AFTER yield (user {user_id}): {e}")
+                    yield f"\n[⚠️ Обрыв соединения: {str(e)[:50]}]"
+                    return # Прерываем стрим
+                
+                # Обнаружение ошибки истекшего кэша или устаревшего API
+                error_str = str(e)
+                
+                # Специфичная обработка ошибки квоты (429) - не ждать, если лимит исчерпан
+                if '429' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
+                    logger.error(f"❌ Quota exceeded (429) for Gemini: {error_str}")
                     if attempt < MAX_RETRIES:
-                        await asyncio.sleep(1)
-                        continue
+                        logger.warning("Quota hit, skipping backoff and trying next key/model immediately.")
+                        # Мы НЕ ждем, так как 429 обычно не проходит за секунды
+                        continue 
+                    else:
+                        raise e # Пробрасываем выше для перехода к OpenRouter
+
+                # Проверка на ошибки кэша: истекший, невалидный, или устаревший API
+                if ('CachedContent' in error_str and ('403' in error_str or 'PERMISSION_DENIED' in error_str)) or \
+                   'google_search' in error_str or \
+                   'not supported' in error_str.lower():
+                    logger.warning(f"❌ Cache error or outdated API: {e}")
+                    # Инвалидировать кэш в Knowledge Base
+                    await self.knowledge_base.invalidate_cache()
+                    # Пересоздать config БЕЗ кэша для повтора
+                    config_params['system_instruction'] = self.system_instruction
+                    config_params['tools'] = tools
+                    if 'cached_content' in config_params:
+                        del config_params['cached_content']
+                    config = types.GenerateContentConfig(**config_params)
+                    generate_kwargs['config'] = config
+                
+                if attempt < MAX_RETRIES:
+                    # Exponential Backoff: 1s, 2s, 4s...
+                    wait_time = (2 ** attempt) + 0.1
+                    logger.info(f"🔄 Retrying Gemini in {wait_time}s")
+                    await asyncio.sleep(wait_time) 
+                    continue # Идем на следующий круг
+                else:
+                    # Все попытки для Gemini исчерпаны
+                    logger.error(f"All {MAX_RETRIES+1} attempts failed for user {user_id}")
                     raise e
 
-            # Финализация
-            if full_reply_parts:
-                full_reply = "".join(full_reply_parts)
-                # Добавляем в нативную историю
-                self._add_to_history(user_id, "model", full_reply)
-                # Сохраняем в SQLite (КРИТИЧНО)
-                asyncio.create_task(self.sqlite_memory.add_message(user_id, "model", full_reply))
-                # Сохраняем в Drive (Фоново, НЕ КРИТИЧНО)
-                if self.memory_archiver:
-                    asyncio.create_task(self._safe_archive(user_id))
-                
-                # Логируем метрики
-                dur = (time.perf_counter() - llm_start_time) * 1000
-                logger.info(f"Gemini stream finished for {user_id} in {dur:.0f}ms")
+        # --- FINALIZATION (Success case) ---
+        
+        # Формирование блока источников (Grounding)
+        if grounding_sources:
+            sources_text = "\n\n📚 **Источники:**\n"
+            for i, (uri, title) in enumerate(grounding_sources.items(), 1):
+                sources_text += f"{i}. [{title}]({uri})\n"
+            
+            yield sources_text
+            full_reply_parts.append(sources_text)
 
-        except Exception as e:
-            logger.error(f"Gemini stream fatal error for {user_id}: {e}")
-            raise e
-
-    async def _safe_archive(self, user_id: int):
-        """Безопасное архивирование на Drive без прерывания основного цикла."""
-        try:
-            # Превращаем chat_history в формат для архиватора
-            history_objs = self.user_histories.get(user_id, [])
-            if history_objs:
-                await self.memory_archiver.archive_user_history(user_id, history_objs)
-        except Exception as e:
-            logger.warning(f"Background archival failed for user {user_id} (ignoring): {e}")
+        # Сохраняем финальный ответ в историю
+        if full_reply_parts:
+            full_reply = "".join(full_reply_parts)
+            self._add_to_history(user_id, "model", full_reply)
+            
+            # Сохраняем в SQLite (КРИТИЧНО для памяти)
+            asyncio.create_task(self.sqlite_memory.add_message(user_id, "model", full_reply))
+            
+            # Метрики LLM: логируем время ответа
+            llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
+            log_llm_metrics(
+                user_id=user_id,
+                model=effective_model,
+                duration_ms=llm_duration_ms,
+                success=True
+            )
+            logger.info(f"Stream finished for user {user_id}, history updated. Sources: {len(grounding_sources)}, Duration: {llm_duration_ms:.0f}ms")
+            
+            # Архивация истории для "памяти"
+            if self.memory_archiver:
+                 asyncio.create_task(self.memory_archiver.archive_user_history(
+                     user_id, 
+                     self.user_histories.get(user_id, [])
+                 ))
 
     async def ask(self, user_id: int, content: str, external_history: Optional[str] = None) -> Optional[str]:
         """Отправляет запрос в Gemini и возвращает полный ответ (через стриминг)."""

@@ -45,7 +45,7 @@ class SQLiteMemoryManager:
         except Exception as e:
             logger.error(f"Error adding message to SQLite: {e}")
 
-    async def get_history_text(self, user_id: int, limit: int = 10) -> str:
+    async def get_history_text(self, user_id: int, limit: int = 12) -> str:
         """Получение истории в виде текста для промпта."""
         try:
             conn = sqlite3.connect(self.db_path)
