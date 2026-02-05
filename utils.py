@@ -55,6 +55,28 @@ def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
     return text
 
 
+def safe_truncate_html(text: str, limit: int = 3900) -> str:
+    """
+    Безопасно обрезает HTML-строку для Telegram, не разрывая теги <... >.
+    Если разрез попадает внутрь тега, обрезает до начала этого тега.
+    """
+    if len(text) <= limit:
+        return text
+    
+    # Обрезаем по лимиту
+    truncated = text[:limit]
+    
+    # Ищем последнее вхождение '<'
+    last_open_bracket = truncated.rfind('<')
+    if last_open_bracket != -1:
+        # Проверяем, закрыт ли этот тег внутри обрезанной строки
+        if '>' not in truncated[last_open_bracket:]:
+            # Тег не закрыт, обрезаем ДО '<'
+            return truncated[:last_open_bracket]
+            
+    return truncated
+
+
 def _markdown_to_telegram_html(text: str) -> str:
     """Конвертирует Markdown-разметку Gemini в HTML для Telegram с экранированием."""
     if not text:

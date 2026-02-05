@@ -10,7 +10,7 @@ from auth_service import AuthService
 from ai_service import AIService
 from appeals_service import AppealsService
 from error_handler import safe_handler
-from utils import create_specialist_button, sanitize_ai_text
+from utils import create_specialist_button, sanitize_ai_text, safe_truncate_html
 from config import settings
 from rate_limiter import check_rate_limit
 from query_classifier import classify_query, QueryComplexity, should_use_rag, should_use_memory
@@ -213,7 +213,8 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             if (time.time() - last_update) > 1.5:
                 display_text = sanitize_ai_text(full_response, ensure_emojis=False)
                 try:
-                    await status_msg.edit_text(display_text[:3900] + " ▌", parse_mode="HTML")
+                    display_text_truncated = safe_truncate_html(display_text, 3900)
+                    await status_msg.edit_text(display_text_truncated + " ▌", parse_mode="HTML")
                     last_update = time.time()
                 except Exception as e:
                     logger.debug(f"edit_text during stream: {e}", exc_info=True)
