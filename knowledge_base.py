@@ -201,7 +201,18 @@ class KnowledgeBase:
 
             # 2. Download files locally
             local_files = []
+            
+            # Собираем все имена файлов для дедупликации
+            ocr_files = {f['name'] for f in files_meta if f['name'].endswith('.ocr.txt')}
+            
             for f in files_meta:
+                name = f['name']
+                # Если это оригинал и для него есть OCR-версия - пропускаем оригинал
+                if not name.endswith('.ocr.txt'):
+                    if f"{name}.ocr.txt" in ocr_files:
+                        logger.info(f"Deduplication: skipping original {name} (using OCR version)")
+                        continue
+                
                 path = await asyncio.to_thread(self.drive_service.download_file, f['id'], f['name'], f['mimeType'])
                 if path:
                     local_files.append(path)

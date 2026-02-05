@@ -25,25 +25,36 @@ function processFolderBatch() {
   
   const files = folder.getFiles();
   const imageTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+  const docTypes = ['application/vnd.google-apps.document', 'application/vnd.google-apps.spreadsheet', 'application/pdf'];
   const processedTag = '.ocr.txt';
   
   while (files.hasNext()) {
     const file = files.next();
     const mimeType = file.getMimeType();
+    const fileName = file.getName();
     
-    if (imageTypes.includes(mimeType)) {
-      const fileName = file.getName();
+    // Пропускаем сами результаты OCR
+    if (fileName.endsWith(processedTag)) continue;
+
+    if (imageTypes.includes(mimeType) || docTypes.includes(mimeType)) {
       const txtName = fileName + processedTag;
       
       // Проверяем, есть ли уже .ocr.txt для этого файла
       const existingTxt = folder.getFilesByName(txtName);
-      if (existingTxt.hasNext()) {
-        continue; // Уже распознано
-      }
+      if (existingTxt.hasNext()) continue;
       
-      Logger.log("Распознавание: " + fileName);
+      Logger.log("Обработка: " + fileName + " (" + mimeType + ")");
       try {
-        const text = performOcr(file);
+        let text = "";
+        if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+          text = processSpreadsheet(file);
+        } else if (mimeType === 'application/vnd.google-apps.document') {
+          text = DocumentApp.openById(file.getId()).getBody().getText();
+        } else {
+          // Для картинок и PDF используем OCR метод
+          text = performOcr(file);
+        }
+
         if (text && text.trim().length > 0) {
           folder.createFile(txtName, text);
           Logger.log("Успех: Создан " + txtName);
@@ -55,15 +66,30 @@ function processFolderBatch() {
   }
 }
 
-function performOcr(imageFile) {
+function processSpreadsheet(file) {
+  const ss = SpreadsheetApp.openById(file.getId());
+  const sheets = ss.getSheets();
+  let fullText = "";
+  
+  sheets.forEach(sheet => {
+    const data = sheet.getDataRange().getValues();
+    fullText += "\nЛист: " + sheet.getName() + "\n";
+    data.forEach(row => {
+      fullText += row.join(" | ") + "\n";
+    });
+  });
+  return fullText;
+}
+
+function performOcr(file) {
   // Используем Google Drive API для создания временного документа с OCR
   const resource = {
-    title: imageFile.getName(),
-    mimeType: imageFile.getMimeType()
+    title: file.getName(),
+    mimeType: file.getMimeType()
   };
   
   // Параметр ocr=true включает распознавание
-  const doc = Drive.Files.copy(resource, imageFile.getId(), {ocr: true, ocrLanguage: 'ru'});
+  const doc = Drive.Files.copy(resource, file.getId(), {ocr: true, ocrLanguage: 'ru'});
   
   // Берем текст из созданного Google Doc
   const gDoc = DocumentApp.openById(doc.id);
