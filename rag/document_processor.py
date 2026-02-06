@@ -14,6 +14,11 @@ class DocumentProcessor:
     def __init__(self, max_chunk_size: int = 1500, min_chunk_size: int = 100):
         self.max_chunk_size = max_chunk_size
         self.min_chunk_size = min_chunk_size
+        # Lightweight overlap to improve recall without heavy compute
+        try:
+            self.overlap_chars = int(os.getenv("CHUNK_OVERLAP_CHARS", "150"))
+        except ValueError:
+            self.overlap_chars = 150
 
     def process_file(self, file_path: str) -> List[Dict[str, str]]:
         """Extracts text from a file and returns semantically chunked pieces with parent context."""
@@ -21,11 +26,13 @@ class DocumentProcessor:
         text = ""
         
         try:
+            is_ocr = file_path.lower().endswith('.ocr.txt')
+            
             if ext == '.pdf':
                 text = self._extract_pdf(file_path)
             elif ext in ('.docx', '.doc'):
                 text = self._extract_docx(file_path)
-            elif ext == '.txt':
+            elif ext == '.txt' or is_ocr:
                 text = self._extract_txt(file_path)
             elif ext == '.csv':
                 text = self._extract_csv(file_path)
@@ -42,14 +49,19 @@ class DocumentProcessor:
             
             # Return chunks with metadata and parent context
             file_name = os.path.basename(file_path)
+            # Если это OCR, пытаемся получить имя оригинального файла (убираем .ocr.txt)
+            original_source = file_name.replace('.ocr.txt', '') if is_ocr else file_name
+            
             result = []
             for i, (chunk, parent) in enumerate(chunks):
                 result.append({
                     "content": chunk,
                     "metadata": {
-                        "source": file_name,
-                        "chunk_index": i,
-                        "parent_content": parent  # Parent Document Retrieval
+                        "source": original_source,
+                        "is_ocr": is_ocr,
+                        "chunk_index": i,  # Ключевой индекс для Sentence Window
+                        "parent_content": parent,  # Parent Document Retrieval
+                        "total_chunks": len(chunks)
                     }
                 })
             return result
@@ -60,12 +72,18 @@ class DocumentProcessor:
 
     def _extract_pdf(self, file_path: str) -> str:
         text = []
+        max_pages = int(os.getenv("MAX_PDF_PAGES", "30"))
+        min_chars = int(os.getenv("MIN_PDF_TEXT_CHARS", "200"))
         with pdfplumber.open(file_path) as pdf:
-            for page in pdf.pages:
+            for page in pdf.pages[:max_pages]:
                 page_text = page.extract_text()
                 if page_text:
                     text.append(page_text)
-        return "\n".join(text)
+        result = "\n".join(text)
+        if len(result.strip()) < min_chars:
+            logger.warning(f"PDF has too little text (likely scanned): {file_path}")
+            return ""
+        return result
 
     def _extract_docx(self, file_path: str) -> str:
         doc = Document(file_path)
@@ -117,9 +135,19 @@ class DocumentProcessor:
         
         # Filter out too small chunks
         chunks_with_parents = [
-            (c, p) for c, p in chunks_with_parents 
+            (c, p) for c, p in chunks_with_parents
             if len(c) >= self.min_chunk_size
         ]
+
+        # Add small overlap between adjacent chunks to preserve continuity
+        if self.overlap_chars > 0 and len(chunks_with_parents) > 1:
+            overlapped = [chunks_with_parents[0]]
+            for (chunk, parent) in chunks_with_parents[1:]:
+                prev_chunk = overlapped[-1][0]
+                overlap = prev_chunk[-self.overlap_chars:] if len(prev_chunk) > self.overlap_chars else prev_chunk
+                merged = (overlap + " " + chunk).strip()
+                overlapped.append((merged, parent))
+            chunks_with_parents = overlapped
         
         logger.info(f"Semantic chunking: {len(paragraphs)} paragraphs -> {len(chunks_with_parents)} chunks")
         return chunks_with_parents
@@ -129,4 +157,3 @@ class DocumentProcessor:
         # Simple sentence splitter for RU/EN
         sentences = re.split(r'(?<=[.!?])\s+', text)
         return [s.strip() for s in sentences if s.strip()]
-

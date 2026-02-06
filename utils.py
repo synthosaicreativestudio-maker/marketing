@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from urllib.parse import urlparse
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonDefault
 
@@ -28,14 +29,160 @@ async def alert_admin(bot, message: str, level: str = "ERROR") -> bool:
     try:
         await bot.send_message(
             chat_id=admin_id,
-            text=f"{emoji} **{level}**\n\n{message}",
-            parse_mode="Markdown"
+            text=f"{emoji} {level}\n\n{message}"
         )
         logger.info(f"Алерт отправлен админу: {message[:50]}...")
         return True
     except Exception as e:
         logger.error(f"Не удалось отправить алерт админу: {e}")
         return False
+
+
+def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
+    """Очищает ответ ИИ от Markdown/служебных символов и приводит ссылки к виду 'Название — URL'."""
+    if not text:
+        return text
+
+    # Сначала конвертируем Markdown в HTML с экранированием
+    text = _markdown_to_telegram_html(text)
+    
+    # Затем форматируем ссылки, которые ИИ мог прислать "голыми"
+    text = _format_links_safe(text)
+
+    if ensure_emojis:
+        text = _ensure_emojis(text)
+
+    return text
+
+
+def safe_truncate_html(text: str, limit: int = 3900) -> str:
+    """
+    Безопасно обрезает HTML-строку для Telegram, не разрывая теги <... >.
+    Если разрез попадает внутрь тега, обрезает до начала этого тега.
+    """
+    if len(text) <= limit:
+        return text
+    
+    # Обрезаем по лимиту
+    truncated = text[:limit]
+    
+    # Ищем последнее вхождение '<'
+    last_open_bracket = truncated.rfind('<')
+    if last_open_bracket != -1:
+        # Проверяем, закрыт ли этот тег внутри обрезанной строки
+        if '>' not in truncated[last_open_bracket:]:
+            # Тег не закрыт, обрезаем ДО '<'
+            return truncated[:last_open_bracket]
+            
+    return truncated
+
+
+def _markdown_to_telegram_html(text: str) -> str:
+    """Конвертирует Markdown-разметку Gemini в HTML для Telegram с экранированием."""
+    if not text:
+        return ""
+    
+    # 0. Экранируем спецсимволы HTML
+    text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    # 1. Жирный текст: **text** -> <b>text</b>
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'__(.*?)__', r'<b>\1</b>', text)
+    
+    # 2. Курсив: *text* -> <i>text</i>
+    text = re.sub(r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
+    
+    # 3. Ссылки: [Text](URL) -> <a href="URL">Text</a>
+    # Telegram требует 'href="URL"', причем URL уже содержит &amp; после шага 0.
+    text = re.sub(r'\[([^&\]]+)\]\((https?://[^\s)]+)\)', r'<a href="\2">\1</a>', text)
+    
+    # 4. Заголовки: ### Header -> <b>Header</b>
+    text = re.sub(r'^#{1,6}\s+(.*)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+    
+    return text
+
+def _format_links_safe(text: str) -> str:
+    """Безопасно форматирует голые URL, не ломая уже созданные <a> теги."""
+    # Регулярка для URL, которые НЕ внутри href="..."
+    url_re = re.compile(r'(?<!href=")(https?://[^\s\)\]\}>]+)')
+    
+    def repl(match):
+        url = match.group(1)
+        # Если это чистый URL в тексте, превратим его в кликабельную ссылку "Источник"
+        # или просто оставим как есть, но в HTML Telegram он должен быть внутри <a> если мы хотим анкор.
+        # Для стабильности просто обернем его в <a> если он не слишком длинный
+        if len(url) < 100:
+            return f'<a href="{url}">ссылка</a>'
+        return url
+
+    return url_re.sub(repl, text)
+
+
+def _convert_markdown_links(text: str) -> str:
+    # [Текст](https://example.com) -> Текст — https://example.com
+    return re.sub(r'\[([^\]]+)\]\((https?://[^\s)]+)\)', r'\1 — \2', text)
+
+
+def _format_links(text: str) -> str:
+    url_re = re.compile(r'https?://[^\s\)\]\}>]+')
+    lines = text.splitlines()
+    out_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            out_lines.append(line)
+            continue
+
+        urls = url_re.findall(stripped)
+        if not urls:
+            out_lines.append(line)
+            continue
+
+        # Если строка — это только ссылка(и)
+        if stripped in urls or stripped.rstrip(".,;") in urls:
+            if len(urls) == 1:
+                out_lines.append(f"Ссылка — {urls[0]}")
+            else:
+                for u in urls:
+                    out_lines.append(f"Ссылка — {u}")
+            continue
+
+        # Иначе берем первую ссылку и делаем "Текст — URL"
+        url = urls[0]
+        label = stripped.replace(url, "").strip()
+        label = re.sub(r'[:—–-]+$', '', label).strip()
+        if not label:
+            label = "Ссылка"
+        out_lines.append(f"{label} — {url}")
+
+    return "\n".join(out_lines)
+
+
+def _strip_markdown(text: str) -> str:
+    # Убираем только символы, которые могут сломать некоторые интерфейсы 
+    # (но оставляем жирный, курсив и заголовки для Телеграма)
+    text = text.replace("```", "")
+    text = text.replace("`", "")
+    return text
+
+
+def _normalize_whitespace(text: str) -> str:
+    lines = []
+    for line in text.splitlines():
+        line = re.sub(r"[ \t]+", " ", line).strip()
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def _ensure_emojis(text: str) -> str:
+    emoji_re = re.compile(r'[\U0001F300-\U0001FAFF\u2600-\u26FF\u2700-\u27BF]')
+    count = len(emoji_re.findall(text))
+    if count == 0:
+        return f"{text} 🙂✨"
+    if count == 1:
+        return f"{text} ✨"
+    return text
 
 
 def mask_phone(phone: str) -> str:

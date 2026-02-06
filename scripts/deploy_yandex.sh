@@ -12,7 +12,7 @@ REPO_URL="https://github.com/synthosaicreativestudio-maker/marketing.git"
 
 echo "==> Подключаюсь к ${VM_USER}@${VM_HOST} и размещаю/обновляю проект в ${REMOTE_DIR}"
 
-ssh -i "$SSH_KEY" "${VM_USER}@${VM_HOST}" bash <<EOF
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$SSH_KEY" "${VM_USER}@${VM_HOST}" bash <<EOF
 set -e
 
 echo "==> Проверяю наличие git и Python"
@@ -43,4 +43,3 @@ echo "==> Деплой кода завершен. Не забудьте наст
 EOF
 
 echo "==> Готово. Проект размещен/обновлен на ВМ."
-

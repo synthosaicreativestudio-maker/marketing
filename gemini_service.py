@@ -1,16 +1,15 @@
 import os
-import logging
 import asyncio
 import time
+import logging
 from typing import Dict, List, Optional, AsyncGenerator
 
 from google import genai
 from google.genai import types
-from openai import AsyncOpenAI
-
 # Импорты для инструментов
 from promotions_api import get_promotions_json
 from sheets_gateway import AsyncGoogleSheetsGateway
+from structured_logging import log_llm_metrics
 
 
 logger = logging.getLogger(__name__)
@@ -42,23 +41,42 @@ class GeminiService:
         proxyapi_key = os.getenv("PROXYAPI_KEY")
         proxyapi_base_url = os.getenv("PROXYAPI_BASE_URL")
         
+        logger.info(f"Found {len(gemini_keys)} Gemini API keys in environment.")
+        logger.info(f"Proxy config: base_url={proxyapi_base_url}, key_present={bool(proxyapi_key)}")
+        
+        if not proxyapi_base_url:
+            raise RuntimeError(
+                "Proxy-only mode enforced: PROXYAPI_BASE_URL is required for Gemini access."
+            )
+        
+        proxy_url = os.getenv("TINYPROXY_URL")
+        if proxy_url:
+            os.environ["HTTP_PROXY"] = proxy_url
+            os.environ["HTTPS_PROXY"] = proxy_url
+            logger.info("System-wide PROXY (TINYPROXY) activated for AI services")
+        
         for key in gemini_keys:
             try:
-                if proxyapi_key and proxyapi_base_url:
-                    # Вариант Б: через прокси
+                logger.info(f"Attempting to init Gemini client with key ...{key[-4:]}")
+                if proxyapi_base_url:
+                    # Вариант Б: через прокси-релей (например, ProxyAPI.ru)
                     api_version = os.getenv("PROXYAPI_VERSION", "v1beta")
                     client = genai.Client(
                         api_key=key,
-                        http_options={'base_url': proxyapi_base_url, 'api_version': api_version}
+                        http_options=types.HttpOptions(
+                            api_version=api_version,
+                            base_url=proxyapi_base_url
+                        )
                     )
                 else:
-                    # Вариант А: напрямую (с поддержкой системного прокси)
                     client = genai.Client(api_key=key)
-                
+
                 self.gemini_clients.append(client)
                 logger.info(f"Gemini client initialized with key ...{key[-4:]}")
             except Exception as e:
-                logger.error(f"Failed to init Gemini client with key ...{key[-4:]}: {e}")
+                logger.error(f"CRITICAL: Failed to init Gemini client with key ...{key[-4:]}: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
         
         self.client = self.gemini_clients[0] if self.gemini_clients else None
         
@@ -70,58 +88,23 @@ class GeminiService:
         logger.info(f"Gemini models pool: {self.gemini_models}")
         
 
-        # 2. Пул моделей OpenRouter
+        # 2. OpenRouter — ОТКЛЮЧЕН (упрощение архитектуры)
         self.or_client = None
-        self.or_api_key = os.getenv("OPENROUTER_API_KEY")
-        or_models_str = os.getenv("OPENROUTER_MODELS", "qwen/qwen-2.5-72b-instruct:free,meta-llama/llama-3.3-70b-instruct:free,deepseek/deepseek-r1-0528:free")
-        self.or_models = [m.strip() for m in or_models_str.split(",") if m.strip()]
+        self.or_api_key = None
+        self.or_models = []
+        logger.info("OpenRouter: DISABLED (simplified architecture)")
         
-        if self.or_api_key:
-            try:
-                self.or_client = AsyncOpenAI(
-                    base_url="https://openrouter.ai/api/v1",
-                    api_key=self.or_api_key,
-                    default_headers={
-                        "HTTP-Referer": "https://github.com/synthosaicreativestudio-maker/marketingbot",
-                        "X-Title": "MarketingBot"
-                    }
-                )
-                logger.info(f"OpenRouter client initialized. Models pool: {self.or_models}")
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenRouter: {e}")
-        
-        # 3. Резервный провайдер Groq (сверхбыстрый LPU) — через прокси для обхода геоблокировки
+        # 3. Groq — ОТКЛЮЧЕН (упрощение архитектуры)
         self.groq_client = None
-        self.groq_api_key = os.getenv("GROQ_API_KEY")
-        self.groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-        
-        if self.groq_api_key:
-            try:
-                # Используем тот же прокси что и для Gemini (американский сервер)
-                groq_proxy_url = os.getenv("GROQ_PROXY_URL", os.getenv("PROXYAPI_BASE_URL"))
-                
-                if groq_proxy_url:
-                    # Настраиваем httpx клиент с прокси
-                    import httpx
-                    http_client = httpx.AsyncClient(
-                        proxy="http://root:LEJ6U5chSK@37.1.212.51:8080",
-                        timeout=60.0
-                    )
-                    self.groq_client = AsyncOpenAI(
-                        base_url="https://api.groq.com/openai/v1",
-                        api_key=self.groq_api_key,
-                        http_client=http_client
-                    )
-                    logger.info(f"Groq client initialized via US proxy. Model: {self.groq_model}")
-                else:
-                    # Без прокси (напрямую)
-                    self.groq_client = AsyncOpenAI(
-                        base_url="https://api.groq.com/openai/v1",
-                        api_key=self.groq_api_key
-                    )
-                    logger.info(f"Groq client initialized (direct). Model: {self.groq_model}")
-            except Exception as e:
-                logger.error(f"Failed to initialize Groq: {e}")
+        self.groq_api_key = None
+        self.groq_model = None
+        logger.info("Groq: DISABLED (simplified architecture)")
+
+        # 4. OpenAI — ОТКЛЮЧЕН (упрощение архитектуры)
+        self.oa_client = None
+        self.oa_api_key = None
+        self.oa_model = None
+        logger.info("OpenAI: DISABLED (simplified architecture)")
 
 
         
@@ -132,11 +115,17 @@ class GeminiService:
         # Инициализация Knowledge Base (RAG)
         from drive_service import DriveService
         from knowledge_base import KnowledgeBase
-        from memory_archiver import MemoryArchiver
         
         self.drive_service = DriveService()
         self.knowledge_base = KnowledgeBase(self.drive_service)
-        self.memory_archiver = MemoryArchiver(self.drive_service)
+        # 5. Инициализация памяти SQLite
+        try:
+            from memory_manager_sqlite import SQLiteMemoryManager
+            self.sqlite_memory = SQLiteMemoryManager()
+            logger.info("SQLite Memory Manager integrated into GeminiService.")
+        except Exception as e:
+            logger.error(f"Failed to integrate SQLite Memory: {e}")
+            self.sqlite_memory = None
         
         # Проверка существования файла промпта
         if os.path.exists(system_prompt_path):
@@ -163,8 +152,13 @@ class GeminiService:
    - **ПРИОРИТЕТ 2:** Добавь фразу: "Также актуальные данные: https://ecosystem.etagi.com/phonebook".
    - ЗАПРЕЩЕНО отправлять пользователя по ссылке, если ты нашел номер в файле. Сначала номер — потом ссылка.
 4. **ЗАЩИТА ССЫЛОК И АТРИБУЦИЯ:** 
-   - Выводи ссылки как Plain Text. 
+   - Оформляй все ссылки СТРОГО через Markdown в формате: [Название](URL).
+   - ЗАПРЕЩЕНО выводить "голые" URL-адреса в тексте (например, https://example.com).
    - ОБЯЗАТЕЛЬНО указывай источник информации (например: "Согласно базе знаний «Этажи»...").
+5. **СТИЛЬ И ЭМОДЗИ:**
+   - Используй Markdown (жирный текст) для акцентов.
+   - Эмодзи: 2–5 в каждом ответе для создания живой и поддерживающей атмосферы.
+   - Ты — дружелюбный наставник. Обращайся к пользователю по имени из [USER PROFILE] и поддерживай его.
 
 ТЫ — продвинутый ассистент, работающий на базе знаний компании. Генерируй лучшие предложения, используя актуальные регламенты.
 
@@ -228,7 +222,11 @@ class GeminiService:
             await self.knowledge_base.initialize()
             
             # Запускаем фоновое автообновление каждые 6 часов
-            await self.knowledge_base.start_auto_refresh(interval_hours=6)
+            try:
+                kb_refresh_hours = int(os.getenv("KB_REFRESH_HOURS", "12"))
+            except ValueError:
+                kb_refresh_hours = 12
+            await self.knowledge_base.start_auto_refresh(interval_hours=kb_refresh_hours)
             
             # ПРИНУДИТЕЛЬНО запускаем первое обновление кэша с нашими правилами
             asyncio.create_task(self.knowledge_base.refresh_cache(
@@ -238,7 +236,7 @@ class GeminiService:
 
     def is_enabled(self) -> bool:
         """Проверяет, доступен ли какой-либо ИИ-сервис."""
-        return self.client is not None or self.or_client is not None
+        return self.client is not None or self.or_client is not None or (hasattr(self, 'oa_client') and self.oa_client is not None)
 
     def _cleanup_old_histories(self) -> None:
         """Очистка старых историй для предотвращения memory leak."""
@@ -327,13 +325,39 @@ class GeminiService:
         rag_context = ""
         if self.knowledge_base:
             try:
-                # Получаем топ-5 релевантных фрагментов
-                rag_context = self.knowledge_base.get_relevant_context(content, top_k=5)
+                # 1. Query Expansion (Техника 3: Расширение запроса силами Gemini)
+                # Генерируем расширенный запрос (синонимы) только если это не пустой контент
+                search_query = content
+                if content.strip() and len(content.split()) > 1:
+                    try:
+                        # Используем легкую модель для быстрой генерации синонимов
+                        expansion_prompt = f"Действуй как эксперт по поиску. Напиши через пробел 3-4 синонима или связанных термина для поискового запроса: '{content}'. Пиши ТОЛЬКО термины. Например: 'продажа квартиры' -> 'реализация недвижимости выгрузка объектов'."
+                        
+                        # Делаем это отдельным быстрым вызовом (не стрим)
+                        expansion_resp = await self.client.aio.models.generate_content(
+                            model="gemini-2.0-flash-lite-preview-02-05", # Самая быстрая для этой задачи
+                            contents=expansion_prompt,
+                            config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=50)
+                        )
+                        if expansion_resp.text:
+                            search_query = f"{content} {expansion_resp.text.strip()}"
+                            logger.info(f"Query expansion: '{content}' -> '{search_query}'")
+                    except Exception as ex_err:
+                        logger.warning(f"Query expansion failed (falling back to original): {ex_err}")
+                
+                # 2. Поиск с расширенным запросом
+                # top_k увеличен до 10 (Техника: "Широкое окно"), window_size=2 (Техника 2: Sentence Window)
+                rag_context = self.knowledge_base.get_relevant_context(search_query, top_k=10)
+                
                 if rag_context:
                     logger.info(f"Universal RAG: Found relevant context (len: {len(rag_context)})")
             except Exception as e:
                 logger.error(f"Error getting RAG context: {e}")
 
+        # 3. Централизованная запись вопроса в историю (ТЗ Блок А-2: Context Pinning)
+        # Это предотвращает дублирование вопроса при ретраях и переключении ключей
+        self._add_to_history(user_id, "user", f"### КОНТЕКСТ RAG:\n{rag_context}\n\n### ВОПРОС:\n{content}")
+        
         # --- MULTI-PROVIDER FALLBACK LOGIC (Priority: Gemini → OpenRouter → Groq) ---
         
         # 1. GEMINI PRIMARY (model rotation + key rotation)
@@ -353,6 +377,9 @@ class GeminiService:
                         if has_content:
                             return
                     except Exception as e:
+                        if 'has_content' in locals() and has_content:
+                            logger.error(f"Gemini stream error AFTER yield (user {user_id}): {e}")
+                            return # Прерываем, нельзя повторять если часть ответа уже ушла
                         logger.warning(f"Gemini '{model_name}' + key #{key_idx+1} failed: {e}")
                         continue
 
@@ -385,6 +412,9 @@ class GeminiService:
                     if has_content:
                         return
                 except Exception as e:
+                    if 'has_content' in locals() and has_content:
+                        logger.error(f"OpenRouter stream error AFTER yield (user {user_id}): {e}")
+                        return
                     logger.warning(f"OpenRouter model {model_id} failed: {e}")
                     continue
 
@@ -413,6 +443,36 @@ class GeminiService:
                     return
             except Exception as e:
                 logger.warning(f"Groq failed: {e}")
+
+        # 4. OpenAI FINAL FALLBACK (If configured and not already tried via OR)
+        if self.oa_client:
+            try:
+                logger.info(f"Trying OpenAI final fallback: {self.oa_model}")
+                has_content = False
+                messages = [
+                    {"role": "system", "content": self.system_instruction},
+                    {"role": "user", "content": f"### КОНТЕКСТ БАЗЫ ЗНАНИЙ:\n{rag_context}\n\n### ВОПРОС:\n{content}"}
+                ]
+                
+                response = await self.oa_client.chat.completions.create(
+                    model=self.oa_model,
+                    messages=messages,
+                    stream=True,
+                    temperature=0.7
+                )
+                
+                async for chunk in response:
+                    text = chunk.choices[0].delta.content
+                    if text:
+                        if not has_content:
+                            logger.info(f"✅ OpenAI {self.oa_model} started responding")
+                            has_content = True
+                        yield text
+                
+                if has_content:
+                    return
+            except Exception as e:
+                logger.warning(f"OpenAI fallback failed: {e}")
 
         # Если дошли сюда — все провайдеры и ключи упали
         logger.error(f"All AI providers and keys failed for user {user_id}")
@@ -505,8 +565,40 @@ class GeminiService:
         except Exception as e:
             raise e
 
+    async def _ask_stream_openai(self, user_id: int, content: str, external_history: Optional[str] = None, rag_context: str = "") -> AsyncGenerator[str, None]:
+        """Потоковая генерация ответа через OpenAI."""
+        try:
+            prompt = content
+            if rag_context:
+                prompt = f"Контекст из базы знаний:\n{rag_context}\n\nЗапрос пользователя: {content}"
+            
+            system_instruction = self.system_instruction
+            messages = [{"role": "system", "content": system_instruction}]
+            
+            # Добавляем историю если есть
+            if external_history:
+                messages.append({"role": "system", "content": f"Предыдущий контекст: {external_history}"})
+            
+            messages.append({"role": "user", "content": prompt})
+
+            response = await self.oa_client.chat.completions.create(
+                model=self.oa_model,
+                messages=messages,
+                stream=True
+            )
+
+            async for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            logger.error(f"Error in _ask_stream_openai: {e}")
+            raise e
+
     async def _ask_stream_gemini_client(self, user_id: int, content: str, client: genai.Client, external_history: Optional[str] = None, rag_context: str = "", model_name: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Внутренний метод для стриминга через конкретного клиента Gemini с указанной моделью."""
+        # Метрики LLM: замер времени
+        llm_start_time = time.perf_counter()
+        
         # Используем переданную модель или дефолтную
         effective_model = model_name or self.gemini_model
         # 1. Инъекция контекста из RAG (если есть)
@@ -516,24 +608,40 @@ class GeminiService:
         
         structured_content += f"### ВОПРОС ПОЛЬЗОВАТЕЛЯ:\n{content}"
 
-        # 2. Инъекция истории из Таблицы
-        if external_history and external_history.strip():
+        # 2. Инъекция истории
+        # ПРИОРИТЕТ 1: Локальная память SQLite
+        local_history = ""
+        if self.sqlite_memory:
+            try:
+                local_history = await self.sqlite_memory.get_history_text(user_id)
+                if local_history:
+                    structured_content += f"### ИСТОРИЯ ПОСЛЕДНИХ СООБЩЕНИЙ (MEMORY):\n{local_history}\n\n"
+                    logger.debug(f"Memory: injected local SQLite history for {user_id}")
+            except Exception as e:
+                logger.error(f"Error getting local history for user {user_id}: {e}")
+
+        if not local_history and external_history and external_history.strip():
+            # ПРИОРИТЕТ 2: Внешняя история (из Таблицы) — только если локальной нет
             # Оптимизация: инъектируем внешнюю историю только если внутренняя история пуста 
             # (содержит только 2 начальных сообщения: системное и подтверждение)
             history_exists = user_id in self.user_histories and len(self.user_histories[user_id]) > 2
             
             if not history_exists:
                 logger.info(f"Injecting external history for user {user_id} (len: {len(external_history)})")
-                # Очистка для свежей инъекции
-                self.clear_history(user_id)
                 # Внешняя история уже усечена в AppealsService до 5000 символов
-                self._add_to_history(user_id, "user", f"ВСПОМНИ КОНТЕКСТ ПРОШЛЫХ ДИАЛОГОВ:\n{external_history}")
-                self._add_to_history(user_id, "model", "Я восстановила память о наших прошлых беседах. Готова помочь на основе этого контекста.")
+                structured_content += f"### ИСТОРИЯ ПРЕДЫДУЩИХ ОБРАЩЕНИЙ:\n{external_history}\n\n"
+                logger.debug(f"Memory: recovered context from External Table for {user_id}")
             else:
                 logger.debug(f"Skipping external history injection for user {user_id} (internal history active)")
 
-        # Добавляем сообщение пользователя в историю
-        self._add_to_history(user_id, "user", structured_content)
+        # 3. Добавление текущего вопроса в SQLite ДО запроса (чтобы он был в памяти для след. раза)
+        if self.sqlite_memory:
+            try:
+                asyncio.create_task(self.sqlite_memory.add_message(user_id, "user", content))
+            except Exception as e:
+                logger.error(f"Error adding message to SQLite for user {user_id}: {e}")
+
+        # ПРИМЕЧАНИЕ: self._add_to_history теперь вызывается централизованно в ask_stream
         
         # Получаем всю историю для отправки
         history = self._get_or_create_history(user_id)
@@ -756,7 +864,19 @@ class GeminiService:
         if full_reply_parts:
             full_reply = "".join(full_reply_parts)
             self._add_to_history(user_id, "model", full_reply)
-            logger.info(f"Stream finished for user {user_id}, history updated. Sources: {len(grounding_sources)}")
+            
+            # Сохраняем в SQLite (КРИТИЧНО для памяти)
+            asyncio.create_task(self.sqlite_memory.add_message(user_id, "model", full_reply))
+            
+            # Метрики LLM: логируем время ответа
+            llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
+            log_llm_metrics(
+                user_id=user_id,
+                model=effective_model,
+                duration_ms=llm_duration_ms,
+                success=True
+            )
+            logger.info(f"Stream finished for user {user_id}, history updated. Sources: {len(grounding_sources)}, Duration: {llm_duration_ms:.0f}ms")
             
             # Архивация истории для "памяти"
             if self.memory_archiver:
@@ -854,6 +974,13 @@ class GeminiService:
         if user_id in self.user_histories:
             del self.user_histories[user_id]
             logger.info(f"Cleared chat history for user {user_id}")
+        
+        if self.sqlite_memory:
+            try:
+                asyncio.create_task(self.sqlite_memory.clear_history(user_id))
+                logger.info(f"Memory: scheduled history clearing in SQLite for {user_id}")
+            except Exception as e:
+                logger.error(f"Error scheduling SQLite history clearing: {e}")
     async def wait_for_ready(self):
         """Ожидает инициализации базы знаний."""
         while self._initializing:

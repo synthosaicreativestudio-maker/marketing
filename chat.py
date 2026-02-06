@@ -10,14 +10,8 @@ from auth_service import AuthService
 from ai_service import AIService
 from appeals_service import AppealsService
 from error_handler import safe_handler
-from utils import create_specialist_button, sanitize_ai_text, safe_truncate_html
+from utils import create_specialist_button, _is_user_escalation_request, sanitize_ai_text
 from config import settings
-from rate_limiter import check_rate_limit
-from query_classifier import classify_query, QueryComplexity, should_use_rag, should_use_memory
-from escalation_manager import (
-    check_escalation, EscalationLevel, 
-    get_clarification_message, get_escalation_success_message, reset_escalation
-)
 
 logger = logging.getLogger(__name__)
 
@@ -41,14 +35,6 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
     async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         text = update.effective_message.text or ""
-        
-        # 0. Rate Limiting (защита от спама)
-        allowed, remaining = check_rate_limit(user.id)
-        if not allowed:
-            await update.message.reply_text(
-                "⚠️ Слишком много сообщений! Подождите минуту и попробуйте снова."
-            )
-            return
         
         # 1. Проверка авторизации
         auth_status = await auth_service.get_user_auth_status(user.id)
@@ -74,27 +60,12 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
             except Exception as e:
                 logger.error(f"Error handling profile for {user.id}: {e}")
 
-        # 3. Двухуровневая система эскалации
-        escalation_level = check_escalation(user.id, text)
-        
-        if escalation_level == EscalationLevel.CONFIRMED:
-            # Уровень 2: Немедленная эскалация — даём кнопку
+        # 3. Проверка на запрос специалиста
+        if _is_user_escalation_request(text):
             await update.message.reply_text(
-                get_escalation_success_message(),
+                "Ваш запрос передан специалисту. Ожидайте ответа.",
                 reply_markup=create_specialist_button()
             )
-            # Обновляем статус в таблице
-            if appeals_service and appeals_service.is_available():
-                try:
-                    await appeals_service.set_status(user.id, "Передано специалисту")
-                except Exception as e:
-                    logger.error(f"Ошибка обновления статуса эскалации: {e}")
-            reset_escalation(user.id)
-            return
-        
-        elif escalation_level == EscalationLevel.CLARIFYING:
-            # Уровень 1: Уточняем тему
-            await update.message.reply_text(get_clarification_message())
             return
 
         # 4. Проверка режима специалиста (пассивный режим)
@@ -106,23 +77,8 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
             await update.message.reply_text("Ассистент временно недоступен. Специалист ответит позже.")
             return
 
-        # 6. Классификация запроса и подготовка контекста
-        complexity, reason = classify_query(text)
-        logger.info(f"Query classified as {complexity.name} (reason: {reason}) for user {user.id}")
-        
-        # Адаптируем контекст в зависимости от сложности
-        use_rag = should_use_rag(complexity)
-        use_memory = should_use_memory(complexity)
-        
-        # Для простых запросов не используем память
-        if not use_memory:
-            profile_context = ""
-
-        # 7. Подготовка и стриминг ответа
-        await _process_ai_response(
-            update, context, ai_service, appeals_service, text, 
-            profile_context, complexity, use_rag
-        )
+        # 6. Подготовка контекста и стриминг
+        await _process_ai_response(update, context, ai_service, appeals_service, text, profile_context)
 
     return handle_chat
 
@@ -158,31 +114,21 @@ async def _is_specialist_mode(user_id, appeals_service):
         logger.debug(f"_is_specialist_mode: {e}", exc_info=True)
         return False
 
-async def _process_ai_response(update, context, ai_service, appeals_service, text, profile_context="", complexity=None, use_rag=True):
+async def _process_ai_response(update, context, ai_service, appeals_service, text, profile_context=""):
     """Стриминг ответа от ИИ с таймаутом и graceful degradation."""
     user = update.effective_user
     
-    # Для простых запросов — минимальная инструкция
-    if complexity == QueryComplexity.SIMPLE:
-        instruction = "\n\n[SYSTEM: Простой запрос. Ответь кратко, 1-2 предложения.]"
-    else:
-        # Контекстуальное приветствие для средних и сложных
-        now = time.time()
-        last = context.user_data.get('last_interaction_timestamp', 0)
-        context.user_data['last_interaction_timestamp'] = now
-        
-        instruction = "\n\n[SYSTEM: Продолжение диалога]" if (now - last) < 28800 else "\n\n[SYSTEM: Новая сессия]"
-        
-        # Принудительная инъекция имени (костыль, если профиль не загрузился)
-        if user.first_name:
-            instruction += f"\nИмя пользователя: {user.first_name}. Обращайся к нему по имени!"
-            
-        instruction += profile_context
+    # Контекстуальное приветствие
+    now = time.time()
+    last = context.user_data.get('last_interaction_timestamp', 0)
+    context.user_data['last_interaction_timestamp'] = now
     
-    # Для простых запросов не загружаем историю из таблицы
-    table_history_task = None
-    if complexity != QueryComplexity.SIMPLE and use_rag:
-        table_history_task = asyncio.create_task(appeals_service.get_raw_history(user.id)) if appeals_service and appeals_service.is_available() else None
+    instruction = "\n\n[SYSTEM: Продолжение диалога]" if (now - last) < 28800 else "\n\n[SYSTEM: Новая сессия]"
+    instruction += profile_context
+    
+    # Запускаем получение истории из таблицы параллельно с показом статуса "печатает"
+    # Это экономит ~1-2 секунды сетевых задержек
+    table_history_task = asyncio.create_task(appeals_service.get_raw_history(user.id)) if appeals_service and appeals_service.is_available() else None
     
     status_msg = await update.message.reply_text("⏳ Синта печатает...")
     
@@ -213,8 +159,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             if (time.time() - last_update) > 1.5:
                 display_text = sanitize_ai_text(full_response, ensure_emojis=False)
                 try:
-                    display_text_truncated = safe_truncate_html(display_text, 3900)
-                    await status_msg.edit_text(display_text_truncated + " ▌", parse_mode="HTML")
+                    await status_msg.edit_text(display_text[:3900] + " ▌")
                     last_update = time.time()
                 except Exception as e:
                     logger.debug(f"edit_text during stream: {e}", exc_info=True)
@@ -231,16 +176,16 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             parts = [clean_response[i:i+4000] for i in range(0, len(clean_response), 4000)]
             
             # Первая часть редактирует сообщение с "печатает..."
-            await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup, parse_mode="HTML")
+            await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup)
             
             # Остальные части отправляем новыми сообщениями
             for i, part in enumerate(parts[1:]):
                 # Кнопки только к последнему сообщению
                 current_markup = markup if i == len(parts) - 2 else None
-                await update.message.reply_text(part, reply_markup=current_markup, parse_mode="HTML")
+                await update.message.reply_text(part, reply_markup=current_markup)
         else:
             # Штатный режим (короткое сообщение)
-            await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode="HTML")
+            await status_msg.edit_text(clean_response, reply_markup=markup)
         
         # Фоновое логирование
         if settings.LOG_TO_SHEETS:

@@ -96,10 +96,10 @@ class PromotionsNotifier:
             # 1. Формируем сообщение
             title = promotion.get('title', 'Акция')
             description = promotion.get('description', '')
-            msg_text = "🎉 **Новая акция!**\n\n"
-            msg_text += f"**{title}**\n\n"
+            msg_text = "🎉 Новая акция!\n\n"
+            msg_text += f"{title}\n\n"
             msg_text += f"📝 {description[:200]}{'...' if len(description) > 200 else ''}\n\n"
-            msg_text += f"📅 **Период действия:** {promotion.get('start_date', '?')} - {promotion.get('end_date', '?')}\n\n"
+            msg_text += f"📅 Период действия: {promotion.get('start_date', '?')} - {promotion.get('end_date', '?')}\n\n"
             
             # 2. Подготавливаем кнопки
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -120,7 +120,7 @@ class PromotionsNotifier:
             
             is_error_media = content_url and (not media_data) and content_url != 'None'
             if is_error_media:
-                msg_text += "\n⚠️ _(Изображение недоступно)_"
+                msg_text += "\n⚠️ Изображение недоступно"
             
             # 4. Рассылка
             sent_count = 0
@@ -133,14 +133,12 @@ class PromotionsNotifier:
                             chat_id=user_id,
                             photo=media_data,
                             caption=msg_text,
-                            parse_mode='Markdown',
                             reply_markup=reply_markup
                         )
                     else:
                         await self.bot.send_message(
                             chat_id=user_id,
                             text=msg_text,
-                            parse_mode='Markdown',
                             reply_markup=reply_markup
                         )
                     

@@ -51,6 +51,8 @@ class AIService:
             active.append(f"OpenRouter({', '.join(models_short)})")
         if self.gemini_service.gemini_clients:
             active.append(f"Gemini({self.gemini_service.gemini_model})")
+        if hasattr(self.gemini_service, 'oa_client') and self.gemini_service.oa_client:
+            active.append(f"OpenAI({self.gemini_service.oa_model})")
         return " + ".join(active) if active else "None"
 
     async def refresh_knowledge_base(self):

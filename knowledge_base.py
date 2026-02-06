@@ -24,9 +24,10 @@ class KnowledgeBase:
         self.is_updating = False
         self._lock = asyncio.Lock()
         self._refresh_task = None
+        self._files_signature = None
         
-        # Feature flag: Context Caching (СAG)
-        self.caching_enabled = os.getenv("ENABLE_CONTEXT_CACHING", "false").lower() == "true"
+        # Feature flag: Context Caching (CAG) — принудительно выключено в proxy-only режиме
+        self.caching_enabled = False
         self.active_files = [] # Список активных файлов Gemini для RAG без кэша
         self.file_links = {}   # Mapping of filename -> Drive webViewLink
         
@@ -52,13 +53,7 @@ class KnowledgeBase:
                     }
                 )
             else:
-                # FIX: Использовать GEMINI_API_KEY вместо несуществующего self.api_key
-                api_key = os.getenv("GEMINI_API_KEY")
-                if api_key:
-                    logger.info("KnowledgeBase using Direct API")
-                    self.client = genai.Client(api_key=api_key)
-                else:
-                    logger.warning("KnowledgeBase: No API key found (GEMINI_API_KEY or PROXYAPI_KEY)")
+                logger.error("KnowledgeBase proxy-only mode: PROXYAPI_BASE_URL is required.")
         except Exception as e:
              logger.error(f"Failed to initialize Gemini Client in KnowledgeBase: {e}")
 
@@ -159,13 +154,65 @@ class KnowledgeBase:
                 self.is_updating = False
                 return
 
-            new_links = {f['name']: f['webViewLink'] for f in files_meta if 'name' in f and 'webViewLink' in f}
-            self.file_links = new_links
-            logger.info(f"Indexed {len(self.file_links)} file links")
+            # Skip refresh if nothing changed (by id/modifiedTime/size/mimeType)
+            signature_items = []
+            for f in files_meta:
+                signature_items.append((
+                    f.get('id'),
+                    f.get('modifiedTime'),
+                    f.get('size'),
+                    f.get('mimeType')
+                ))
+            signature = tuple(sorted(signature_items))
+            if self._files_signature == signature and self.local_context_ready:
+                logger.info("Knowledge Base refresh skipped: no file changes detected.")
+                self.last_update_time = time.time()
+                self.is_updating = False
+                return
+            self._files_signature = signature
+
+            # Filter heavy/unsupported files to reduce CPU/IO
+            max_mb = int(os.getenv("MAX_DRIVE_FILE_MB", "25"))
+            max_bytes = max_mb * 1024 * 1024
+            filtered_files = []
+            
+            # Предварительный сбор ссылок для всех файлов (включая картинки)
+            all_links = {f['name']: f['webViewLink'] for f in files_meta if 'name' in f and 'webViewLink' in f}
+            self.file_links = all_links
+            
+            for f in files_meta:
+                mime = f.get('mimeType', '')
+                size = int(f.get('size') or 0)
+                name = f.get('name', '')
+                
+                # Пропускаем только "чистые" картинки, но оставляем .ocr.txt
+                if mime in ('image/png', 'image/jpeg') and not name.lower().endswith('.ocr.txt'):
+                    logger.info(f"Skipping image file: {name} (waiting for OCR version)")
+                    continue
+                
+                if size and size > max_bytes:
+                    logger.info(f"Skipping large file (> {max_mb}MB): {name}")
+                    continue
+                    
+                filtered_files.append(f)
+            
+            files_meta = filtered_files
+            logger.info(f"Indexed {len(self.file_links)} file links, will download {len(files_meta)} text-based files")
 
             # 2. Download files locally
             local_files = []
+            
+            # Собираем все имена файлов для дедупликации
+            ocr_files = {f['name'] for f in files_meta if f['name'].endswith('.ocr.txt')}
+            
             for f in files_meta:
+                name = f['name']
+                # Если это оригинал и для него есть OCR-версия - пропускаем оригинал
+                if not name.endswith('.ocr.txt'):
+                    if f"{name}.ocr.txt" in ocr_files:
+                        logger.info(f"Deduplication: skipping original {name} (using OCR version)")
+                        continue
+                
                 path = await asyncio.to_thread(self.drive_service.download_file, f['id'], f['name'], f['mimeType'])
                 if path:
                     local_files.append(path)
@@ -252,21 +299,29 @@ class KnowledgeBase:
         finally:
             self.is_updating = False
 
-    def get_relevant_context(self, query: str, top_k: int = 5) -> str:
+    def get_relevant_context(self, query: str, top_k: int = 5, window_size: int = 1) -> str:
         """Returns the most relevant chunks formatted for the LLM prompt."""
-        if not self.local_context_ready:
+        if not self.search_engine:
             return ""
-            
-        chunks = self.search_engine.search(query, top_k=top_k)
-        if not chunks:
+        
+        # Передаем window_size в поисковый движок
+        results = self.search_engine.search(query, top_k=top_k, window_size=window_size)
+        if not results:
             return ""
+        
+        context = []
+        for res in results:
+            metadata = res.get('metadata', {})
+            source = metadata.get('source', 'unknown')
+            content = res.get('content', '')
             
-        context_parts = []
-        for i, chunk in enumerate(chunks):
-            source = chunk['metadata'].get('source', 'Unknown')
-            context_parts.append(f"--- Fragment {i+1} (Source: {source}) ---\n{chunk['content']}")
+            # Пытаемся добавить ссылку на файл из Drive
+            link = self.file_links.get(source, "")
+            source_info = f"{source} (Link: {link})" if link else source
             
-        return "\n\n".join(context_parts)
+            context.append(f"SOURCE: {source_info}\nCONTENT: {content}\n")
+            
+        return "\n---\n".join(context)
 
     async def get_active_files(self) -> List[types.File]:
         """Returns the list of active files in Gemini for RAG without cache."""

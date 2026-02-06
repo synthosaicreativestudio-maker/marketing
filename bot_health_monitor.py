@@ -4,11 +4,18 @@
 import logging
 import asyncio
 import time
+import os
 from typing import Optional
 from telegram import Bot
 from telegram.error import TelegramError, NetworkError, TimedOut
 
 logger = logging.getLogger(__name__)
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "y", "on")
 
 
 class BotHealthMonitor:
@@ -37,6 +44,10 @@ class BotHealthMonitor:
         self.last_successful_check = time.time()
         self.consecutive_failures = 0
         self.max_failures = 3
+        self.restart_on_failure = _env_bool("HEALTHCHECK_RESTART_ON_FAILURE", True)
+        self.max_failures = int(os.getenv("HEALTHCHECK_MAX_FAILURES", str(self.max_failures)))
+        self.restart_cooldown_sec = int(os.getenv("HEALTHCHECK_RESTART_COOLDOWN_SEC", "3600"))
+        self._last_restart_time = 0.0
         
         # Для мониторинга Google Sheets
         self.sheets_gateway = sheets_gateway
@@ -91,6 +102,19 @@ class BotHealthMonitor:
                             f"КРИТИЧЕСКОЕ: Бот не отвечает после {self.max_failures} попыток. "
                             f"Последняя успешная проверка: {time.time() - self.last_successful_check:.0f} сек назад"
                         )
+                        if self.restart_on_failure:
+                            now = time.time()
+                            if now - self._last_restart_time >= self.restart_cooldown_sec:
+                                logger.critical(
+                                    "Автоматический рестарт процесса (healthcheck): "
+                                    f"cooldown={self.restart_cooldown_sec}s"
+                                )
+                                self._last_restart_time = now
+                                os._exit(1)
+                            else:
+                                logger.error(
+                                    "Рестарт подавлен: cooldown ещё не истёк"
+                                )
                 
                 # Проверяем Google Sheets (если настроено)
                 if self.auth_service:
