@@ -1,6 +1,7 @@
 import logging
 import re
 import os
+import json
 import numpy as np
 from typing import List, Dict, Optional, Any, Set
 from rank_bm25 import BM25Okapi
@@ -63,6 +64,56 @@ class SearchEngine:
         
         # Morphological analyzer for Russian
         self.morph = pymorphy2.MorphAnalyzer()
+
+    def _rebuild_metadata_indexes(self):
+        """Rebuild metadata indexes from chunks."""
+        self.source_to_indices = {}
+        self.doc_type_to_indices = {}
+        for i, chunk in enumerate(self.chunks):
+            source = chunk.get('metadata', {}).get('source', 'unknown')
+            if source not in self.source_to_indices:
+                self.source_to_indices[source] = []
+            self.source_to_indices[source].append(i)
+
+            ext = os.path.splitext(source)[1].lower()
+            doc_type = DOC_TYPES.get(ext, "other")
+            if doc_type not in self.doc_type_to_indices:
+                self.doc_type_to_indices[doc_type] = []
+            self.doc_type_to_indices[doc_type].append(i)
+
+    def save_index(self, path: str) -> bool:
+        """Persist chunks to disk for fast startup."""
+        try:
+            if not path:
+                return False
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"chunks": self.chunks}, f, ensure_ascii=False)
+            logger.info(f"RAG index saved: {path} (chunks: {len(self.chunks)})")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save RAG index to {path}: {e}")
+            return False
+
+    def load_index(self, path: str) -> bool:
+        """Load chunks from disk and rebuild indexes."""
+        try:
+            if not path or not os.path.exists(path):
+                return False
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            chunks = data.get("chunks", [])
+            if not chunks:
+                logger.warning(f"RAG index file is empty: {path}")
+                return False
+            self.chunks = chunks
+            self._rebuild_metadata_indexes()
+            self._build_indexes()
+            logger.info(f"RAG index loaded: {path} (chunks: {len(self.chunks)})")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to load RAG index from {path}: {e}")
+            return False
 
     def add_chunks(self, new_chunks: List[Dict[str, Any]]):
         """Adds new text chunks and re-initializes indexes."""
@@ -205,7 +256,11 @@ class SearchEngine:
             return []
         
         # Для reranking берем больше кандидатов
-        candidate_k = top_k * 4 if enable_reranking else top_k
+        try:
+            multiplier = int(os.getenv("RAG_CANDIDATE_MULTIPLIER", "2"))
+        except ValueError:
+            multiplier = 2
+        candidate_k = top_k * max(1, multiplier) if enable_reranking else top_k
         
         # Get filtered indices (if any filters applied)
         filtered_indices = self._get_filtered_indices(sources, doc_types)

@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import time
+import hashlib
 from typing import Optional, List
 from google import genai
 from google.genai import types
@@ -24,6 +25,8 @@ class KnowledgeBase:
         self.is_updating = False
         self._lock = asyncio.Lock()
         self._refresh_task = None
+        self.index_path = os.getenv("RAG_INDEX_PATH", "rag_index.json")
+        self.skip_initial_refresh = os.getenv("RAG_SKIP_INITIAL_REFRESH", "true").lower() in ("1", "true", "yes", "y")
         self._files_signature = None
         
         # Feature flag: Context Caching (CAG) — принудительно выключено в proxy-only режиме
@@ -59,6 +62,15 @@ class KnowledgeBase:
 
     async def initialize(self):
         """Initial check and cache creation."""
+        # Try to load local RAG index for fast startup
+        if self.index_path:
+            if self.search_engine.load_index(self.index_path):
+                self.local_context_ready = True
+                logger.info("KnowledgeBase: Local RAG index loaded from disk.")
+                if self.skip_initial_refresh:
+                    logger.info("KnowledgeBase: Initial refresh skipped (RAG_SKIP_INITIAL_REFRESH=true).")
+                    return
+
         if not self.client or not self.folder_id or str(self.folder_id).lower() in ('none', ''):
             logger.warning(f"KnowledgeBase disabled: client missing or invalid folder_id: {self.folder_id}")
             return
@@ -111,24 +123,31 @@ class KnowledgeBase:
                 except Exception as e:
                     logger.warning(f"Failed to delete cache from API (already gone?): {e}")
 
-    async def start_auto_refresh(self, interval_hours: int = 6):
-        """Starts a background task to refresh the knowledge base periodically."""
+    async def start_auto_refresh(self, target_hour_local: int = 23, tz_offset_hours: int = 5):
+        """Starts a background task to refresh the knowledge base daily at target_hour_local (Ekb by default)."""
         if self._refresh_task and not self._refresh_task.done():
             logger.info("Knowledge Base auto-refresh is already running.")
             return
 
         async def _refresh_loop():
-            logger.info(f"Starting Knowledge Base auto-refresh loop (every {interval_hours} hours)")
+            logger.info(
+                f"Starting Knowledge Base auto-refresh loop (daily at {target_hour_local:02d}:00 UTC{tz_offset_hours:+d})"
+            )
+            from datetime import datetime, timedelta, timezone
+            tz = timezone(timedelta(hours=tz_offset_hours))
             while True:
                 try:
-                    # Ждем 30 секунд перед первым запуском, чтобы дать боту полностью загрузиться
-                    await asyncio.sleep(30)
+                    now_local = datetime.now(tz)
+                    target_local = now_local.replace(hour=target_hour_local, minute=0, second=0, microsecond=0)
+                    if target_local <= now_local:
+                        target_local = target_local + timedelta(days=1)
+                    sleep_seconds = (target_local - now_local).total_seconds()
+                    await asyncio.sleep(sleep_seconds)
                     await self.refresh_cache()
-                    logger.info(f"Knowledge Base auto-refresh successful. Next refresh in {interval_hours} hours.")
+                    logger.info("Knowledge Base auto-refresh successful. Next refresh scheduled for tomorrow.")
                 except Exception as e:
                     logger.error(f"Error during Knowledge Base auto-refresh: {e}")
-                
-                await asyncio.sleep(interval_hours * 3600)
+                    await asyncio.sleep(60)
 
         # Создаем задачу через task_tracker для мониторинга
         from task_tracker import task_tracker
@@ -198,43 +217,53 @@ class KnowledgeBase:
             
             files_meta = filtered_files
             logger.info(f"Indexed {len(self.file_links)} file links, will download {len(files_meta)} text-based files")
-
-            # 2. Download files locally
+            # 2. Download/process files with incremental cache
             local_files = []
+            all_chunks = []
             
-            # Собираем все имена файлов для дедупликации
+            # ???????????????? ?????? ?????????? ???????????? ?????? ????????????????????????
             ocr_files = {f['name'] for f in files_meta if f['name'].endswith('.ocr.txt')}
             
             for f in files_meta:
                 name = f['name']
-                # Если это оригинал и для него есть OCR-версия - пропускаем оригинал
+                # ???????? ?????? ???????????????? ?? ?????? ???????? ???????? OCR-???????????? - ???????????????????? ????????????????
                 if not name.endswith('.ocr.txt'):
                     if f"{name}.ocr.txt" in ocr_files:
                         logger.info(f"Deduplication: skipping original {name} (using OCR version)")
                         continue
-                
+
+                file_id = f.get('id', '')
+                modified = f.get('modifiedTime', '')
+                file_key = f"{file_id}:{modified}"
+                file_hash = hashlib.md5(file_key.encode('utf-8')).hexdigest()
+                cached = self.search_engine.persistent_cache.get_cached_chunks(file_hash)
+                if cached:
+                    all_chunks.extend(cached)
+                    continue
+
                 path = await asyncio.to_thread(self.drive_service.download_file, f['id'], f['name'], f['mimeType'])
                 if path:
                     local_files.append(path)
+                    chunks = self.doc_processor.process_file(path)
+                    if chunks:
+                        all_chunks.extend(chunks)
+                        self.search_engine.persistent_cache.cache_chunks(file_hash, name, chunks)
             
-            if not local_files:
-                logger.warning("Failed to download any files.")
+            if not all_chunks:
+                logger.warning("Failed to process any files.")
                 self.is_updating = False
                 return
 
             # 3. Universal RAG: Local Indexing
             logger.info("Universal RAG: Starting local indexing...")
-            all_chunks = []
-            for path in local_files:
-                chunks = self.doc_processor.process_file(path)
-                if chunks:
-                    all_chunks.extend(chunks)
-            
             if all_chunks:
                 self.search_engine.clear()
                 self.search_engine.add_chunks(all_chunks)
                 self.local_context_ready = True
                 logger.info(f"✅ Universal RAG: Indexed {len(all_chunks)} chunks.")
+                # Persist local RAG index for fast restarts
+                if self.index_path:
+                    self.search_engine.save_index(self.index_path)
             else:
                 logger.warning("Universal RAG: No text chunks extracted.")
 

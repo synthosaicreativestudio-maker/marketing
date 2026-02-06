@@ -231,18 +231,27 @@ class GeminiService:
         if self.knowledge_base:
             await self.knowledge_base.initialize()
             
-            # Запускаем фоновое автообновление каждые 6 часов
+            # Запускаем фоновое автообновление (по локальному времени)
             try:
-                kb_refresh_hours = int(os.getenv("KB_REFRESH_HOURS", "12"))
+                kb_refresh_hour = int(os.getenv("KB_REFRESH_HOUR_LOCAL", "23"))
             except ValueError:
-                kb_refresh_hours = 12
-            await self.knowledge_base.start_auto_refresh(interval_hours=kb_refresh_hours)
+                kb_refresh_hour = 23
+            try:
+                kb_refresh_tz = int(os.getenv("KB_REFRESH_TZ_OFFSET", "5"))
+            except ValueError:
+                kb_refresh_tz = 5
+            await self.knowledge_base.start_auto_refresh(
+                target_hour_local=kb_refresh_hour,
+                tz_offset_hours=kb_refresh_tz
+            )
             
-            # ПРИНУДИТЕЛЬНО запускаем первое обновление кэша с нашими правилами
-            asyncio.create_task(self.knowledge_base.refresh_cache(
-                system_instruction=self.system_instruction,
-                tools=self.tools
-            ))
+            # Принудительное обновление при старте — только если не отключено
+            skip_initial = os.getenv("RAG_SKIP_INITIAL_REFRESH", "true").lower() in ("1", "true", "yes", "y")
+            if not skip_initial:
+                asyncio.create_task(self.knowledge_base.refresh_cache(
+                    system_instruction=self.system_instruction,
+                    tools=self.tools
+                ))
 
     def is_enabled(self) -> bool:
         """Проверяет, доступен ли Gemini."""

@@ -5,6 +5,7 @@ from handlers.chat import register_chat_handlers
 from handlers.appeals import register_appeals_handlers
 from handlers.promotions import register_promotions_handlers
 from handlers.callback import register_callback_handlers
+from handlers.admin import register_admin_handlers
 
 logger = logging.getLogger(__name__)
 
@@ -38,3 +39,7 @@ def setup_handlers(application, auth_service, ai_service, appeals_service, promo
     if settings.ENABLE_CALLBACKS:
         register_callback_handlers(application, auth_service, appeals_service)
         logger.info("Модуль Callbacks подключен")
+
+    # 6. Админ-команды
+    register_admin_handlers(application, ai_service)
+    logger.info("Модуль Admin подключен")

@@ -12,8 +12,14 @@ class DocumentProcessor:
     """Processes various document types with semantic chunking and parent document retrieval."""
     
     def __init__(self, max_chunk_size: int = 1500, min_chunk_size: int = 100):
-        self.max_chunk_size = max_chunk_size
-        self.min_chunk_size = min_chunk_size
+        try:
+            self.max_chunk_size = int(os.getenv("CHUNK_MAX_CHARS", str(max_chunk_size)))
+        except ValueError:
+            self.max_chunk_size = max_chunk_size
+        try:
+            self.min_chunk_size = int(os.getenv("CHUNK_MIN_CHARS", str(min_chunk_size)))
+        except ValueError:
+            self.min_chunk_size = min_chunk_size
         # Lightweight overlap to improve recall without heavy compute
         try:
             self.overlap_chars = int(os.getenv("CHUNK_OVERLAP_CHARS", "150"))
