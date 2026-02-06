@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiService:
-    """Сервис для работы с Google Gemini API и OpenRouter.
+    """Сервис для работы только с Google Gemini API.
     
     Функционал:
     - Управление историей диалогов в памяти (user_id -> chat_history)
     - Ограничение истории до 10 последних сообщений
     - Поддержка настройки температуры и максимального количества токенов
-    - Обработка ошибок и логирование (Gemini + OpenRouter/DeepSeek)
+    - Обработка ошибок и логирование (Gemini only)
     """
 
     def __init__(self, promotions_gateway: Optional[AsyncGoogleSheetsGateway] = None) -> None:
@@ -43,6 +43,12 @@ class GeminiService:
         
         logger.info(f"Found {len(gemini_keys)} Gemini API keys in environment.")
         logger.info(f"Proxy config: base_url={proxyapi_base_url}, key_present={bool(proxyapi_key)}")
+        
+        # Проверка доступности прокси-хоста (базовая)
+        if proxyapi_base_url and "://" in proxyapi_base_url:
+            from urllib.parse import urlparse
+            parsed = urlparse(proxyapi_base_url)
+            logger.info(f"Proxy destination: {parsed.netloc}")
         
         if not proxyapi_base_url:
             raise RuntimeError(
@@ -75,6 +81,10 @@ class GeminiService:
                 logger.info(f"Gemini client initialized with key ...{key[-4:]}")
             except Exception as e:
                 logger.error(f"CRITICAL: Failed to init Gemini client with key ...{key[-4:]}: {str(e)}")
+                if "404" in str(e):
+                    logger.error("Error 404: Model not found or API version mismatch. Check GEMINI_MODELS and PROXYAPI_VERSION.")
+                elif "401" in str(e):
+                    logger.error("Error 401: Invalid API Key.")
                 import traceback
                 logger.error(traceback.format_exc())
         
@@ -235,8 +245,8 @@ class GeminiService:
             ))
 
     def is_enabled(self) -> bool:
-        """Проверяет, доступен ли какой-либо ИИ-сервис."""
-        return self.client is not None or self.or_client is not None or (hasattr(self, 'oa_client') and self.oa_client is not None)
+        """Проверяет, доступен ли Gemini."""
+        return self.client is not None
 
     def _cleanup_old_histories(self) -> None:
         """Очистка старых историй для предотвращения memory leak."""
@@ -358,7 +368,7 @@ class GeminiService:
         # Это предотвращает дублирование вопроса при ретраях и переключении ключей
         self._add_to_history(user_id, "user", f"### КОНТЕКСТ RAG:\n{rag_context}\n\n### ВОПРОС:\n{content}")
         
-        # --- MULTI-PROVIDER FALLBACK LOGIC (Priority: Gemini → OpenRouter → Groq) ---
+        # --- GEMINI ONLY (no fallback providers) ---
         
         # 1. GEMINI PRIMARY (model rotation + key rotation)
         # Стратегия: пробуем все ключи с моделью #1, затем все ключи с моделью #2, и т.д.
@@ -383,96 +393,7 @@ class GeminiService:
                         logger.warning(f"Gemini '{model_name}' + key #{key_idx+1} failed: {e}")
                         continue
 
-        # 2. OpenRouter FALLBACK (Pool of free models)
-        if self.or_client:
-            logger.info("Gemini exhausted, trying OpenRouter fallback...")
-            for model_id in self.or_models:
-                try:
-                    logger.info(f"Trying OpenRouter model: {model_id}")
-                    has_content = False
-                    
-                    gen = self._ask_stream_openrouter_model(user_id, content, model_id, external_history, rag_context)
-                    
-                    try:
-                        first_chunk = await asyncio.wait_for(gen.__anext__(), timeout=15.0)
-                        if first_chunk:
-                            logger.info(f"✅ OpenRouter {model_id} started responding")
-                            has_content = True
-                            yield first_chunk
-                    except asyncio.TimeoutError:
-                        logger.warning(f"Timeout waiting for {model_id}")
-                        continue
-                    except StopAsyncIteration:
-                        continue
-                    
-                    async for chunk in gen:
-                        if chunk:
-                            yield chunk
-                    
-                    if has_content:
-                        return
-                except Exception as e:
-                    if 'has_content' in locals() and has_content:
-                        logger.error(f"OpenRouter stream error AFTER yield (user {user_id}): {e}")
-                        return
-                    logger.warning(f"OpenRouter model {model_id} failed: {e}")
-                    continue
-
-        # 3. Groq LAST RESORT (if enabled)
-        if self.groq_client:
-            try:
-                logger.info(f"Trying Groq last resort: {self.groq_model}")
-                has_content = False
-                gen = self._ask_stream_groq(user_id, content, external_history, rag_context)
-                
-                try:
-                    first_chunk = await asyncio.wait_for(gen.__anext__(), timeout=15.0)
-                    if first_chunk:
-                        logger.info(f"✅ Groq {self.groq_model} started responding")
-                        has_content = True
-                        yield first_chunk
-                except asyncio.TimeoutError:
-                    logger.warning("Timeout waiting for Groq")
-                except StopAsyncIteration:
-                    pass
-                    
-                async for chunk in gen:
-                    if chunk:
-                        yield chunk
-                if has_content:
-                    return
-            except Exception as e:
-                logger.warning(f"Groq failed: {e}")
-
-        # 4. OpenAI FINAL FALLBACK (If configured and not already tried via OR)
-        if self.oa_client:
-            try:
-                logger.info(f"Trying OpenAI final fallback: {self.oa_model}")
-                has_content = False
-                messages = [
-                    {"role": "system", "content": self.system_instruction},
-                    {"role": "user", "content": f"### КОНТЕКСТ БАЗЫ ЗНАНИЙ:\n{rag_context}\n\n### ВОПРОС:\n{content}"}
-                ]
-                
-                response = await self.oa_client.chat.completions.create(
-                    model=self.oa_model,
-                    messages=messages,
-                    stream=True,
-                    temperature=0.7
-                )
-                
-                async for chunk in response:
-                    text = chunk.choices[0].delta.content
-                    if text:
-                        if not has_content:
-                            logger.info(f"✅ OpenAI {self.oa_model} started responding")
-                            has_content = True
-                        yield text
-                
-                if has_content:
-                    return
-            except Exception as e:
-                logger.warning(f"OpenAI fallback failed: {e}")
+        raise RuntimeError("Gemini unavailable: no fallback providers configured")
 
         # Если дошли сюда — все провайдеры и ключи упали
         logger.error(f"All AI providers and keys failed for user {user_id}")

@@ -49,10 +49,11 @@ async def test_gemini_access():
             print("✗ ОШИБКА: Не найден ни один ключ API")
             return False
         
-        print("Отправка тестового запроса к модели gemini-3-pro-preview...")
+        model_name = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+        print(f"Отправка тестового запроса к модели {model_name}...")
         
         response = await client.aio.models.generate_content(
-            model='gemini-3-pro-preview',
+            model=model_name,
             contents='Скажи "привет" в одном слове на русском языке'
         )
         

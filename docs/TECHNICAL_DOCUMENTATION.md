@@ -8,13 +8,13 @@
 
 ## 1. High-Level Architecture
 
-The project is a resilient **Telegram Bot** built with Python, designed for high availability (24/7) and fault tolerance. It operates as a monolithic application with modular services, using **Google Sheets** as its primary database and an **Advanced Multi-AI System** (Gemini 2.0 Flash + OpenRouter) for AI capabilities.
+The project is a resilient **Telegram Bot** built with Python, designed for high availability (24/7) and fault tolerance. It operates as a monolithic application with modular services, using **Google Sheets** as its primary database and **Google Gemini** as the only AI provider (no fallback providers).
 
 ### Technology Stack
 *   **Runtime:** Python 3.10+
 *   **Core Framework:** `python-telegram-bot` (v20+, Async)
 *   **Database:** Google Sheets (via `gspread` + `tenacity` for retries)
-*   **AI Engine:** Advanced Multi-AI (Gemini 2.0 Flash + OpenRouter Model Pool)
+*   **AI Engine:** Gemini only (`gemini-3-flash-preview`)
 *   **Web Integration:** Flask (for Webhooks & Mini Apps)
 *   **Deployment:** Systemd Service (Linux/Ubuntu)
 
@@ -41,7 +41,7 @@ graph TD
     end
     
     subgraph "External Integrations"
-        GeminiService <-->|API Pool| MultiAI[Gemini / OpenRouter]
+        GeminiService <-->|API| Gemini[Google Gemini]
     end
 ```
 
@@ -135,7 +135,7 @@ Stores support tickets and chat history.
 *   **Google Sheets API:** Authenticated via Service Account JSON (`GCP_SA_FILE`).
 *   **Advanced Multi-AI System:**
     *   **Gemini API:** Uses `GEMINI_API_KEYS` (rotation pool) and `gemini-2.0-flash` model.
-    *   **OpenRouter API:** Accesses varied LLMs (DeepSeek, Llama, Qwen) via `OPENROUTER_API_KEY`.
+    *   **OpenRouter API:** DISABLED (no fallback providers).
     *   **Proxy Support:** Configurable via `PROXYAPI_BASE_URL` for bypass regional restrictions.
 
 ### 4.2 Webhooks & Mini App
@@ -160,7 +160,7 @@ For a beginner developer, here is what each file does:
 *   `auth_service.py`: **Security**. Handles checking user permissions in Google Sheets.
 *   `appeals_service.py`: **Support Ticket System**. Logic for creating/updating tickets in Sheets.
 *   `sheets_gateway.py`: **Database Driver**. Low-level connector to Google Sheets with retry protection.
-*   `gemini_service.py`: **AI Connector**. Handles pooling, rotation, and falling back between Gemini and OpenRouter.
+*   `gemini_service.py`: **AI Connector**. Handles Gemini pooling/rotation only (no fallback providers).
 
 ### 5.2 Setting Up Your Local Environment (Step-by-Step)
 1.  **Install Python 3.10+**.

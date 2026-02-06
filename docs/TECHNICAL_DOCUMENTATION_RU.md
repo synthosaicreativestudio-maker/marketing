@@ -8,14 +8,14 @@
 
 ## 1. Высокоуровневая Архитектура
 
-Проект представляет собой отказоустойчивый **Telegram-бот**, написанный на Python, разработанный для высокой доступности (24/7). Он работает как монолитное приложение с модульными сервисами, используя **Google Sheets** в качестве основной базы данных и **Advanced Multi-AI System** (Gemini 2.0 Flash + OpenRouter) для возможностей ИИ.
+Проект представляет собой отказоустойчивый **Telegram-бот**, написанный на Python, разработанный для высокой доступности (24/7). Он работает как монолитное приложение с модульными сервисами, используя **Google Sheets** в качестве основной базы данных и **Google Gemini** как единственный ИИ (без резервных провайдеров).
 
 ### Технологический Стек
 *   **Язык:** Python 3.12+
 *   **Фреймворк:** `python-telegram-bot` (v20+, Async)
 *   **База Данных:** Google Sheets (через `gspread` + `tenacity` для повторных попыток)
-*   **ИИ Движок:** Advanced Multi-AI (Gemini 2.0 Flash через пул ключей + OpenRouter пул моделей)
-*   **Сетевая связность:** Работа через US-прокси и API OpenRouter
+*   **ИИ Движок:** Только Gemini (модель `gemini-3-flash-preview`)
+*   **Сетевая связность:** Только US-прокси для запросов Gemini (без OpenRouter/других провайдеров)
 *   **Развертывание:** Systemd Service (Linux/Ubuntu)
 
 ### Диаграмма Архитектуры (Логическая)
@@ -140,8 +140,8 @@ graph TD
 *   **Google Sheets API:** Аутентификация через JSON Сервисного Аккаунта (`GCP_SA_FILE`).
 *   **Advanced Multi-AI System:**
     *   **Gemini API:** Использует `GEMINI_API_KEYS` (пул для ротации) и модель `gemini-2.0-flash`.
-    *   **OpenRouter API:** Использует `OPENROUTER_API_KEY` и пул моделей `OPENROUTER_MODELS`.
-    *   **Поддержка Прокси:** Настраивается через `PROXYAPI_BASE_URL` для обхода ограничений в РФ.
+    *   **OpenRouter API:** ОТКЛЮЧЕН (резервные ИИ-подключения не используются).
+    *   **Поддержка Прокси:** Настраивается через `PROXYAPI_BASE_URL` для обхода ограничений в РФ (только для Gemini).
 
 ### 4.2 Вебхуки и Mini App
 *   **Эндпоинт:** `/webhook/promotions` (Flask/Werkzeug).
@@ -220,3 +220,34 @@ graph TD
 *   **Перезапустить Бот:** `sudo systemctl restart marketingbot`
     *   Запускайте это после *каждого* обновления кода на сервере.
 *   **Смотреть Логи в Реал-тайме:** `journalctl -u marketingbot -f`
+
+---
+
+## Приложение: Google Drive (папки)
+
+Ниже зафиксированы ссылки на папки Google Drive, которые используются в проекте:
+
+- **Папка обращений:** `1BMgJ-hjUh9pMRzBg_cGgHrHkb-KZjRPt`
+- **Папка авторизации:** `1dWsMQ8pWjh1qhjLaj8-LYqT8a-9rWU25`
+- **Папка акций:** `1HVvNRrRLDbPpxHx5gwFPw0r55O3jTkrv`
+- **Папка базы знаний:** `1JKjzWs3or3hn5ioCIqPBGHkZmgIN-OFf`
+
+Важно: для настройки `SHEET_ID`, `APPEALS_SHEET_ID`, `PROMOTIONS_SHEET_ID` нужны ID конкретных таблиц Google Sheets
+(`https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit`), а не папок.
+
+---
+
+## Приложение: Google Sheets (ID таблиц)
+
+Актуальные ID таблиц:
+
+- **Авторизация (SHEET_ID):** `1_SB04LMuGB7ba3aog2xxN6N3g99ZfOboT-vdWXxrh_8`
+- **Обращения (APPEALS_SHEET_ID):** `15XxSIpD_gMZaSOIrqDVCNI2EqBzphEGiG0ZNJ3HR8hI`
+- **Акции (PROMOTIONS_SHEET_ID):** `1V3-cPRq_SmbCbIzn1-CWSqD8pdpDqraq_GJ7LjMmwf8`
+
+---
+
+## Приложение: Gemini (модель и ключи)
+
+- **Модель:** `gemini-3-flash-preview`
+- **Ключ API:** хранится только в `.env` (не фиксируется в документации).

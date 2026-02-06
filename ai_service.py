@@ -45,15 +45,9 @@ class AIService:
 
     def get_provider_name(self) -> str:
         """Возвращает имя активных провайдеров."""
-        active = []
-        if self.gemini_service.or_client:
-            models_short = [m.split("/")[-1] for m in self.gemini_service.or_models]
-            active.append(f"OpenRouter({', '.join(models_short)})")
         if self.gemini_service.gemini_clients:
-            active.append(f"Gemini({self.gemini_service.gemini_model})")
-        if hasattr(self.gemini_service, 'oa_client') and self.gemini_service.oa_client:
-            active.append(f"OpenAI({self.gemini_service.oa_model})")
-        return " + ".join(active) if active else "None"
+            return f"Gemini({self.gemini_service.gemini_model})"
+        return "None"
 
     async def refresh_knowledge_base(self):
         """Ручное обновление базы знаний."""
