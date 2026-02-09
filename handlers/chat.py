@@ -188,15 +188,15 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     
     # Инструкции по каскадам (краткость и без лишнего)
     if cascade_level == 1:
-        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 1 предложение. Без лишнего. Без ссылок, если не просили.]"
+        instruction = "\n\n[SYSTEM: Дружелюбный короткий ответ (1-2 предложения). Эмодзи допустимы. Без лишнего.]"
     elif cascade_level == 2:
-        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 1-2 предложения. Без лишнего. Без длинных вступлений.]"
+        instruction = "\n\n[SYSTEM: Дай полный текст сценария из системного промта без сокращений. Обязательно сохрани все ссылки и шаги. Разрешён короткий список. В конце 1 фраза «Следующий шаг». Эмодзи 0–2 допустимы.]"
     elif cascade_level == 3:
-        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 3-6 строк. Можно один короткий список. Используй системный промт + RAG. В конце 1 вопрос «Следующий шаг».]"
+        instruction = "\n\n[SYSTEM: Дай полный текст сценария из системного промта или RAG без сокращений. Обязательно сохрани все ссылки и шаги. Разрешён короткий список. В конце 1 фраза «Следующий шаг». Эмодзи 0–2 допустимы.]"
     elif cascade_level == 4:
-        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 4-7 строк. Один короткий список. Используй системный промт + RAG. В конце 1 вопрос «Следующий шаг».]"
+        instruction = "\n\n[SYSTEM: Дай полный текст сценария из системного промта или RAG без сокращений. Обязательно сохрани все ссылки и шаги. Разрешён короткий список. В конце 1 фраза «Следующий шаг». Эмодзи 0–2 допустимы.]"
     else:
-        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 4-7 строк. Один короткий список. Используй системный промт + RAG. В конце 1 вопрос «Следующий шаг». Добавь метку [ESCALATE_ACTION].]"
+        instruction = "\n\n[SYSTEM: Дай полный текст сценария из системного промта или RAG без сокращений. Обязательно сохрани все ссылки и шаги. Разрешён короткий список. В конце 1 фраза «Следующий шаг». Эмодзи 0–2 допустимы. Добавь метку [ESCALATE_ACTION].]"
 
     # Контекстуальное приветствие для средних и сложных
     if cascade_level >= 3:
@@ -244,7 +244,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             
             full_response += chunk
             if (time.time() - last_update) > 1.5:
-                display_text = sanitize_ai_text_plain(full_response, ensure_emojis=False)
+                display_text = sanitize_ai_text_plain(full_response, ensure_emojis=True)
                 try:
                     display_text_truncated = display_text[:3900]
                     await status_msg.edit_text(display_text_truncated + " ▌")
@@ -255,17 +255,9 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
         # Финализация
         is_esc = "[ESCALATE_ACTION]" in full_response
         clean_response = full_response.replace("[ESCALATE_ACTION]", "").strip()
-        clean_response = sanitize_ai_text_plain(clean_response, ensure_emojis=False)
+        clean_response = sanitize_ai_text_plain(clean_response, ensure_emojis=True)
 
-        # Ограничиваем длину ответа по уровню
-        if cascade_level == 1:
-            clean_response = _limit_sentences(clean_response, 1)
-        elif cascade_level == 2:
-            clean_response = _limit_sentences(clean_response, 2)
-        elif cascade_level == 3:
-            clean_response = _limit_sentences(clean_response, 4)
-        else:
-            clean_response = _limit_sentences(clean_response, 6)
+        # Вариант A: не сокращаем ответы — отдаём полный сценарий
 
         # Эскалация для уровня 5
         if force_escalation and "[ESCALATE_ACTION]" not in full_response:

@@ -66,9 +66,10 @@ def sanitize_ai_text_plain(text: str, ensure_emojis: bool = True) -> str:
     # Convert markdown links to "Text: URL"
     text = re.sub(r'\[([^\]]+)\]\((https?://[^\s)]+)\)', r'\1: \2', text)
 
-    # Remove "Согласно базе знаний ..." phrasing
+    # Remove formal phrasing
     text = re.sub(r'(?i)\bсогласно (?:нашей )?базе знаний[^.]*\.\s*', '', text)
     text = re.sub(r'(?i)\bсогласно базе знаний[^:]*:\s*', '', text)
+    text = re.sub(r'(?i)\bв соответствии с регламент(?:ами|ом)[^.]*\.\s*', '', text)
 
     # Strip markdown formatting markers
     text = text.replace("```", "")
