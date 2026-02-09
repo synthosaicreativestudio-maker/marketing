@@ -78,6 +78,13 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
         # 3. Классификация запроса
         complexity, reason = classify_query(text)
 
+        # Короткий ответ на приветствие/благодарность без ИИ
+        if reason == "greeting_or_acknowledgment":
+            await update.message.reply_text(
+                "Здравствуйте! Я Галина Галкина, помощник по маркетингу. Чем могу помочь? 🙂✨"
+            )
+            return
+
         # Быстрые короткие сообщения — считаем простыми (даже если с вопросом)
         if len(text.strip()) < 20 and complexity == QueryComplexity.MEDIUM:
             complexity, reason = QueryComplexity.SIMPLE, "short_message"
@@ -128,6 +135,8 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
 
         # 7. Адаптация контекста в зависимости от уровня
         use_rag = cascade_level >= 3 and should_use_rag(complexity)
+        if os.getenv("RAG_DISABLED", "false").lower() in ("1", "true", "yes", "y"):
+            use_rag = False
         use_memory = cascade_level >= 4 and should_use_memory(complexity)
 
         # Для простых запросов не используем память
@@ -217,7 +226,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     if complexity != QueryComplexity.SIMPLE and use_rag:
         table_history_task = asyncio.create_task(appeals_service.get_raw_history(user.id)) if appeals_service and appeals_service.is_available() else None
     
-    status_msg = await update.message.reply_text("⏳ Синта печатает...")
+    status_msg = await update.message.reply_text("⏳ Галина Галкина печатает...")
     
     table_history = ""
     if table_history_task:

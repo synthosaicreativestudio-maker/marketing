@@ -51,7 +51,11 @@ class AIService:
 
     async def refresh_knowledge_base(self):
         """Ручное обновление базы знаний."""
-        if self.gemini_service and self.gemini_service.knowledge_base:
+        if (
+            self.gemini_service
+            and self.gemini_service.knowledge_base
+            and not getattr(self.gemini_service, "rag_disabled", False)
+        ):
             await self.gemini_service.knowledge_base.refresh_cache(
                 system_instruction=self.gemini_service.system_instruction,
                 tools=self.gemini_service.tools

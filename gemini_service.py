@@ -123,11 +123,16 @@ class GeminiService:
         self.system_instruction = None
         
         # Инициализация Knowledge Base (RAG)
-        from drive_service import DriveService
-        from knowledge_base import KnowledgeBase
-        
-        self.drive_service = DriveService()
-        self.knowledge_base = KnowledgeBase(self.drive_service)
+        self.rag_disabled = os.getenv("RAG_DISABLED", "false").lower() in ("1", "true", "yes", "y")
+        if self.rag_disabled:
+            self.drive_service = None
+            self.knowledge_base = None
+            logger.warning("RAG disabled via RAG_DISABLED env flag")
+        else:
+            from drive_service import DriveService
+            from knowledge_base import KnowledgeBase
+            self.drive_service = DriveService()
+            self.knowledge_base = KnowledgeBase(self.drive_service)
         # 5. Инициализация памяти SQLite
         try:
             from memory_manager_sqlite import SQLiteMemoryManager
@@ -157,17 +162,18 @@ class GeminiService:
 
 2. **ИНСТРУМЕНТЫ (TOOLS):** 
    - Если вопрос касается цен, акций, ипотеки - ТЫ ОБЯЗАН вызвать функцию `get_promotions`.
-3. **ПОИСК КОНТАКТОВ:** 
-   - **ПРИОРИТЕТ 1:** Найди контакт в базе знаний (файл справочника). НАПИШИ ИМЯ И ТЕЛЕФОН в ответе.
-   - **ПРИОРИТЕТ 2:** Добавь фразу: "Также актуальные данные: https://ecosystem.etagi.com/phonebook".
-   - ЗАПРЕЩЕНО отправлять пользователя по ссылке, если ты нашел номер в файле. Сначала номер — потом ссылка.
+3. **ПОИСК КОНТАКТОВ (ТОЛЬКО ПО ЗАПРОСУ):** 
+   - Ищи контакты и телефоны ТОЛЬКО если пользователь явно просит контакты/телефон.
+   - Если контакт найден, сначала дай имя и телефон, затем добавь: "Также актуальные данные: https://ecosystem.etagi.com/phonebook".
+   - Если контакта нет — дай только ссылку на справочник.
 4. **ССЫЛКИ И ФОРМАТ:**
    - Только plain-text. Без Markdown/HTML, без хэштегов и декоративных символов.
    - Ссылки указывай как: Название: URL (не используй голые URL без названия).
    - Не добавляй фразу "Согласно базе знаний...".
 5. **СТИЛЬ:**
-   - Кратко и по делу: 2–6 строк, один короткий список при необходимости, затем 1 вопрос "Следующий шаг".
+   - Кратко и по делу: 2–6 строк, один короткий список при необходимости, затем 1 фраза "Следующий шаг".
    - Эмодзи допустимы, но не обязательны (0–1).
+   - Если запрос — приветствие/благодарность, отвечай 1–2 короткими предложениями и НЕ используй сценарии.
    - Ты — дружелюбный наставник. Обращайся к пользователю по имени из [USER PROFILE] и поддерживай его.
 
 ТЫ — продвинутый ассистент, работающий на базе знаний компании. Генерируй лучшие предложения, используя актуальные регламенты.
@@ -228,7 +234,7 @@ class GeminiService:
         self.tools.append(types.Tool(function_declarations=[get_promotions_func]))
         logger.info("'get_promotions' tool activated in GeminiService.")
 
-        if self.knowledge_base:
+        if self.knowledge_base and not self.rag_disabled:
             await self.knowledge_base.initialize()
             
             # Запускаем фоновое автообновление (по локальному времени)
@@ -342,7 +348,7 @@ class GeminiService:
 
         # --- UNIVERSAL RAG CONTEXT ---
         rag_context = ""
-        if self.knowledge_base:
+        if self.knowledge_base and not self.rag_disabled:
             try:
                 # 1. Query Expansion (Техника 3: Расширение запроса силами Gemini)
                 # Генерируем расширенный запрос (синонимы) только если это не пустой контент
