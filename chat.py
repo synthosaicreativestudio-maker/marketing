@@ -130,7 +130,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     # Это экономит ~1-2 секунды сетевых задержек
     table_history_task = asyncio.create_task(appeals_service.get_raw_history(user.id)) if appeals_service and appeals_service.is_available() else None
     
-    status_msg = await update.message.reply_text("⏳ Галина Галкина печатает...")
+    status_msg = await update.message.reply_text("⏳ Галина печатает...")
     
     table_history = ""
     if table_history_task:
