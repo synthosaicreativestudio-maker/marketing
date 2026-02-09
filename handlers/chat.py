@@ -1,8 +1,9 @@
-import logging
+﻿import logging
 import time
 import asyncio
 import os
 import json
+import re
 from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
 
@@ -10,7 +11,7 @@ from auth_service import AuthService
 from ai_service import AIService
 from appeals_service import AppealsService
 from error_handler import safe_handler
-from utils import create_specialist_button, sanitize_ai_text, safe_truncate_html
+from utils import create_specialist_button, sanitize_ai_text_plain
 from config import settings
 from rate_limiter import check_rate_limit
 from query_classifier import classify_query, QueryComplexity, should_use_rag, should_use_memory
@@ -74,54 +75,69 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
             except Exception as e:
                 logger.error(f"Error handling profile for {user.id}: {e}")
 
-        # 3. Двухуровневая система эскалации
+        # 3. Классификация запроса
+        complexity, reason = classify_query(text)
+
+        # Быстрые короткие сообщения — считаем простыми (даже если с вопросом)
+        if len(text.strip()) < 20 and complexity == QueryComplexity.MEDIUM:
+            complexity, reason = QueryComplexity.SIMPLE, "short_message"
+
+        # Уровень каскада 1–4 (5-й включается по эскалации)
+        cascade_level = 1 if reason == "greeting_or_acknowledgment" and complexity == QueryComplexity.SIMPLE else \
+                        2 if complexity == QueryComplexity.SIMPLE else \
+                        3 if complexity == QueryComplexity.MEDIUM else 4
+
+        logger.info(f"Query classified as {complexity.name} (reason: {reason}, level: {cascade_level}) for user {user.id}")
+
+        # 4. Двухуровневая система эскалации
         escalation_level = check_escalation(user.id, text)
-        
+        force_escalation = False
+
         if escalation_level == EscalationLevel.CONFIRMED:
-            # Уровень 2: Немедленная эскалация — даём кнопку
-            await update.message.reply_text(
-                get_escalation_success_message(),
-                reply_markup=create_specialist_button()
-            )
-            # Обновляем статус в таблице
-            if appeals_service and appeals_service.is_available():
-                try:
-                    await appeals_service.set_status(user.id, "Передано специалисту")
-                except Exception as e:
-                    logger.error(f"Ошибка обновления статуса эскалации: {e}")
-            reset_escalation(user.id)
-            return
-        
+            # Для сложных запросов: отвечаем + эскалация (уровень 5)
+            if complexity == QueryComplexity.COMPLEX:
+                force_escalation = True
+                cascade_level = 5
+            else:
+                # Немедленная эскалация — даём кнопку
+                await update.message.reply_text(
+                    get_escalation_success_message(),
+                    reply_markup=create_specialist_button()
+                )
+                # Обновляем статус в таблице
+                if appeals_service and appeals_service.is_available():
+                    try:
+                        await appeals_service.set_status(user.id, "Передано специалисту")
+                    except Exception as e:
+                        logger.error(f"Ошибка обновления статуса эскалации: {e}")
+                reset_escalation(user.id)
+                return
         elif escalation_level == EscalationLevel.CLARIFYING:
             # Уровень 1: Уточняем тему
             await update.message.reply_text(get_clarification_message())
             return
 
-        # 4. Проверка режима специалиста (пассивный режим)
+        # 5. Проверка режима специалиста (пассивный режим)
         if await _is_specialist_mode(user.id, appeals_service):
             return
 
-        # 5. Проверка доступности ИИ
+        # 6. Проверка доступности ИИ
         if not ai_service or not ai_service.is_enabled() or not settings.ENABLE_AI_CHAT:
             await update.message.reply_text("Ассистент временно недоступен. Специалист ответит позже.")
             return
 
-        # 6. Классификация запроса и подготовка контекста
-        complexity, reason = classify_query(text)
-        logger.info(f"Query classified as {complexity.name} (reason: {reason}) for user {user.id}")
-        
-        # Адаптируем контекст в зависимости от сложности
-        use_rag = should_use_rag(complexity)
-        use_memory = should_use_memory(complexity)
-        
+        # 7. Адаптация контекста в зависимости от уровня
+        use_rag = cascade_level >= 3 and should_use_rag(complexity)
+        use_memory = cascade_level >= 4 and should_use_memory(complexity)
+
         # Для простых запросов не используем память
         if not use_memory:
             profile_context = ""
 
-        # 7. Подготовка и стриминг ответа
+        # 8. Подготовка и стриминг ответа
         await _process_ai_response(
-            update, context, ai_service, appeals_service, text, 
-            profile_context, complexity, use_rag
+            update, context, ai_service, appeals_service, text,
+            profile_context, complexity, use_rag, cascade_level, force_escalation
         )
 
     return handle_chat
@@ -158,25 +174,42 @@ async def _is_specialist_mode(user_id, appeals_service):
         logger.debug(f"_is_specialist_mode: {e}", exc_info=True)
         return False
 
-async def _process_ai_response(update, context, ai_service, appeals_service, text, profile_context="", complexity=None, use_rag=True):
+def _limit_sentences(text: str, max_sentences: int) -> str:
+    if not text:
+        return text
+    parts = re.split(r'(?<=[.!?])\s+', text.strip())
+    if len(parts) <= max_sentences:
+        return text.strip()
+    return " ".join(parts[:max_sentences]).strip()
+
+async def _process_ai_response(update, context, ai_service, appeals_service, text, profile_context="", complexity=None, use_rag=True, cascade_level=2, force_escalation=False):
     """Стриминг ответа от ИИ с таймаутом и graceful degradation."""
     user = update.effective_user
     
-    # Для простых запросов — минимальная инструкция
-    if complexity == QueryComplexity.SIMPLE:
-        instruction = "\n\n[SYSTEM: Простой запрос. Ответь кратко, 1-2 предложения.]"
+    # Инструкции по каскадам (краткость и без лишнего)
+    if cascade_level == 1:
+        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 1 предложение. Без лишнего. Без ссылок, если не просили.]"
+    elif cascade_level == 2:
+        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 1-2 предложения. Без лишнего. Без длинных вступлений.]"
+    elif cascade_level == 3:
+        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 3-6 строк. Можно один короткий список. Используй системный промт + RAG. В конце 1 вопрос «Следующий шаг».]"
+    elif cascade_level == 4:
+        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 4-7 строк. Один короткий список. Используй системный промт + RAG. В конце 1 вопрос «Следующий шаг».]"
     else:
-        # Контекстуальное приветствие для средних и сложных
+        instruction = "\n\n[SYSTEM: Короткий дружелюбный ответ. 4-7 строк. Один короткий список. Используй системный промт + RAG. В конце 1 вопрос «Следующий шаг». Добавь метку [ESCALATE_ACTION].]"
+
+    # Контекстуальное приветствие для средних и сложных
+    if cascade_level >= 3:
         now = time.time()
         last = context.user_data.get('last_interaction_timestamp', 0)
         context.user_data['last_interaction_timestamp'] = now
-        
-        instruction = "\n\n[SYSTEM: Продолжение диалога]" if (now - last) < 28800 else "\n\n[SYSTEM: Новая сессия]"
-        
+
+        instruction += "\n[SYSTEM: Продолжение диалога]" if (now - last) < 28800 else "\n[SYSTEM: Новая сессия]"
+
         # Принудительная инъекция имени (костыль, если профиль не загрузился)
         if user.first_name:
             instruction += f"\nИмя пользователя: {user.first_name}. Обращайся к нему по имени!"
-            
+
         instruction += profile_context
     
     # Для простых запросов не загружаем историю из таблицы
@@ -211,10 +244,10 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             
             full_response += chunk
             if (time.time() - last_update) > 1.5:
-                display_text = sanitize_ai_text(full_response, ensure_emojis=False)
+                display_text = sanitize_ai_text_plain(full_response, ensure_emojis=False)
                 try:
-                    display_text_truncated = safe_truncate_html(display_text, 3900)
-                    await status_msg.edit_text(display_text_truncated + " ▌", parse_mode="HTML")
+                    display_text_truncated = display_text[:3900]
+                    await status_msg.edit_text(display_text_truncated + " ▌")
                     last_update = time.time()
                 except Exception as e:
                     logger.debug(f"edit_text during stream: {e}", exc_info=True)
@@ -222,7 +255,23 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
         # Финализация
         is_esc = "[ESCALATE_ACTION]" in full_response
         clean_response = full_response.replace("[ESCALATE_ACTION]", "").strip()
-        clean_response = sanitize_ai_text(clean_response, ensure_emojis=True)
+        clean_response = sanitize_ai_text_plain(clean_response, ensure_emojis=False)
+
+        # Ограничиваем длину ответа по уровню
+        if cascade_level == 1:
+            clean_response = _limit_sentences(clean_response, 1)
+        elif cascade_level == 2:
+            clean_response = _limit_sentences(clean_response, 2)
+        elif cascade_level == 3:
+            clean_response = _limit_sentences(clean_response, 4)
+        else:
+            clean_response = _limit_sentences(clean_response, 6)
+
+        # Эскалация для уровня 5
+        if force_escalation and "[ESCALATE_ACTION]" not in full_response:
+            is_esc = True
+            clean_response = f"{clean_response}\n\nЕсли нужна помощь специалиста — передам."
+
         markup = create_specialist_button() if is_esc else None
         
         # Разделение длинных сообщений (Telegram limit 4096)
@@ -231,17 +280,25 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             parts = [clean_response[i:i+4000] for i in range(0, len(clean_response), 4000)]
             
             # Первая часть редактирует сообщение с "печатает..."
-            await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup, parse_mode="HTML")
+            await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup)
             
             # Остальные части отправляем новыми сообщениями
             for i, part in enumerate(parts[1:]):
                 # Кнопки только к последнему сообщению
                 current_markup = markup if i == len(parts) - 2 else None
-                await update.message.reply_text(part, reply_markup=current_markup, parse_mode="HTML")
+                await update.message.reply_text(part, reply_markup=current_markup)
         else:
             # Штатный режим (короткое сообщение)
-            await status_msg.edit_text(clean_response, reply_markup=markup, parse_mode="HTML")
+            await status_msg.edit_text(clean_response, reply_markup=markup)
         
+        # Авто-эскалация для уровня 5
+        if force_escalation and appeals_service and appeals_service.is_available():
+            try:
+                await appeals_service.set_status(user.id, "Передано специалисту")
+            except Exception as e:
+                logger.debug(f"force_escalation: {e}", exc_info=True)
+            reset_escalation(user.id)
+
         # Фоновое логирование
         if settings.LOG_TO_SHEETS:
             asyncio.create_task(_safe_background_log(user.id, text, clean_response, appeals_service))
@@ -336,3 +393,5 @@ def refresh_kb_handler(ai_service: AIService):
                 pass
 
     return handle_refresh
+
+

@@ -55,6 +55,36 @@ def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
     return text
 
 
+def sanitize_ai_text_plain(text: str, ensure_emojis: bool = True) -> str:
+    """Возвращает чистый plain-text без Markdown/HTML, ссылки формата 'Название: URL'."""
+    if not text:
+        return text
+
+    # Remove HTML tags if any
+    text = re.sub(r"<[^>]+>", "", text)
+
+    # Convert markdown links to "Text: URL"
+    text = re.sub(r'\[([^\]]+)\]\((https?://[^\s)]+)\)', r'\1: \2', text)
+
+    # Remove "Согласно базе знаний ..." phrasing
+    text = re.sub(r'(?i)\bсогласно (?:нашей )?базе знаний[^.]*\.\s*', '', text)
+    text = re.sub(r'(?i)\bсогласно базе знаний[^:]*:\s*', '', text)
+
+    # Strip markdown formatting markers
+    text = text.replace("```", "")
+    text = text.replace("`", "")
+    text = text.replace("**", "")
+    text = text.replace("__", "")
+    text = re.sub(r'(?m)^#{1,6}\s*', '', text)
+    text = re.sub(r'(?m)^\s*[\-\*\+]\s+', '', text)
+
+    text = _normalize_whitespace(text)
+
+    if ensure_emojis:
+        text = _ensure_emojis(text)
+
+    return text
+
 def safe_truncate_html(text: str, limit: int = 3900) -> str:
     """
     Безопасно обрезает HTML-строку для Telegram, не разрывая теги <... >.
