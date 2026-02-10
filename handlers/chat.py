@@ -11,7 +11,7 @@ from auth_service import AuthService
 from ai_service import AIService
 from appeals_service import AppealsService
 from error_handler import safe_handler
-from utils import create_specialist_button, sanitize_ai_text_plain
+from utils import create_specialist_button, sanitize_ai_text_plain, sanitize_ai_text
 from config import settings
 from rate_limiter import check_rate_limit
 from query_classifier import classify_query, QueryComplexity, should_use_rag, should_use_memory
@@ -206,19 +206,8 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     """Стриминг ответа от ИИ с таймаутом и graceful degradation."""
     user = update.effective_user
     
-    # Инструкции по каскадам (краткость и без лишнего)
-    wants_details = _wants_details(text)
-    wants_links = _wants_links(text)
-
-    if cascade_level == 1:
-        instruction = "\n\n[SYSTEM: Дружелюбный короткий ответ (1-2 предложения). Эмодзи допустимы. Без лишнего.]"
-    elif cascade_level in (2, 3, 4):
-        if wants_details or wants_links:
-            instruction = "\n\n[SYSTEM: Дай полный текст релевантного сценария из системного промта без сокращений. Ссылки добавляй только если пользователь их просит или без них нельзя выполнить действие. Разрешён короткий список. В конце 1 фраза «Следующий шаг». Эмодзи 0–2 допустимы.]"
-        else:
-            instruction = "\n\n[SYSTEM: Ответь кратко и по сути (2–4 предложения) и задай 1 уточняющий вопрос. Не давай ссылки и контакты, если их не просили. Эмодзи 0–2 допустимы.]"
-    else:
-        instruction = "\n\n[SYSTEM: Дай полный текст сценария из системного промта без сокращений. Обязательно сохрани все ссылки и шаги. Разрешён короткий список. В конце 1 фраза «Следующий шаг». Эмодзи 0–2 допустимы. Добавь метку [ESCALATE_ACTION].]"
+    # Бизнес-правила ответа хранятся в системном промпте, здесь без переопределений.
+    instruction = ""
 
     # Контекстуальное приветствие для средних и сложных
     if cascade_level >= 3:
@@ -226,12 +215,9 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
         last = context.user_data.get('last_interaction_timestamp', 0)
         context.user_data['last_interaction_timestamp'] = now
 
-        instruction += "\n[SYSTEM: Продолжение диалога]" if (now - last) < 28800 else "\n[SYSTEM: Новая сессия]"
-
-        # Принудительная инъекция имени (костыль, если профиль не загрузился)
+        # Контекст профиля (без бизнес-правил формата/стиля)
         if user.first_name:
-            instruction += f"\nИмя пользователя: {user.first_name}. Обращайся к нему по имени!"
-
+            instruction += f"\nИмя пользователя: {user.first_name}."
         instruction += profile_context
     
     # Для простых запросов не загружаем историю из таблицы
@@ -269,29 +255,31 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
                 display_text = sanitize_ai_text_plain(full_response, ensure_emojis=True)
                 try:
                     display_text_truncated = display_text[:3900]
-                    await status_msg.edit_text(display_text_truncated + " ▌")
-                    last_update = time.time()
-                except Exception as e:
-                    logger.debug(f"edit_text during stream: {e}", exc_info=True)
+            await status_msg.edit_text(display_text_truncated + " ▌")
+            last_update = time.time()
+        except Exception as e:
+            logger.debug(f"edit_text during stream: {e}", exc_info=True)
         
         # Финализация
         is_esc = "[ESCALATE_ACTION]" in full_response
         clean_response = full_response.replace("[ESCALATE_ACTION]", "").strip()
-        clean_response = sanitize_ai_text_plain(clean_response, ensure_emojis=True)
+        clean_response_plain = sanitize_ai_text_plain(clean_response, ensure_emojis=True)
+        clean_response_html = sanitize_ai_text(clean_response, ensure_emojis=True)
 
         # Вариант A: не сокращаем ответы — отдаём полный сценарий
 
         # Эскалация для уровня 5
         if force_escalation and "[ESCALATE_ACTION]" not in full_response:
             is_esc = True
-            clean_response = f"{clean_response}\n\nЕсли нужна помощь специалиста — передам."
+            clean_response_plain = f"{clean_response_plain}\n\nЕсли нужна помощь специалиста — передам."
+            clean_response_html = sanitize_ai_text(clean_response_plain, ensure_emojis=True)
 
         markup = create_specialist_button() if is_esc else None
         
         # Разделение длинных сообщений (Telegram limit 4096)
-        if len(clean_response) > 4096:
+        if len(clean_response_html) > 4096:
             # Разбиваем на части по 4000 символов для безопасности
-            parts = [clean_response[i:i+4000] for i in range(0, len(clean_response), 4000)]
+            parts = [clean_response_plain[i:i+4000] for i in range(0, len(clean_response_plain), 4000)]
             
             # Первая часть редактирует сообщение с "печатает..."
             await status_msg.edit_text(parts[0], reply_markup=None if len(parts) > 1 else markup)
@@ -303,7 +291,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
                 await update.message.reply_text(part, reply_markup=current_markup)
         else:
             # Штатный режим (короткое сообщение)
-            await status_msg.edit_text(clean_response, reply_markup=markup)
+            await status_msg.edit_text(clean_response_html, reply_markup=markup, parse_mode="HTML")
         
         # Авто-эскалация для уровня 5
         if force_escalation and appeals_service and appeals_service.is_available():
