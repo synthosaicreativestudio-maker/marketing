@@ -133,14 +133,7 @@ class GeminiService:
             from knowledge_base import KnowledgeBase
             self.drive_service = DriveService()
             self.knowledge_base = KnowledgeBase(self.drive_service)
-        # 5. Инициализация памяти SQLite
-        try:
-            from memory_manager_sqlite import SQLiteMemoryManager
-            self.sqlite_memory = SQLiteMemoryManager()
-            logger.info("SQLite Memory Manager integrated into GeminiService.")
-        except Exception as e:
-            logger.error(f"Failed to integrate SQLite Memory: {e}")
-            self.sqlite_memory = None
+        # SQLite Memory Manager removed — Google Sheets is the single source of truth
         
         # Проверка существования файла промпта
         if os.path.exists(system_prompt_path):
@@ -514,38 +507,10 @@ class GeminiService:
         
         structured_content += f"### ВОПРОС ПОЛЬЗОВАТЕЛЯ:\n{content}"
 
-        # 2. Инъекция истории
-        # ПРИОРИТЕТ 1: Локальная память SQLite
-        local_history = ""
-        if self.sqlite_memory:
-            try:
-                local_history = await self.sqlite_memory.get_history_text(user_id)
-                if local_history:
-                    structured_content += f"### ИСТОРИЯ ПОСЛЕДНИХ СООБЩЕНИЙ (MEMORY):\n{local_history}\n\n"
-                    logger.debug(f"Memory: injected local SQLite history for {user_id}")
-            except Exception as e:
-                logger.error(f"Error getting local history for user {user_id}: {e}")
-
-        if not local_history and external_history and external_history.strip():
-            # ПРИОРИТЕТ 2: Внешняя история (из Таблицы) — только если локальной нет
-            # Оптимизация: инъектируем внешнюю историю только если внутренняя история пуста 
-            # (содержит только 2 начальных сообщения: системное и подтверждение)
-            history_exists = user_id in self.user_histories and len(self.user_histories[user_id]) > 2
-            
-            if not history_exists:
-                logger.info(f"Injecting external history for user {user_id} (len: {len(external_history)})")
-                # Внешняя история уже усечена в AppealsService до 5000 символов
-                structured_content += f"### ИСТОРИЯ ПРЕДЫДУЩИХ ОБРАЩЕНИЙ:\n{external_history}\n\n"
-                logger.debug(f"Memory: recovered context from External Table for {user_id}")
-            else:
-                logger.debug(f"Skipping external history injection for user {user_id} (internal history active)")
-
-        # 3. Добавление текущего вопроса в SQLite ДО запроса (чтобы он был в памяти для след. раза)
-        if self.sqlite_memory:
-            try:
-                asyncio.create_task(self.sqlite_memory.add_message(user_id, "user", content))
-            except Exception as e:
-                logger.error(f"Error adding message to SQLite for user {user_id}: {e}")
+        # 2. Инъекция истории из Google Sheets (единственный источник)
+        if external_history and external_history.strip():
+            logger.info(f"Injecting Google Sheets history for user {user_id} (len: {len(external_history)})")
+            structured_content += f"### ИСТОРИЯ ПРЕДЫДУЩИХ ОБРАЩЕНИЙ:\n{external_history}\n\n"
 
         # ПРИМЕЧАНИЕ: self._add_to_history теперь вызывается централизованно в ask_stream
         
@@ -771,9 +736,6 @@ class GeminiService:
             full_reply = "".join(full_reply_parts)
             self._add_to_history(user_id, "model", full_reply)
             
-            # Сохраняем в SQLite (КРИТИЧНО для памяти)
-            asyncio.create_task(self.sqlite_memory.add_message(user_id, "model", full_reply))
-            
             # Метрики LLM: логируем время ответа
             llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
             log_llm_metrics(
@@ -880,13 +842,6 @@ class GeminiService:
         if user_id in self.user_histories:
             del self.user_histories[user_id]
             logger.info(f"Cleared chat history for user {user_id}")
-        
-        if self.sqlite_memory:
-            try:
-                asyncio.create_task(self.sqlite_memory.clear_history(user_id))
-                logger.info(f"Memory: scheduled history clearing in SQLite for {user_id}")
-            except Exception as e:
-                logger.error(f"Error scheduling SQLite history clearing: {e}")
     async def wait_for_ready(self):
         """Ожидает инициализации базы знаний."""
         while self._initializing:
