@@ -15,10 +15,7 @@ from utils import create_specialist_button, sanitize_ai_text_plain, sanitize_ai_
 from config import settings
 from rate_limiter import check_rate_limit
 from query_classifier import classify_query, QueryComplexity, should_use_rag, should_use_memory
-from escalation_manager import (
-    check_escalation, EscalationLevel, 
-    get_clarification_message, get_escalation_success_message, reset_escalation
-)
+from escalation_manager import is_escalation_request, get_escalation_message
 
 logger = logging.getLogger(__name__)
 
@@ -96,32 +93,18 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
 
         logger.info(f"Query classified as {complexity.name} (reason: {reason}, level: {cascade_level}) for user {user.id}")
 
-        # 4. Двухуровневая система эскалации
-        escalation_level = check_escalation(user.id, text)
-        force_escalation = False
-
-        if escalation_level == EscalationLevel.CONFIRMED:
-            # Для сложных запросов: отвечаем + эскалация (уровень 5)
-            if complexity == QueryComplexity.COMPLEX:
-                force_escalation = True
-                cascade_level = 5
-            else:
-                # Немедленная эскалация — даём кнопку
-                await update.message.reply_text(
-                    get_escalation_success_message(),
-                    reply_markup=create_specialist_button()
-                )
-                # Обновляем статус в таблице
-                if appeals_service and appeals_service.is_available():
-                    try:
-                        await appeals_service.set_status(user.id, "Передано специалисту")
-                    except Exception as e:
-                        logger.error(f"Ошибка обновления статуса эскалации: {e}")
-                reset_escalation(user.id)
-                return
-        elif escalation_level == EscalationLevel.CLARIFYING:
-            # Уровень 1: Уточняем тему
-            await update.message.reply_text(get_clarification_message())
+        # 4. Одноуровневая эскалация — сразу кнопка
+        if is_escalation_request(text):
+            await update.message.reply_text(
+                get_escalation_message(),
+                reply_markup=create_specialist_button()
+            )
+            # Обновляем статус в таблице
+            if appeals_service and appeals_service.is_available():
+                try:
+                    await appeals_service.set_status(user.id, "Передано специалисту")
+                except Exception as e:
+                    logger.error(f"Ошибка обновления статуса эскалации: {e}")
             return
 
         # 5. Проверка режима специалиста (пассивный режим)
@@ -146,7 +129,7 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
         # 8. Подготовка и стриминг ответа
         await _process_ai_response(
             update, context, ai_service, appeals_service, text,
-            profile_context, complexity, use_rag, cascade_level, force_escalation
+            profile_context, complexity, use_rag, cascade_level
         )
 
     return handle_chat
@@ -202,7 +185,7 @@ def _wants_links(text: str) -> bool:
     t = text.lower()
     return any(k in t for k in ("ссылка", "ссылки", "где найти", "дай ссылк", "кинь ссылк", "контакт", "телефон"))
 
-async def _process_ai_response(update, context, ai_service, appeals_service, text, profile_context="", complexity=None, use_rag=True, cascade_level=2, force_escalation=False):
+async def _process_ai_response(update, context, ai_service, appeals_service, text, profile_context="", complexity=None, use_rag=True, cascade_level=2):
     """Стриминг ответа от ИИ с таймаутом и graceful degradation."""
     user = update.effective_user
     
@@ -212,7 +195,6 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
     # Контекстуальное приветствие для средних и сложных
     if cascade_level >= 3:
         now = time.time()
-        last = context.user_data.get('last_interaction_timestamp', 0)
         context.user_data['last_interaction_timestamp'] = now
 
         # Контекст профиля (без бизнес-правил формата/стиля)
@@ -268,11 +250,9 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
 
         # Вариант A: не сокращаем ответы — отдаём полный сценарий
 
-        # Эскалация для уровня 5
-        if force_escalation and "[ESCALATE_ACTION]" not in full_response:
+        # Если ИИ сам предложил эскалацию
+        if not is_esc and is_escalation_request(text):
             is_esc = True
-            clean_response_plain = f"{clean_response_plain}\n\nЕсли нужна помощь специалиста — передам."
-            clean_response_html = sanitize_ai_text(clean_response_plain, ensure_emojis=True)
 
         markup = create_specialist_button() if is_esc else None
         
@@ -293,13 +273,6 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
             # Штатный режим (короткое сообщение)
             await status_msg.edit_text(clean_response_html, reply_markup=markup, parse_mode="HTML")
         
-        # Авто-эскалация для уровня 5
-        if force_escalation and appeals_service and appeals_service.is_available():
-            try:
-                await appeals_service.set_status(user.id, "Передано специалисту")
-            except Exception as e:
-                logger.debug(f"force_escalation: {e}", exc_info=True)
-            reset_escalation(user.id)
 
         # Фоновое логирование
         if settings.LOG_TO_SHEETS:
