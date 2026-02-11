@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MarketingBot - Авторизация</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Google Fonts: Outfit for modern premium look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary-color: #8A2BE2;
+            /* BlueViolet */
+            --accent-color: #00BFFF;
+            /* DeepSkyBlue */
+            --bg-gradient: linear-gradient(135deg, #050505 0%, #1a1a2e 100%);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.8);
+            --error-color: #ff5252;
+            --success-color: #00e676;
+            --card-radius: 24px;
+            --input-radius: 16px;
+            --transition-speed: 0.3s;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* Background Ambient Glow */
+        .ambient-glow {
+            position: fixed;
+            top: -20%;
+            left: -20%;
+            width: 80%;
+            height: 80%;
+            background: radial-gradient(circle, rgba(138, 43, 226, 0.2) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: -1;
+            animation: float 10s infinite ease-in-out;
+        }
+
+        .ambient-glow-2 {
+            position: fixed;
+            bottom: -20%;
+            right: -20%;
+            width: 80%;
+            height: 80%;
+            background: radial-gradient(circle, rgba(0, 191, 255, 0.15) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: -1;
+            animation: float 15s infinite ease-in-out reverse;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translate(0, 0);
+            }
+
+            50% {
+                transform: translate(30px, 30px);
+            }
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
+            z-index: 1;
+        }
+
+        /* Glass Card */
+        .glass-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 32px 24px;
+            width: 100%;
+            box-shadow: var(--glass-shadow);
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #fff, #a5a5a5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+            position: relative;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-left: 5px;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--input-radius);
+            font-size: 16px;
+            color: #fff;
+            font-family: 'Outfit', sans-serif;
+            transition: all var(--transition-speed);
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.3);
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        .form-group input::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        .auth-button {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, var(--primary-color), #6a0dad);
+            color: #fff;
+            border: none;
+            border-radius: var(--input-radius);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-speed);
+            margin-top: 10px;
+            box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .auth-button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: 0.5s;
+        }
+
+        .auth-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(138, 43, 226, 0.6);
+        }
+
+        .auth-button:hover::after {
+            left: 100%;
+        }
+
+        .auth-button:disabled {
+            background: #444;
+            color: #888;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .error-message {
+            color: var(--error-color);
+            font-size: 12px;
+            margin-top: 8px;
+            margin-left: 5px;
+            display: none;
+            animation: shake 0.4s ease-in-out;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        .success-message {
+            color: var(--success-color);
+            font-size: 14px;
+            margin-top: 15px;
+            text-align: center;
+            display: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .loading-spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Ambient Background -->
+    <div class="ambient-glow"></div>
+    <div class="ambient-glow-2"></div>
+
+    <div class="container">
+        <div class="glass-card">
+            <div class="header">
+                <h1>🔐 Вход</h1>
+                <p>Введите данные партнера для доступа</p>
+            </div>
+
+            <form id="authForm">
+                <div class="form-group">
+                    <label for="partnerCode">Код партнера</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="partnerCode" name="partnerCode" placeholder="123456" maxlength="20"
+                            pattern="[0-9]*" inputmode="numeric" required>
+                    </div>
+                    <div class="error-message" id="partnerCodeError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="partnerPhone">Номер телефона</label>
+                    <div class="input-wrapper">
+                        <input type="tel" id="partnerPhone" name="partnerPhone" placeholder="89001234567" maxlength="15"
+                            required>
+                    </div>
+                    <div class="error-message" id="partnerPhoneError"></div>
+                </div>
+
+                <button type="submit" class="auth-button" id="authButton">
+                    Войти
+                </button>
+
+                <div class="error-message" id="generalError" style="text-align: center; margin-top: 15px;"></div>
+                <div class="success-message" id="successMessage"></div>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                <div>Проверяем данные...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // Элементы формы
+        const form = document.getElementById('authForm');
+        const partnerCodeInput = document.getElementById('partnerCode');
+        const partnerPhoneInput = document.getElementById('partnerPhone');
+        const authButton = document.getElementById('authButton');
+        const loading = document.getElementById('loading');
+        const generalError = document.getElementById('generalError');
+        const successMessage = document.getElementById('successMessage');
+
+        // Валидация ввода (только цифры)
+        [partnerCodeInput, partnerPhoneInput].forEach(input => {
+            input.addEventListener('input', function (e) {
+                e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                clearError(input.id + 'Error');
+            });
+        });
+
+        function clearError(errorId) {
+            const errorElement = document.getElementById(errorId);
+            if (errorElement) {
+                errorElement.style.display = 'none';
+                errorElement.textContent = '';
+            }
+        }
+
+        function showError(errorId, message) {
+            const errorElement = document.getElementById(errorId);
+            if (errorElement) {
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+            }
+        }
+
+        function validateForm() {
+            let isValid = true;
+            const partnerCode = partnerCodeInput.value.trim();
+            const partnerPhone = partnerPhoneInput.value.trim();
+
+            if (!partnerCode) {
+                showError('partnerCodeError', 'Введите код партнера');
+                isValid = false;
+            } else if (partnerCode.length < 3) {
+                showError('partnerCodeError', 'Минимум 3 цифры');
+                isValid = false;
+            }
+
+            if (!partnerPhone) {
+                showError('partnerPhoneError', 'Введите номер телефона');
+                isValid = false;
+            } else if (partnerPhone.length < 10) {
+                showError('partnerPhoneError', 'Минимум 10 цифр');
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        // Main Logic
+        let isSubmitting = false;
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            clearError('partnerCodeError');
+            clearError('partnerPhoneError');
+            generalError.style.display = 'none';
+            successMessage.style.display = 'none';
+
+            if (isSubmitting) return;
+
+            if (!validateForm()) {
+                tg.HapticFeedback.notificationOccurred('error');
+                return;
+            }
+
+            isSubmitting = true;
+            authButton.disabled = true;
+            authButton.style.opacity = '0.7';
+            loading.style.display = 'block';
+
+            const partnerCode = partnerCodeInput.value.trim();
+            const partnerPhone = partnerPhoneInput.value.trim();
+
+            try {
+                // Simulate network delay for better UX
+                setTimeout(() => {
+                    tg.sendData(JSON.stringify({
+                        partner_code: partnerCode,
+                        partner_phone: partnerPhone
+                    }));
+
+                    showSuccess('Отправлено! Проверяем...');
+
+                    setTimeout(() => {
+                        tg.close();
+                    }, 1500);
+                }, 500); // Added a small delay before sending data
+            } catch (error) {
+                console.error('Error:', error);
+                showError('generalError', 'Ошибка отправки. Попробуйте снова.');
+                isSubmitting = false; // Reset flag on error
+                authButton.disabled = false;
+                authButton.style.opacity = '1';
+                loading.style.display = 'none';
+            }
+        });
+
+        // Haptic Feedback on focus
+        partnerCodeInput.addEventListener('focus', () => {
+            if (tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+        });
+    </script>
+</body>
+
+</html>

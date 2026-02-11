@@ -1,0 +1,27 @@
+# === СЕКРЕТЫ И КЛЮЧИ ===
+.env
+*.env
+.env.*
+credentials.json
+estateanalyticsbot-*.json
+ALL_CREDENTIALS.md
+api_cloude.txt
+ssh-key-*/
+ssh-key-*.pub
+
+# === ДАННЫЕ С КЛЮЧАМИ ===
+аналитика/bootstrap_data.json
+аналитика/sheet_debug.html
+
+# === АРХИВЫ ===
+*.zip
+*.tar
+
+# === КЕШИ И ПРОЧЕЕ ===
+__pycache__/
+*.pyc
+__MACOSX/
+.DS_Store
+*.log
+.agent/
+.ruff_cache/

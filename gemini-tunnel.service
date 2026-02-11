@@ -1,0 +1,11 @@
+[Unit]
+Description=Gemini Tunnel (Corkscrew)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/socat TCP4-LISTEN:8443,fork,reuseaddr EXEC:/usr/local/bin/corkscrew-gemini.sh
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target

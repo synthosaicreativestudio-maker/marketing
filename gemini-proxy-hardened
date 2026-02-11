@@ -1,0 +1,25 @@
+server {
+    listen 8443;
+    server_name _;
+    
+    # Force IPv4 resolution to avoid IPv6 geo-blocking
+    resolver 8.8.8.8 ipv6=off;
+
+    location / {
+        proxy_pass https://generativelanguage.googleapis.com;
+        proxy_ssl_server_name on;
+        proxy_set_header Host generativelanguage.googleapis.com;
+        
+        # Privacy: EXPLICITLY REMOVE client location headers
+        proxy_set_header X-Real-IP "";
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header Forwarded "";
+        proxy_set_header Via "";
+        
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        proxy_connect_timeout 30s;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+}
