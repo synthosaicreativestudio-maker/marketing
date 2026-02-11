@@ -5097,7 +5097,8 @@ function processQueue() {
       sheet.getRange(rowNumber, 8).setValue(new Date().toISOString());
       sheet.getRange(rowNumber, 11).setValue(resultText || 'Анализ выполнен, но текст пуст.');
 
-      // Фиксируем высоту строки (чтобы не раздувало лист от длинного текста)
+      // Фиксируем высоту строки: отключаем перенос текста + принудительная высота
+      sheet.getRange(rowNumber, 1, 1, 12).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       sheet.setRowHeight(rowNumber, 21);
 
       // Рассчитываем ETA для оставшихся в очереди (приблизительно)
