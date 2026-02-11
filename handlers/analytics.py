@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 # Константы
 QUEUE_SHEET_NAME = "Очередь"
 POLL_INTERVAL_SEC = 15       # Интервал проверки статуса
-POLL_MAX_ATTEMPTS = 40       # Максимум проверок (~10 минут)
-ANALYTICS_TIMEOUT_SEC = 600  # Таймаут 10 минут
+POLL_MAX_ATTEMPTS = 80       # Максимум проверок (20 минут)
+ANALYTICS_TIMEOUT_SEC = 1200  # Таймаут 20 минут
 
 
 def register_analytics_handlers(application, auth_service: AuthService):
@@ -97,7 +97,7 @@ async def _process_analytics_request(update, context, object_code: str, chat_id:
     # Подтверждение пользователю
     status_msg = await update.message.reply_text(
         f"📊 Запрос на анализ объекта `{object_code}` принят.\n"
-        f"⏳ Обработка займёт 1–3 минуты.\n"
+        f"⏳ Обработка займёт 2–5 минут.\n"
         f"Номер запроса: `{request_id}`",
         parse_mode="Markdown"
     )
