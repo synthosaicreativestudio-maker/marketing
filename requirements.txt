@@ -31,6 +31,8 @@ httplib2==0.31.2
 openai==2.20.0
 scikit-learn==1.7.2
 rank-bm25==0.2.2
+pymorphy2==0.9.1
+pymorphy2-dicts-ru==2.4.417127.4579844
 
 # === Document Processing ===
 pdfplumber==0.11.9
