@@ -14,8 +14,17 @@
 - [ ] **Structured Logging.**  
   Switch from plain text logs to JSON logs for better analysis (especially if integrating with external monitoring tools later).
 
-## 🟢 Low Priority (Cleanup)
-- [ ] **Type Hinting Coverage.**  
-  Ensure 100% type coverage with `mypy` for better code stability.
 - [ ] **Unit Tests.**  
-  Write tests for `AuthService` logic to prevent regression during updates.
+   Write tests for `AuthService` logic to prevent regression during updates.
+
+## 🔵 Future: RAG System Redesign (Ideas)
+- [ ] **Switch to `bm25s` library.** 
+  Current `rank_bm25` and `sklearn` are too heavy for the VM. `bm25s` offers similar accuracy with much lower memory footprint.
+- [ ] **Context Selection Optimization.**
+  Reduce `top_k` from 10 to 3-5 to prevent "information noise" and focus the AI on the most relevant data.
+- [ ] **Smart Prompting for Context.**
+  Add explicit instructions to the system prompt to ignore retrieved context if it doesn't directly answer the user's question.
+- [ ] **Lightweight Lemmatization.**
+  Use `razdel` for tokenization and apply `pymorphy2` only where strictly necessary to save RAM.
+- [ ] **Context-Aware RAG Activation.**
+  Only trigger RAG for specific query types (technical, analytics) via the `query_classifier.py`.
