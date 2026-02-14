@@ -282,7 +282,7 @@ def create_specialist_button() -> InlineKeyboardMarkup:
     """
     Создает инлайн-кнопку для обращения к специалисту.
     """
-    keyboard = [[InlineKeyboardButton("👨‍💼 Обратиться к специалисту", callback_data="contact_specialist")]]
+    keyboard = [[InlineKeyboardButton("👨‍💼 ОБРАТИТЬСЯ К СПЕЦИАЛИСТУ", callback_data="contact_specialist")]]
     return InlineKeyboardMarkup(keyboard)
 
 def _is_user_escalation_request(text: str) -> bool:
