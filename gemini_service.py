@@ -554,7 +554,6 @@ class GeminiService:
                     links_block = "\n### ССЫЛКИ НА ДОКУМЕНТЫ БАЗЫ ЗНАНИЙ (ДЛЯ ЦИТИРОВАНИЯ):\n"
                     for fname, url in links.items():
                         links_block += f"- {fname}: {url}\n"
-                    links_block += "\n**ПРАВИЛО:** Если ты используешь данные из файла выше, в конце ответа ОБЯЗАТЕЛЬНО напиши: 'Подробнее см. в документе: [Название документа](ссылка)'."
                     effective_system_instruction += links_block
 
             config_params['system_instruction'] = effective_system_instruction

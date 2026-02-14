@@ -49,9 +49,6 @@ def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
     # Затем форматируем ссылки, которые ИИ мог прислать "голыми"
     text = _format_links_safe(text)
 
-    if ensure_emojis:
-        text = _ensure_emojis(text)
-
     return text
 
 
@@ -66,10 +63,8 @@ def sanitize_ai_text_plain(text: str, ensure_emojis: bool = True) -> str:
     # Convert markdown links to "Text: URL"
     text = re.sub(r'\[([^\]]+)\]\((https?://[^\s)]+)\)', r'\1: \2', text)
 
-    # Remove formal phrasing
-    text = re.sub(r'(?i)\bсогласно (?:нашей )?базе знаний[^.]*\.\s*', '', text)
-    text = re.sub(r'(?i)\bсогласно базе знаний[^:]*:\s*', '', text)
-    text = re.sub(r'(?i)\bв соответствии с регламент(?:ами|ом)[^.]*\.\s*', '', text)
+    # Удаление формальных фраз ОТКЛЮЧЕНО, чтобы бот мог следовать промпту
+    # text = re.sub(r'(?i)\bсогласно (?:нашей )?базе знаний[^.]*\.\s*', '', text)
 
     # Strip markdown formatting markers
     text = text.replace("```", "")
@@ -80,10 +75,6 @@ def sanitize_ai_text_plain(text: str, ensure_emojis: bool = True) -> str:
     text = re.sub(r'(?m)^\s*[\-\*\+]\s+', '', text)
 
     text = _normalize_whitespace(text)
-
-    if ensure_emojis:
-        text = _ensure_emojis(text)
-
     return text
 
 def safe_truncate_html(text: str, limit: int = 3900) -> str:
@@ -207,12 +198,7 @@ def _normalize_whitespace(text: str) -> str:
 
 
 def _ensure_emojis(text: str) -> str:
-    emoji_re = re.compile(r'[\U0001F300-\U0001FAFF\u2600-\u26FF\u2700-\u27BF]')
-    count = len(emoji_re.findall(text))
-    if count == 0:
-        return f"{text} 🙂✨"
-    if count == 1:
-        return f"{text} ✨"
+    """Оставляет текст как есть. Логика принудительных эмодзи перенесена в промпт."""
     return text
 
 
