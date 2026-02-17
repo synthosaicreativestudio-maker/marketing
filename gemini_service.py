@@ -57,9 +57,14 @@ class GeminiService:
         
         proxy_url = os.getenv("TINYPROXY_URL")
         if proxy_url:
-            os.environ["HTTP_PROXY"] = proxy_url
-            os.environ["HTTPS_PROXY"] = proxy_url
-            logger.info("System-wide PROXY (TINYPROXY) activated for AI services")
+            # СТРОГО: Только для системных запросов (Sheets, Telegram)
+            # Мы НЕ используем здесь порт 8443, так как он не Forward Proxy.
+            if ":8443" not in proxy_url:
+                os.environ["HTTP_PROXY"] = proxy_url
+                os.environ["HTTPS_PROXY"] = proxy_url
+                logger.info(f"System-wide PROXY (TINYPROXY) activated: {proxy_url}")
+            else:
+                logger.warning(f"Skipping 8443 as system proxy: it is a REVERSE proxy only. Use {proxyapi_base_url} as base_url instead.")
         
         for key in gemini_keys:
             try:

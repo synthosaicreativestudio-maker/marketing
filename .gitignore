@@ -29,3 +29,11 @@ __MACOSX/
 *.log
 .agent/
 .ruff_cache/
+
+# === ЭКСПОРТЫ И БЭКАПЫ ===
+DataExport*/
+system_prompt_backup_*
+system_prompt_update*
+system_instructions_*
+marketing_report.md
+*.tgs
