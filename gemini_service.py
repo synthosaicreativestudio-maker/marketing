@@ -146,6 +146,10 @@ class GeminiService:
         self.openclaw_token = os.getenv("OPENCLAW_TOKEN", "default-token")
         self.openclaw_client = OpenClawClient(self.openclaw_url, self.openclaw_token)
         logger.info(f"OpenClaw: enabled={self.use_openclaw}, url={self.openclaw_url}")
+        
+        # Memory archiver (отключён — Google Sheets is the single source of truth)
+        self.memory_archiver = None
+        self._initializing = False
         # SQLite Memory Manager removed — Google Sheets is the single source of truth
         
         # Проверка существования файла промпта
@@ -328,7 +332,7 @@ class GeminiService:
             try:
                 # В текущей реализации OpenClawClient.ask возвращает полный текст
                 # Для стриминга нужно будет доработать клиент, но пока используем ask
-                response = await self.openclaw_client.ask(content, user_id=str(user_id))
+                response = await self.openclaw_client.ask(content, user_id=user_id)
                 if response:
                     yield response
                     return
@@ -396,8 +400,6 @@ class GeminiService:
                             return # Прерываем, нельзя повторять если часть ответа уже ушла
                         logger.warning(f"Gemini '{model_name}' + key #{key_idx+1} failed: {e}")
                         continue
-
-        raise RuntimeError("Gemini unavailable: no fallback providers configured")
 
         # Если дошли сюда — все провайдеры и ключи упали
         logger.error(f"All AI providers and keys failed for user {user_id}")
