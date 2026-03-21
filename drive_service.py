@@ -121,13 +121,27 @@ class DriveService:
             tmp_dir = "tmp_drive_files"
             os.makedirs(tmp_dir, exist_ok=True)
             
-            # Handle Google Apps files (Export to PDF or CSV)
-            if mime_type in ('application/vnd.google-apps.document', 'application/vnd.google-apps.presentation'):
-                # Append .pdf if not present
+            # Handle Google Apps files (Export to PDF, Plain Text or CSV)
+            if mime_type == 'application/vnd.google-apps.document':
+                # Export Google Docs as Plain Text if requested or by default
+                if file_name.lower().endswith('.txt'):
+                    export_mime = 'text/plain'
+                else:
+                    export_mime = 'application/pdf'
+                    if not file_name.lower().endswith('.pdf'):
+                        file_name += '.pdf'
+                
+                logger.info(f"Exporting Google Doc {file_name} as {export_mime}...")
+                request = self.service.files().export_media(
+                    fileId=file_id,
+                    mimeType=export_mime
+                )
+            elif mime_type == 'application/vnd.google-apps.presentation':
+                # Export Google Slides as PDF
                 if not file_name.lower().endswith('.pdf'):
                     file_name += '.pdf'
                 
-                logger.info(f"Exporting Google App file {file_name} as PDF...")
+                logger.info(f"Exporting Google Slide {file_name} as PDF...")
                 request = self.service.files().export_media(
                     fileId=file_id,
                     mimeType='application/pdf'

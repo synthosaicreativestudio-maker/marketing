@@ -1,4 +1,4 @@
-﻿import os
+import os
 import logging
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 def register_admin_handlers(application, ai_service: AIService):
     """Р РµРіРёСЃС‚СЂР°С†РёСЏ Р°РґРјРёРЅ-РєРѕРјР°РЅРґ."""
     application.add_handler(CommandHandler("rag_refresh", rag_refresh_handler(ai_service)))
+    application.add_handler(CommandHandler("reload_prompt", reload_prompt_handler(ai_service)))
 
 
 def _is_admin(user_id: int) -> bool:
@@ -42,5 +43,28 @@ def rag_refresh_handler(ai_service: AIService):
         except Exception as e:
             logger.error(f"/rag_refresh failed: {e}", exc_info=True)
             await update.message.reply_text("РћС€РёР±РєР° РїСЂРё РїРµСЂРµРёРЅРґРµРєСЃР°С†РёРё. РџСЂРѕРІРµСЂСЊС‚Рµ Р»РѕРіРё.")
+
+    return handler
+
+
+def reload_prompt_handler(ai_service: AIService):
+    """Фабрика для команды /reload_prompt (ручное обновление системного промпта)."""
+    @safe_handler
+    async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+        if not _is_admin(user.id):
+            await update.message.reply_text("Команда доступна только администратору.")
+            return
+
+        await update.message.reply_text("🔄 Обновляю системный промпт из Google Docs...")
+        try:
+            ok = await ai_service.refresh_system_prompt()
+            if ok:
+                await update.message.reply_text("✅ Системный промпт успешно обновлен!")
+            else:
+                await update.message.reply_text("❌ Не удалось обновить промпт. Проверьте логи или права доступа к Google Doc.")
+        except Exception as e:
+            logger.error(f"/reload_prompt failed: {e}", exc_info=True)
+            await update.message.reply_text(f"⚠️ Ошибка при обновлении: {str(e)}")
 
     return handler

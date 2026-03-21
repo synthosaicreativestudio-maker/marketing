@@ -125,22 +125,25 @@ class GeminiService:
 
         
         # Загрузка системного промпта
-        system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
+        self.system_prompt_doc_id = os.getenv("SYSTEM_PROMPT_GOOGLE_DOC_ID")
+        self.system_prompt_local_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
         self.system_instruction = None
+        
+        # Если ID документа не задан в .env, попробуем взять из параметров или констант
+        if not self.system_prompt_doc_id:
+            # Ссылка от пользователя: https://docs.google.com/document/d/1FdNz5lmS-1AWADsF6UjLGatjH705A5yeTzc8rSsRrHc/edit
+            self.system_prompt_doc_id = "1FdNz5lmS-1AWADsF6UjLGatjH705A5yeTzc8rSsRrHc"
         
         # Инициализация Knowledge Base (RAG)
         self.rag_disabled = os.getenv("RAG_DISABLED", "false").lower() in ("1", "true", "yes", "y")
         if self.rag_disabled:
             self.drive_service = None
             self.knowledge_base = None
-            logger.warning("RAG disabled via RAG_DISABLED env flag")
-        else:
-            from drive_service import DriveService
-            from knowledge_base import KnowledgeBase
-            self.drive_service = DriveService()
-            self.knowledge_base = KnowledgeBase(self.drive_service)
+        # 5. Режим Архитектора (Meta-Programming)
+        self.owner_id = int(os.getenv("OWNER_TELEGRAM_ID", "284355186"))
+        self.persistent_rules_path = "rag/persistent_rules.txt"
         
-        # 5. OpenClaw Redirect
+        # 6. OpenClaw Redirect
         self.use_openclaw = os.getenv("USE_OPENCLAW", "true").lower() == "true"
         self.openclaw_url = os.getenv("OPENCLAW_URL", "http://37.1.212.51:8080")
         self.openclaw_token = os.getenv("OPENCLAW_TOKEN", "default-token")
@@ -152,20 +155,16 @@ class GeminiService:
         self._initializing = False
         # SQLite Memory Manager removed — Google Sheets is the single source of truth
         
-        # Проверка существования файла промпта
-        if os.path.exists(system_prompt_path):
+        # Проверка существования локального файла (как бэкап)
+        if os.path.exists(self.system_prompt_local_path):
             try:
-                with open(system_prompt_path, 'r', encoding='utf-8') as f:
-                    user_business_rules = f.read()
-                    
-                # Бизнес-инструкции должны идти только из системного промпта.
-                # Технические ограничения реализуются на уровне кода, без переопределения промпта.
-                self.system_instruction = user_business_rules
-                logger.info("System prompt loaded (no ROOT override)")
+                with open(self.system_prompt_local_path, 'r', encoding='utf-8') as f:
+                    self.system_instruction = f.read()
+                logger.info(f"Initial system prompt loaded from local file: {self.system_prompt_local_path}")
             except Exception as e:
-                logger.error(f"Failed to load system prompt from {system_prompt_path}: {e}", exc_info=True)
+                logger.error(f"Failed to load local system prompt: {e}")
         else:
-            logger.warning(f"System prompt file not found: {system_prompt_path}")
+            logger.warning(f"Local system prompt file not found: {self.system_prompt_local_path}")
         
         # Helper for rotation
         self.current_or_model_index = 0
@@ -213,6 +212,29 @@ class GeminiService:
             
         self.tools.append(types.Tool(function_declarations=[get_promotions_func]))
         logger.info("'get_promotions' tool activated in GeminiService.")
+        
+        # Админ-инструменты
+        save_rule_func = types.FunctionDeclaration(
+            name="save_persistent_rule",
+            description="Сохраняет новое правило или инструкцию в постоянную память бота (только для владельца).",
+            parameters=types.Schema(
+                type="OBJECT",
+                properties={
+                    "rule_text": types.Schema(type="STRING", description="Текст нового правила или дополнения к промпту.")
+                },
+                required=["rule_text"]
+            )
+        )
+        get_logs_func = types.FunctionDeclaration(
+            name="get_system_logs",
+            description="Получает последние 50 строк системных логов бота (только для владельца).",
+            parameters=types.Schema(type="OBJECT", properties={})
+        )
+        self.tools.append(types.Tool(function_declarations=[save_rule_func, get_logs_func]))
+
+        # 1. Загрузка промпта из Google Docs (до инициализации RAG)
+        if self.system_prompt_doc_id and hasattr(self, 'drive_service') and self.drive_service:
+            await self.refresh_system_prompt()
 
         if self.knowledge_base and not self.rag_disabled:
             await self.knowledge_base.initialize()
@@ -238,6 +260,44 @@ class GeminiService:
                     system_instruction=self.system_instruction,
                     tools=self.tools
                 ))
+
+    async def refresh_system_prompt(self) -> bool:
+        """Downloads the system prompt from Google Docs and updates self.system_instruction."""
+        if not hasattr(self, 'drive_service') or not self.drive_service or not self.system_prompt_doc_id:
+            logger.warning("DriveService or Google Doc ID missing, cannot refresh system prompt.")
+            return False
+            
+        try:
+            logger.info(f"Refreshing system prompt from Google Doc: {self.system_prompt_doc_id}")
+            temp_name = f"system_prompt_{int(time.time())}.txt"
+            
+            file_path = await asyncio.to_thread(
+                self.drive_service.download_file, 
+                self.system_prompt_doc_id, 
+                temp_name, 
+                'application/vnd.google-apps.document'
+            )
+            
+            if file_path and os.path.exists(file_path):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    new_instruction = f.read()
+                
+                if new_instruction:
+                    self.system_instruction = new_instruction
+                    logger.info("✅ System prompt successfully updated from Google Drive.")
+                    
+                    # Сохраняем локально как бэкап
+                    with open(self.system_prompt_local_path, 'w', encoding='utf-8') as f:
+                        f.write(new_instruction)
+                    
+                    # Удаляем временный файл
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to refresh system prompt from Drive: {e}", exc_info=True)
+            return False
 
     def is_enabled(self) -> bool:
         """Проверяет, доступен ли Gemini."""
@@ -280,21 +340,53 @@ class GeminiService:
         
         if user_id not in self.user_histories:
             self.user_histories[user_id] = []
+            
+            # Определяем роль и набор инструкций
+            is_owner = (user_id == self.owner_id)
+            
+            # Читаем дополнительные правила из файла
+            persistent_rules = ""
+            if os.path.exists(self.persistent_rules_path):
+                try:
+                    with open(self.persistent_rules_path, 'r', encoding='utf-8') as f:
+                        persistent_rules = f.read().strip()
+                except Exception as e:
+                    logger.error(f"Failed to read persistent rules: {e}")
+
+            if is_owner:
+                # Режим Архитектора (Владелец)
+                meta_prompt = (
+                    "ВНИМАНИЕ: Ты говоришь с ВЛАДЕЛЬЦЕМ и своим создателем (ID: 284355186). "
+                    "В этом чате ты — полноценный ИИ-ассистент с расширенными правами. "
+                    "Ты можешь помогать в управлении системой, предлагать улучшения и менять свои инструкции. "
+                    "Если владелец просит что-то запомнить или изменить системный промпт — используй инструмент `save_persistent_rule`. "
+                    f"\n\nТекущий системный промпт маркетингового бота:\n{self.system_instruction}\n"
+                    f"\nДополнительные накопленные правила:\n{persistent_rules}"
+                )
+                system_text = meta_prompt
+                welcome_text = "Приветствую, Создатель. Режим Архитектора активирован. Я готов к любым задачам по управлению и развитию системы."
+            else:
+                # Режим Маркетолога (Обычные пользователи)
+                full_instruction = self.system_instruction or "Ты — маркетинговый ассистент."
+                if persistent_rules:
+                    full_instruction += f"\n\nДОПОЛНИТЕЛЬНЫЕ ПРАВИЛА ОТ ВЛАДЕЛЬЦА:\n{persistent_rules}"
+                system_text = full_instruction
+                welcome_text = "Принято. Я работаю в режиме маркетингового ассистента Этажей. Готов к вопросам."
+
             # Добавляем системный промпт как первое сообщение (Role: User)
-            if self.system_instruction:
-                self.user_histories[user_id].append(
-                    types.Content(
-                        role="user",
-                        parts=[types.Part(text=self.system_instruction)]
-                    )
+            self.user_histories[user_id].append(
+                types.Content(
+                    role="user",
+                    parts=[types.Part(text=system_text)]
                 )
-                # Подтверждение от модели (Role: Model)
-                self.user_histories[user_id].append(
-                    types.Content(
-                        role="model",
-                        parts=[types.Part(text="Принято. Я работаю в режиме маркетингового ассистента Этажей. Готов к вопросам.")]
-                    )
+            )
+            # Подтверждение от модели (Role: Model)
+            self.user_histories[user_id].append(
+                types.Content(
+                    role="model",
+                    parts=[types.Part(text=welcome_text)]
                 )
+            )
             logger.info(f"Created new chat history for user {user_id} with Fake History Injection")
         
         return self.user_histories[user_id]
@@ -664,6 +756,34 @@ class GeminiService:
                                             logger.info(f"Promotions cache updated (len: {len(tool_result)})")
                                         except Exception as te:
                                             logger.error(f"Error calling promotion tool in stream: {te}")
+                                            
+                            elif fc.name == "save_persistent_rule":
+                                rule_text = fc.args.get("rule_text")
+                                logger.info(f"Tool call: save_persistent_rule -> {rule_text[:50]}...")
+                                try:
+                                    os.makedirs(os.path.dirname(self.persistent_rules_path), exist_ok=True)
+                                    with open(self.persistent_rules_path, 'a', encoding='utf-8') as f:
+                                        f.write(f"\n# Добавлено {time.strftime('%Y-%m-%d %H:%M:%S')}\n{rule_text}\n")
+                                    tool_result = "✅ Правило успешно сохранено в постоянную память. Я буду учитывать его во всех будущих диалогах."
+                                except Exception as e:
+                                    tool_result = f"Ошибка сохранения: {e}"
+                                    
+                            elif fc.name == "get_system_logs":
+                                logger.info("Tool call: get_system_logs")
+                                try:
+                                    import subprocess
+                                    # Пытаемся прочитать последние строки journalctl или лог-файл
+                                    cmd = "journalctl -n 50 --no-pager -u marketingbot || tail -n 50 marketingbot.log"
+                                    proc = await asyncio.create_subprocess_shell(
+                                        cmd,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE
+                                    )
+                                    stdout, stderr = await proc.communicate()
+                                    logs = stdout.decode() or stderr.decode() or "Логи пусты или недоступны."
+                                    tool_result = f"Системные логи (последние 50 строк):\n\n{logs}"
+                                except Exception as e:
+                                    tool_result = f"Не удалось получить логи: {e}"
                                     
                             # Добавляем в историю
                             self.user_histories[user_id].append(response.candidates[0].content)
