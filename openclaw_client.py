@@ -8,17 +8,12 @@ class OpenClawClient:
     def __init__(self, base_url: str, token: str):
         self.base_url = base_url.rstrip("/")
         self.token = token
-        # КРИТИЧНО: НЕ использовать системный прокси для запросов к OpenClaw
-        # HTTP_PROXY/HTTPS_PROXY из .env предназначены для Gemini API, а не для OpenClaw
+        # КРИТИЧНО: trust_env=False — не подхватывать HTTP_PROXY/HTTPS_PROXY из .env
+        # Эти переменные предназначены для Gemini API, а не для запросов к OpenClaw
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(90.0, connect=10.0),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-            proxy=None,  # Явно отключаем прокси
-        )
-        # Убираем прокси из переменных среды для этого клиента
-        self.client._transport = httpx.AsyncHTTPTransport(
-            retries=1,
-            proxy=None,
+            trust_env=False,  # Игнорировать HTTP_PROXY из окружения
         )
 
     async def ask(
