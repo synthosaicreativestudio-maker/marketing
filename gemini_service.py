@@ -330,9 +330,11 @@ class GeminiService:
         if self.use_openclaw:
             logger.info(f"Redirecting request to OpenClaw for user {user_id}")
             try:
-                # В текущей реализации OpenClawClient.ask возвращает полный текст
-                # Для стриминга нужно будет доработать клиент, но пока используем ask
-                response = await self.openclaw_client.ask(content, user_id=user_id)
+                response = await self.openclaw_client.ask(
+                    prompt=content,
+                    user_id=user_id,
+                    system_instruction=self.system_instruction,
+                )
                 if response:
                     yield response
                     return

@@ -1,8 +1,6 @@
 import httpx
-import os
 import logging
-import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -10,28 +8,58 @@ class OpenClawClient:
     def __init__(self, base_url: str, token: str):
         self.base_url = base_url.rstrip("/")
         self.token = token
+        # КРИТИЧНО: НЕ использовать системный прокси для запросов к OpenClaw
+        # HTTP_PROXY/HTTPS_PROXY из .env предназначены для Gemini API, а не для OpenClaw
         self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(60.0, connect=10.0),
-            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            timeout=httpx.Timeout(90.0, connect=10.0),
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+            proxy=None,  # Явно отключаем прокси
+        )
+        # Убираем прокси из переменных среды для этого клиента
+        self.client._transport = httpx.AsyncHTTPTransport(
+            retries=1,
+            proxy=None,
         )
 
-    async def ask(self, prompt: str, user_id: int, model: str = "openclaw:main") -> str:
+    async def ask(
+        self,
+        prompt: str,
+        user_id: int,
+        model: str = "openclaw:main",
+        system_instruction: Optional[str] = None,
+        history: Optional[List[Dict[str, str]]] = None,
+    ) -> str:
         """
         Отправляет запрос в OpenClaw через OpenAI-совместимый эндпоинт.
+        Поддерживает system prompt и историю диалога.
         """
         url = f"{self.base_url}/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json"
         }
+
+        messages = []
+
+        # Системная инструкция (system prompt)
+        if system_instruction:
+            messages.append({"role": "system", "content": system_instruction})
+
+        # История диалога (если есть)
+        if history:
+            messages.extend(history)
+
+        # Текущий вопрос пользователя
+        messages.append({"role": "user", "content": prompt})
+
         payload = {
             "model": model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "user": str(user_id)
         }
-        
+
         try:
-            logger.info(f"Sending request to OpenClaw for user {user_id}")
+            logger.info(f"Sending request to OpenClaw for user {user_id} (messages: {len(messages)}, system: {bool(system_instruction)})")
             response = await self.client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
