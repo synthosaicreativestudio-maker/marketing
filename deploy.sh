@@ -19,7 +19,7 @@ MAX_RELEASES=3
 # Shared files that will be symlinked into each release
 SHARED_FILES=(".env" "credentials.json")
 SHARED_DIRS=("logs")
-SHARED_RUNTIME=("chat_memory.db" "rag_cache.db" "rag_index.json")
+SHARED_RUNTIME=("chat_memory.db" "rag_cache.db" "rag_index.json" "rag/persistent_rules.txt")
 
 # Colors
 RED='\033[0;31m'
