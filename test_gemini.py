@@ -1,4 +1,3 @@
-import os
 import requests
 
 API_KEY = "AIzaSyD5WGVM1AqIjhszcGEprqOo-PwrldExmQs"
