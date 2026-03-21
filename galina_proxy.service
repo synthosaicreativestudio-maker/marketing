@@ -1,0 +1,13 @@
+[Unit]
+Description=Galina Proxy for Gemini API
+After=network.target
+
+[Service]
+Environment=GEMINI_API_KEY=AIzaSyD5WGVM1AqIjhszcGEprqOo-PwrldExmQs
+ExecStart=/usr/bin/python3 /opt/openclaw/galina_proxy.py
+StandardOutput=append:/var/log/galina_proxy.log
+StandardError=append:/var/log/galina_proxy.log
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

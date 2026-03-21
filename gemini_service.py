@@ -1,4 +1,5 @@
-﻿import os
+from openclaw_client import OpenClawClient
+import os
 import asyncio
 import time
 import logging
@@ -138,6 +139,13 @@ class GeminiService:
             from knowledge_base import KnowledgeBase
             self.drive_service = DriveService()
             self.knowledge_base = KnowledgeBase(self.drive_service)
+        
+        # 5. OpenClaw Redirect
+        self.use_openclaw = os.getenv("USE_OPENCLAW", "true").lower() == "true"
+        self.openclaw_url = os.getenv("OPENCLAW_URL", "http://37.1.212.51:8080")
+        self.openclaw_token = os.getenv("OPENCLAW_TOKEN", "default-token")
+        self.openclaw_client = OpenClawClient(self.openclaw_url, self.openclaw_token)
+        logger.info(f"OpenClaw: enabled={self.use_openclaw}, url={self.openclaw_url}")
         # SQLite Memory Manager removed — Google Sheets is the single source of truth
         
         # Проверка существования файла промпта
@@ -313,6 +321,19 @@ class GeminiService:
         if not self.is_enabled():
             yield "Сервис ИИ временно недоступен."
             return
+
+        # --- OPENCLAW REDIRECT (Блок А-3: Брайн в США) ---
+        if self.use_openclaw:
+            logger.info(f"Redirecting request to OpenClaw for user {user_id}")
+            try:
+                # В текущей реализации OpenClawClient.ask возвращает полный текст
+                # Для стриминга нужно будет доработать клиент, но пока используем ask
+                response = await self.openclaw_client.ask(content, user_id=str(user_id))
+                if response:
+                    yield response
+                    return
+            except Exception as e:
+                logger.error(f"OpenClaw failed, falling back to Gemini: {e}")
 
         # --- UNIVERSAL RAG CONTEXT ---
         rag_context = ""
