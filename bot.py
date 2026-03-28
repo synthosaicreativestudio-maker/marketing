@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 from auth_service import AuthService  # noqa: E402
 from handlers.chat import register_chat_handlers  # noqa: E402
-from handlers.callback import register_callbacks  # noqa: E402
+from handlers.callback import register_callback_handlers  # noqa: E402
 from handlers.admin import register_admin_handlers  # noqa: E402
 from utils import alert_admin  # noqa: E402
 from handlers import setup_handlers  # noqa: E402
@@ -262,7 +262,7 @@ def _run_bot_main():
     try:
         register_chat_handlers(application, auth_gateway, ai_service, appeals_service)
         register_admin_handlers(application)
-        register_callbacks(application, ai_service, appeals_service)
+        register_callback_handlers(application, auth_service, appeals_service)
         setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway, profile_manager)
         logger.info("Обработчики успешно зарегистрированы")
     except Exception as e:
