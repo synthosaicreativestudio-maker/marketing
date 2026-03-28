@@ -260,7 +260,7 @@ def _run_bot_main():
     # --- Регистрация обработчиков ---
     logger.info("Регистрация обработчиков...")
     try:
-        register_chat_handlers(application, auth_gateway, ai_service, appeals_service)
+        register_chat_handlers(application, auth_service, ai_service, appeals_service)
         register_admin_handlers(application)
         register_callback_handlers(application, auth_service, appeals_service)
         setup_handlers(application, auth_service, ai_service, appeals_service, promotions_gateway, profile_manager)
