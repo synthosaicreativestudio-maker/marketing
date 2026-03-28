@@ -62,3 +62,9 @@ class AIService:
             )
             return True
         return False
+
+    async def refresh_system_prompt(self) -> bool:
+        """Ручное обновление системного промпта из Google Docs."""
+        if self.gemini_service:
+            return await self.gemini_service.refresh_system_prompt()
+        return False

@@ -214,7 +214,7 @@ class AppealsService:
             telegram_id: ID пользователя в Telegram
             
         Returns:
-            str: склеенный текст из всех найденных строк или пустая строка
+            str: склеенный текст или пустая строка
         """
         if not self.is_available():
             return ""
@@ -245,6 +245,70 @@ class AppealsService:
         except Exception as e:
             logger.error(f"Ошибка получения истории из таблицы: {e}")
             return ""
+
+    async def get_user_memory(self, telegram_id: int) -> str:
+        """
+        Получает краткий контекст/память о пользователе из колонки I.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            
+        Returns:
+            str: текст памяти или пустая строка
+        """
+        if not self.is_available():
+            return ""
+
+        try:
+            records = await self.gateway.get_all_records(self.worksheet)
+            
+            for record in records:
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    # Колонка I — 9-я по счету. В словаре record ключи по заголовкам.
+                    # Если заголовка еще нет, record.get() вернет None.
+                    return str(record.get('контекст_памяти', '')).strip()
+            
+            return ""
+        except Exception as e:
+            logger.error(f"Ошибка получения памяти из таблицы: {e}")
+            return ""
+
+    async def update_user_memory(self, telegram_id: int, memory_text: str) -> bool:
+        """
+        Обновляет долгосрочную память о пользователе в колонке I.
+        
+        Args:
+            telegram_id: ID пользователя в Telegram
+            memory_text: новый текст для сохранения
+            
+        Returns:
+            bool: True если успешно
+        """
+        if not self.is_available():
+            return False
+
+        try:
+            records = await self.gateway.get_all_records(self.worksheet)
+            existing_row = None
+            
+            for i, record in enumerate(records, start=2):
+                if str(record.get('telegram_id', '')) == str(telegram_id):
+                    existing_row = i
+                    break
+            
+            if existing_row:
+                # Обновляем колонку I (9)
+                truncated_memory = self._truncate_to_gs_limit(memory_text, limit=5000)
+                await self.gateway.batch_update(self.worksheet, [{
+                    'range': f'I{existing_row}',
+                    'values': [[truncated_memory]]
+                }])
+                logger.info(f"Обновлена долгосрочная память для пользователя {mask_telegram_id(telegram_id)}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Ошибка обновления памяти: {e}")
+            return False
 
     async def update_appeal_status(self, telegram_id: int, appeal_text: str, status: str, specialist_answer: str = '') -> bool:
         """

@@ -11,7 +11,7 @@ from auth_service import AuthService
 from ai_service import AIService
 from appeals_service import AppealsService
 from error_handler import safe_handler
-from utils import create_specialist_button, sanitize_ai_text_plain, sanitize_ai_text
+from utils import create_specialist_button, sanitize_ai_text_plain, sanitize_ai_text, _is_ai_asking_for_escalation
 from config import settings
 from rate_limiter import check_rate_limit
 from query_classifier import classify_query, QueryComplexity, should_use_rag, should_use_memory
@@ -75,12 +75,8 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
         # 3. Классификация запроса
         complexity, reason = classify_query(text)
 
-        # Короткий ответ на приветствие/благодарность без ИИ
-        if reason == "greeting_or_acknowledgment":
-            await update.message.reply_text(
-                "Здравствуйте! Я Галина, помощник по маркетингу. Чем могу помочь? 🙂✨"
-            )
-            return
+        # Ответ на приветствие теперь тоже через ИИ, чтобы соблюдать стиль из Google Docs
+        pass
 
         # Быстрые короткие сообщения — считаем простыми (даже если с вопросом)
         if len(text.strip()) < 20 and complexity == QueryComplexity.MEDIUM:
@@ -243,7 +239,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
                     logger.debug(f"edit_text during stream: {e}", exc_info=True)
         
         # Финализация
-        is_esc = "[ESCALATE_ACTION]" in full_response
+        is_esc = "[ESCALATE_ACTION]" in full_response or _is_ai_asking_for_escalation(full_response)
         clean_response = full_response.replace("[ESCALATE_ACTION]", "").strip()
         clean_response_plain = sanitize_ai_text_plain(clean_response, ensure_emojis=True)
         clean_response_html = sanitize_ai_text(clean_response, ensure_emojis=True)
@@ -352,8 +348,11 @@ def refresh_kb_handler(ai_service: AIService):
         status_msg = await update.message.reply_text("🔄 Обновляю базу знаний... Это может занять пару минут.")
         
         try:
-            success = await ai_service.refresh_knowledge_base()
-            if success:
+            # Обновляем и базу знаний, и системную инструкцию
+            kb_success = await ai_service.refresh_knowledge_base()
+            prompt_success = await ai_service.refresh_system_prompt(force=True)
+            
+            if kb_success or prompt_success:
                 # Даем немного времени на завершение фоновых задач загрузки в Gemini
                 await update.message.reply_text("✅ База знаний успешно обновлена! Новые файлы теперь доступны ИИ.")
             else:

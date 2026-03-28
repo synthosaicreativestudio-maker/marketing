@@ -1,4 +1,5 @@
-﻿import os
+from openclaw_client import OpenClawClient
+import os
 import asyncio
 import time
 import logging
@@ -38,62 +39,24 @@ class GeminiService:
         if old_gemini_key and old_gemini_key not in gemini_keys:
             gemini_keys.insert(0, old_gemini_key)
             
-        proxyapi_key = os.getenv("PROXYAPI_KEY")
-        proxyapi_base_url = os.getenv("PROXYAPI_BASE_URL")
-        
-        logger.info(f"Found {len(gemini_keys)} Gemini API keys in environment.")
-        logger.info(f"Proxy config: base_url={proxyapi_base_url}, key_present={bool(proxyapi_key)}")
-        
-        # Проверка доступности прокси-хоста (базовая)
-        if proxyapi_base_url and "://" in proxyapi_base_url:
-            from urllib.parse import urlparse
-            parsed = urlparse(proxyapi_base_url)
-            logger.info(f"Proxy destination: {parsed.netloc}")
-        
-        if not proxyapi_base_url:
-            raise RuntimeError(
-                "Proxy-only mode enforced: PROXYAPI_BASE_URL is required for Gemini access."
-            )
-        
-        proxy_url = os.getenv("TINYPROXY_URL")
-        if proxy_url:
-            os.environ["HTTP_PROXY"] = proxy_url
-            os.environ["HTTPS_PROXY"] = proxy_url
-            logger.info("System-wide PROXY (TINYPROXY) activated for AI services")
-        
+        # Прямая инициализация локального клиента Gemini (БЕЗ ПРОКСИ И КОСТЫЛЕЙ)
+        # В нашей архитектуре основной трафик идет на OpenClaw (US Server).
+        # Локальный клиент нужен только для вспомогательных задач (например Query Expansion),
+        # и если сервер в РФ, локальные запросы могут блокироваться Google.
         for key in gemini_keys:
             try:
-                logger.info(f"Attempting to init Gemini client with key ...{key[-4:]}")
-                if proxyapi_base_url:
-                    # Вариант Б: через прокси-релей (например, ProxyAPI.ru)
-                    api_version = os.getenv("PROXYAPI_VERSION", "v1beta")
-                    client = genai.Client(
-                        api_key=key,
-                        http_options=types.HttpOptions(
-                            api_version=api_version,
-                            base_url=proxyapi_base_url
-                        )
-                    )
-                else:
-                    client = genai.Client(api_key=key)
-
+                logger.debug(f"Attempting to init basic Gemini client with key ...{key[-4:]}")
+                client = genai.Client(api_key=key)
                 self.gemini_clients.append(client)
-                logger.info(f"Gemini client initialized with key ...{key[-4:]}")
             except Exception as e:
-                logger.error(f"CRITICAL: Failed to init Gemini client with key ...{key[-4:]}: {str(e)}")
-                if "404" in str(e):
-                    logger.error("Error 404: Model not found or API version mismatch. Check GEMINI_MODELS and PROXYAPI_VERSION.")
-                elif "401" in str(e):
-                    logger.error("Error 401: Invalid API Key.")
-                import traceback
-                logger.error(traceback.format_exc())
+                logger.error(f"Failed to init Gemini client with key ...{key[-4:]}: {e}")
         
         self.client = self.gemini_clients[0] if self.gemini_clients else None
         
         # Пул моделей Gemini с ротацией (приоритет: от мощной к легкой)
-        gemini_models_str = os.getenv("GEMINI_MODELS", "gemini-3-flash-preview,gemini-2.5-flash,gemini-2.5-flash-lite,gemini-flash-latest")
+        gemini_models_str = os.getenv("GEMINI_MODELS", "gemini-3.1-flash-lite-preview")
         self.gemini_models = [m.strip() for m in gemini_models_str.split(",") if m.strip()]
-        self.gemini_model = self.gemini_models[0] if self.gemini_models else os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.gemini_model = self.gemini_models[0] if self.gemini_models else os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
         self.current_gemini_model_index = 0
         logger.info(f"Gemini models pool: {self.gemini_models}")
         
@@ -119,36 +82,53 @@ class GeminiService:
 
         
         # Загрузка системного промпта
-        system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
+        self.system_prompt_doc_id = os.getenv("SYSTEM_PROMPT_GOOGLE_DOC_ID")
+        self.system_prompt_local_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
         self.system_instruction = None
+        
+        # Если ID документа не задан в .env, попробуем взять из параметров или констант
+        if not self.system_prompt_doc_id:
+            # Ссылка от пользователя: https://docs.google.com/document/d/1FdNz5lmS-1AWADsF6UjLGatjH705A5yeTzc8rSsRrHc/edit
+            self.system_prompt_doc_id = "1FdNz5lmS-1AWADsF6UjLGatjH705A5yeTzc8rSsRrHc"
         
         # Инициализация Knowledge Base (RAG)
         self.rag_disabled = os.getenv("RAG_DISABLED", "false").lower() in ("1", "true", "yes", "y")
+        
+        # DriveService инициализируем ВСЕГДА (нужен для системной инструкции)
+        from drive_service import DriveService
+        self.drive_service = DriveService()
+        
         if self.rag_disabled:
-            self.drive_service = None
             self.knowledge_base = None
-            logger.warning("RAG disabled via RAG_DISABLED env flag")
         else:
-            from drive_service import DriveService
             from knowledge_base import KnowledgeBase
-            self.drive_service = DriveService()
             self.knowledge_base = KnowledgeBase(self.drive_service)
+        # 5. Режим Архитектора (Meta-Programming)
+        self.owner_id = int(os.getenv("OWNER_TELEGRAM_ID", "284355186"))
+        self.persistent_rules_path = "rag/persistent_rules.txt"
+        
+        # 6. OpenClaw Redirect
+        self.use_openclaw = os.getenv("USE_OPENCLAW", "true").lower() == "true"
+        self.openclaw_url = os.getenv("OPENCLAW_URL", "http://37.1.212.51:8080")
+        self.openclaw_token = os.getenv("OPENCLAW_TOKEN", "default-token")
+        self.openclaw_client = OpenClawClient(self.openclaw_url, self.openclaw_token)
+        logger.info(f"OpenClaw: enabled={self.use_openclaw}, url={self.openclaw_url}")
+        
+        # Memory archiver (отключён — Google Sheets is the single source of truth)
+        self.memory_archiver = None
+        self._initializing = False
         # SQLite Memory Manager removed — Google Sheets is the single source of truth
         
-        # Проверка существования файла промпта
-        if os.path.exists(system_prompt_path):
+        # Проверка существования локального файла (как бэкап)
+        if os.path.exists(self.system_prompt_local_path):
             try:
-                with open(system_prompt_path, 'r', encoding='utf-8') as f:
-                    user_business_rules = f.read()
-                    
-                # Бизнес-инструкции должны идти только из системного промпта.
-                # Технические ограничения реализуются на уровне кода, без переопределения промпта.
-                self.system_instruction = user_business_rules
-                logger.info("System prompt loaded (no ROOT override)")
+                with open(self.system_prompt_local_path, 'r', encoding='utf-8') as f:
+                    self.system_instruction = f.read()
+                logger.info(f"Initial system prompt loaded from local file: {self.system_prompt_local_path}")
             except Exception as e:
-                logger.error(f"Failed to load system prompt from {system_prompt_path}: {e}", exc_info=True)
+                logger.error(f"Failed to load local system prompt: {e}")
         else:
-            logger.warning(f"System prompt file not found: {system_prompt_path}")
+            logger.warning(f"Local system prompt file not found: {self.system_prompt_local_path}")
         
         # Helper for rotation
         self.current_or_model_index = 0
@@ -196,6 +176,30 @@ class GeminiService:
             
         self.tools.append(types.Tool(function_declarations=[get_promotions_func]))
         logger.info("'get_promotions' tool activated in GeminiService.")
+        
+        # Админ-инструменты
+        save_rule_func = types.FunctionDeclaration(
+            name="save_persistent_rule",
+            description="Сохраняет новое правило или инструкцию в постоянную память бота (только для владельца).",
+            parameters=types.Schema(
+                type="OBJECT",
+                properties={
+                    "rule_text": types.Schema(type="STRING", description="Текст нового правила или дополнения к промпту.")
+                },
+                required=["rule_text"]
+            )
+        )
+        get_logs_func = types.FunctionDeclaration(
+            name="get_system_logs",
+            description="Получает последние 50 строк системных логов бота (только для владельца).",
+            parameters=types.Schema(type="OBJECT", properties={})
+        )
+        self.tools.append(types.Tool(function_declarations=[save_rule_func, get_logs_func]))
+
+        # 1. Загрузка промпта из Google Docs (до инициализации RAG)
+        if self.system_prompt_doc_id and self.drive_service:
+            # При инициализации проверяем срок жизни (force=False по умолчанию)
+            await self.refresh_system_prompt(force=False)
 
         if self.knowledge_base and not self.rag_disabled:
             await self.knowledge_base.initialize()
@@ -221,6 +225,51 @@ class GeminiService:
                     system_instruction=self.system_instruction,
                     tools=self.tools
                 ))
+
+    async def refresh_system_prompt(self, force: bool = False) -> bool:
+        """Downloads the system prompt from Google Docs with expiration check (1 week)."""
+        if not self.drive_service or not self.system_prompt_doc_id:
+            logger.warning("DriveService or Google Doc ID missing, cannot refresh system prompt.")
+            return False
+            
+        # Проверка срока жизни локального файла (1 неделя = 604800 секунд)
+        if not force and os.path.exists(self.system_prompt_local_path):
+            file_age = time.time() - os.path.getmtime(self.system_prompt_local_path)
+            if file_age < 604800:
+                logger.info(f"System prompt is fresh ({file_age/3600:.1f}h old), skipping download. Use force=True to update.")
+                return True
+
+        try:
+            logger.info(f"Refreshing system prompt from Google Doc: {self.system_prompt_doc_id}")
+            temp_name = f"system_prompt_{int(time.time())}.txt"
+            
+            file_path = await asyncio.to_thread(
+                self.drive_service.download_file, 
+                self.system_prompt_doc_id, 
+                temp_name, 
+                'application/vnd.google-apps.document'
+            )
+            
+            if file_path and os.path.exists(file_path):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    new_instruction = f.read()
+                
+                if new_instruction:
+                    self.system_instruction = new_instruction
+                    logger.info("✅ System prompt successfully updated from Google Drive.")
+                    
+                    # Сохраняем локально как бэкап
+                    with open(self.system_prompt_local_path, 'w', encoding='utf-8') as f:
+                        f.write(new_instruction)
+                    
+                    # Удаляем временный файл
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to refresh system prompt from Drive: {e}", exc_info=True)
+            return False
 
     def is_enabled(self) -> bool:
         """Проверяет, доступен ли Gemini."""
@@ -263,21 +312,53 @@ class GeminiService:
         
         if user_id not in self.user_histories:
             self.user_histories[user_id] = []
+            
+            # Определяем роль и набор инструкций
+            is_owner = (user_id == self.owner_id)
+            
+            # Читаем дополнительные правила из файла
+            persistent_rules = ""
+            if os.path.exists(self.persistent_rules_path):
+                try:
+                    with open(self.persistent_rules_path, 'r', encoding='utf-8') as f:
+                        persistent_rules = f.read().strip()
+                except Exception as e:
+                    logger.error(f"Failed to read persistent rules: {e}")
+
+            if is_owner:
+                # Режим Архитектора (Владелец)
+                meta_prompt = (
+                    "ВНИМАНИЕ: Ты говоришь с ВЛАДЕЛЬЦЕМ и своим создателем (ID: 284355186). "
+                    "В этом чате ты — полноценный ИИ-ассистент с расширенными правами. "
+                    "Ты можешь помогать в управлении системой, предлагать улучшения и менять свои инструкции. "
+                    "Если владелец просит что-то запомнить или изменить системный промпт — используй инструмент `save_persistent_rule`. "
+                    f"\n\nТекущий системный промпт маркетингового бота:\n{self.system_instruction}\n"
+                    f"\nДополнительные накопленные правила:\n{persistent_rules}"
+                )
+                system_text = meta_prompt
+                welcome_text = "Приветствую, Создатель. Режим Архитектора активирован. Я готов к любым задачам по управлению и развитию системы."
+            else:
+                # Режим Маркетолога (Обычные пользователи)
+                full_instruction = self.system_instruction or "Ты — маркетинговый ассистент."
+                if persistent_rules:
+                    full_instruction += f"\n\nДОПОЛНИТЕЛЬНЫЕ ПРАВИЛА ОТ ВЛАДЕЛЬЦА:\n{persistent_rules}"
+                system_text = full_instruction
+                welcome_text = "Принято. Я работаю в режиме маркетингового ассистента Этажей. Готов к вопросам."
+
             # Добавляем системный промпт как первое сообщение (Role: User)
-            if self.system_instruction:
-                self.user_histories[user_id].append(
-                    types.Content(
-                        role="user",
-                        parts=[types.Part(text=self.system_instruction)]
-                    )
+            self.user_histories[user_id].append(
+                types.Content(
+                    role="user",
+                    parts=[types.Part(text=system_text)]
                 )
-                # Подтверждение от модели (Role: Model)
-                self.user_histories[user_id].append(
-                    types.Content(
-                        role="model",
-                        parts=[types.Part(text="Принято. Я работаю в режиме маркетингового ассистента Этажей. Готов к вопросам.")]
-                    )
+            )
+            # Подтверждение от модели (Role: Model)
+            self.user_histories[user_id].append(
+                types.Content(
+                    role="model",
+                    parts=[types.Part(text=welcome_text)]
                 )
+            )
             logger.info(f"Created new chat history for user {user_id} with Fake History Injection")
         
         return self.user_histories[user_id]
@@ -308,6 +389,45 @@ class GeminiService:
         if not self.is_enabled():
             yield "Сервис ИИ временно недоступен."
             return
+
+        # Добавляем вопрос в локальную историю
+        self._add_to_history(user_id, "user", content)
+
+        # Конвертируем историю в формат OpenAI для OpenClaw (пропускаем фейковые 0 и 1 индексы, и последний добавленный элемент)
+        local_history = self._get_or_create_history(user_id)
+        openclaw_history = []
+        for msg in local_history[2:-1]:
+            role = "assistant" if msg.role == "model" else "user"
+            text_parts = [p.text for p in msg.parts if hasattr(p, 'text')]
+            text = " ".join(text_parts)
+            openclaw_history.append({"role": role, "content": text})
+
+        # Если есть external_history из Таблицы
+        if external_history:
+             openclaw_history.append({"role": "user", "content": f"[История прошлых обращений из базы данных]\n{external_history}"})
+
+        # --- OPENCLAW REDIRECT (Блок А-3: Брайн в США) ---
+        if self.use_openclaw:
+            logger.info(f"Redirecting request to OpenClaw for user {user_id}")
+            try:
+                response = await self.openclaw_client.ask(
+                    prompt=content,
+                    user_id=user_id,
+                    system_instruction=self.system_instruction,
+                    history=openclaw_history,
+                    model=self.model_name
+                )
+                
+                # Добавляем ответ ИИ в историю
+                if response and not response.startswith("Ошибка"):
+                    self._add_to_history(user_id, "model", response)
+                    
+
+                if response:
+                    yield response
+                    return
+            except Exception as e:
+                logger.error(f"OpenClaw failed, falling back to Gemini: {e}")
 
         # --- UNIVERSAL RAG CONTEXT ---
         rag_context = ""
@@ -370,8 +490,6 @@ class GeminiService:
                             return # Прерываем, нельзя повторять если часть ответа уже ушла
                         logger.warning(f"Gemini '{model_name}' + key #{key_idx+1} failed: {e}")
                         continue
-
-        raise RuntimeError("Gemini unavailable: no fallback providers configured")
 
         # Если дошли сюда — все провайдеры и ключи упали
         logger.error(f"All AI providers and keys failed for user {user_id}")
@@ -554,7 +672,6 @@ class GeminiService:
                     links_block = "\n### ССЫЛКИ НА ДОКУМЕНТЫ БАЗЫ ЗНАНИЙ (ДЛЯ ЦИТИРОВАНИЯ):\n"
                     for fname, url in links.items():
                         links_block += f"- {fname}: {url}\n"
-                    links_block += "\n**ПРАВИЛО:** Если ты используешь данные из файла выше, в конце ответа ОБЯЗАТЕЛЬНО напиши: 'Подробнее см. в документе: [Название документа](ссылка)'."
                     effective_system_instruction += links_block
 
             config_params['system_instruction'] = effective_system_instruction
@@ -635,6 +752,34 @@ class GeminiService:
                                             logger.info(f"Promotions cache updated (len: {len(tool_result)})")
                                         except Exception as te:
                                             logger.error(f"Error calling promotion tool in stream: {te}")
+                                            
+                            elif fc.name == "save_persistent_rule":
+                                rule_text = fc.args.get("rule_text")
+                                logger.info(f"Tool call: save_persistent_rule -> {rule_text[:50]}...")
+                                try:
+                                    os.makedirs(os.path.dirname(self.persistent_rules_path), exist_ok=True)
+                                    with open(self.persistent_rules_path, 'a', encoding='utf-8') as f:
+                                        f.write(f"\n# Добавлено {time.strftime('%Y-%m-%d %H:%M:%S')}\n{rule_text}\n")
+                                    tool_result = "✅ Правило успешно сохранено в постоянную память. Я буду учитывать его во всех будущих диалогах."
+                                except Exception as e:
+                                    tool_result = f"Ошибка сохранения: {e}"
+                                    
+                            elif fc.name == "get_system_logs":
+                                logger.info("Tool call: get_system_logs")
+                                try:
+                                    import subprocess
+                                    # Пытаемся прочитать последние строки journalctl или лог-файл
+                                    cmd = "journalctl -n 50 --no-pager -u marketingbot || tail -n 50 marketingbot.log"
+                                    proc = await asyncio.create_subprocess_shell(
+                                        cmd,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE
+                                    )
+                                    stdout, stderr = await proc.communicate()
+                                    logs = stdout.decode() or stderr.decode() or "Логи пусты или недоступны."
+                                    tool_result = f"Системные логи (последние 50 строк):\n\n{logs}"
+                                except Exception as e:
+                                    tool_result = f"Не удалось получить логи: {e}"
                                     
                             # Добавляем в историю
                             self.user_histories[user_id].append(response.candidates[0].content)
