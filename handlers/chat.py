@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import time
 import asyncio
 import os
@@ -199,7 +199,7 @@ async def _process_ai_response(update, context, ai_service, appeals_service, tex
 
         # Контекст профиля (без бизнес-правил формата/стиля)
         if user.first_name:
-            instruction += f"\nИмя пользователя: {user.first_name}."
+            instruction += f"\n[СИСТЕМНАЯ ИНФОРМАЦИЯ: Имя клиента - {user.first_name}. СТРОГОЕ ПРАВИЛО: НЕ здоровайся повторно, сразу отвечай на вопрос!]"
         instruction += profile_context
     
     # Для простых запросов не загружаем историю из таблицы
