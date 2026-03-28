@@ -11,7 +11,7 @@ class OpenClawClient:
         # КРИТИЧНО: trust_env=False — не подхватывать HTTP_PROXY/HTTPS_PROXY из .env
         # Эти переменные предназначены для Gemini API, а не для запросов к OpenClaw
         self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(90.0, connect=10.0),
+            timeout=httpx.Timeout(120.0, connect=10.0),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
             trust_env=False,  # Игнорировать HTTP_PROXY из окружения
         )

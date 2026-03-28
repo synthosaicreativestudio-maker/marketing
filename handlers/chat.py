@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import time
 import asyncio
 import os
@@ -75,12 +75,8 @@ def chat_handler(auth_service: AuthService, ai_service: AIService, appeals_servi
         # 3. Классификация запроса
         complexity, reason = classify_query(text)
 
-        # Короткий ответ на приветствие/благодарность без ИИ
-        if reason == "greeting_or_acknowledgment":
-            await update.message.reply_text(
-                "Здравствуйте! Я Галина, помощник по маркетингу. Чем могу помочь? 🙂✨"
-            )
-            return
+        # Ответ на приветствие теперь тоже через ИИ, чтобы соблюдать стиль из Google Docs
+        pass
 
         # Быстрые короткие сообщения — считаем простыми (даже если с вопросом)
         if len(text.strip()) < 20 and complexity == QueryComplexity.MEDIUM:
@@ -352,8 +348,11 @@ def refresh_kb_handler(ai_service: AIService):
         status_msg = await update.message.reply_text("🔄 Обновляю базу знаний... Это может занять пару минут.")
         
         try:
-            success = await ai_service.refresh_knowledge_base()
-            if success:
+            # Обновляем и базу знаний, и системную инструкцию
+            kb_success = await ai_service.refresh_knowledge_base()
+            prompt_success = await ai_service.refresh_system_prompt(force=True)
+            
+            if kb_success or prompt_success:
                 # Даем немного времени на завершение фоновых задач загрузки в Gemini
                 await update.message.reply_text("✅ База знаний успешно обновлена! Новые файлы теперь доступны ИИ.")
             else:

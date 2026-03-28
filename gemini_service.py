@@ -39,67 +39,24 @@ class GeminiService:
         if old_gemini_key and old_gemini_key not in gemini_keys:
             gemini_keys.insert(0, old_gemini_key)
             
-        proxyapi_key = os.getenv("PROXYAPI_KEY")
-        proxyapi_base_url = os.getenv("PROXYAPI_BASE_URL")
-        
-        logger.info(f"Found {len(gemini_keys)} Gemini API keys in environment.")
-        logger.info(f"Proxy config: base_url={proxyapi_base_url}, key_present={bool(proxyapi_key)}")
-        
-        # Проверка доступности прокси-хоста (базовая)
-        if proxyapi_base_url and "://" in proxyapi_base_url:
-            from urllib.parse import urlparse
-            parsed = urlparse(proxyapi_base_url)
-            logger.info(f"Proxy destination: {parsed.netloc}")
-        
-        if not proxyapi_base_url:
-            raise RuntimeError(
-                "Proxy-only mode enforced: PROXYAPI_BASE_URL is required for Gemini access."
-            )
-        
-        proxy_url = os.getenv("TINYPROXY_URL")
-        if proxy_url:
-            # СТРОГО: Только для системных запросов (Sheets, Telegram)
-            # Мы НЕ используем здесь порт 8443, так как он не Forward Proxy.
-            if ":8443" not in proxy_url:
-                os.environ["HTTP_PROXY"] = proxy_url
-                os.environ["HTTPS_PROXY"] = proxy_url
-                logger.info(f"System-wide PROXY (TINYPROXY) activated: {proxy_url}")
-            else:
-                logger.warning(f"Skipping 8443 as system proxy: it is a REVERSE proxy only. Use {proxyapi_base_url} as base_url instead.")
-        
+        # Прямая инициализация локального клиента Gemini (БЕЗ ПРОКСИ И КОСТЫЛЕЙ)
+        # В нашей архитектуре основной трафик идет на OpenClaw (US Server).
+        # Локальный клиент нужен только для вспомогательных задач (например Query Expansion),
+        # и если сервер в РФ, локальные запросы могут блокироваться Google.
         for key in gemini_keys:
             try:
-                logger.info(f"Attempting to init Gemini client with key ...{key[-4:]}")
-                if proxyapi_base_url:
-                    # Вариант Б: через прокси-релей (например, ProxyAPI.ru)
-                    api_version = os.getenv("PROXYAPI_VERSION", "v1beta")
-                    client = genai.Client(
-                        api_key=key,
-                        http_options=types.HttpOptions(
-                            api_version=api_version,
-                            base_url=proxyapi_base_url
-                        )
-                    )
-                else:
-                    client = genai.Client(api_key=key)
-
+                logger.debug(f"Attempting to init basic Gemini client with key ...{key[-4:]}")
+                client = genai.Client(api_key=key)
                 self.gemini_clients.append(client)
-                logger.info(f"Gemini client initialized with key ...{key[-4:]}")
             except Exception as e:
-                logger.error(f"CRITICAL: Failed to init Gemini client with key ...{key[-4:]}: {str(e)}")
-                if "404" in str(e):
-                    logger.error("Error 404: Model not found or API version mismatch. Check GEMINI_MODELS and PROXYAPI_VERSION.")
-                elif "401" in str(e):
-                    logger.error("Error 401: Invalid API Key.")
-                import traceback
-                logger.error(traceback.format_exc())
+                logger.error(f"Failed to init Gemini client with key ...{key[-4:]}: {e}")
         
         self.client = self.gemini_clients[0] if self.gemini_clients else None
         
         # Пул моделей Gemini с ротацией (приоритет: от мощной к легкой)
-        gemini_models_str = os.getenv("GEMINI_MODELS", "gemini-3-flash-preview,gemini-2.5-flash,gemini-2.5-flash-lite,gemini-flash-latest")
+        gemini_models_str = os.getenv("GEMINI_MODELS", "gemini-3.1-flash-lite-preview")
         self.gemini_models = [m.strip() for m in gemini_models_str.split(",") if m.strip()]
-        self.gemini_model = self.gemini_models[0] if self.gemini_models else os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.gemini_model = self.gemini_models[0] if self.gemini_models else os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
         self.current_gemini_model_index = 0
         logger.info(f"Gemini models pool: {self.gemini_models}")
         
@@ -136,9 +93,16 @@ class GeminiService:
         
         # Инициализация Knowledge Base (RAG)
         self.rag_disabled = os.getenv("RAG_DISABLED", "false").lower() in ("1", "true", "yes", "y")
+        
+        # DriveService инициализируем ВСЕГДА (нужен для системной инструкции)
+        from drive_service import DriveService
+        self.drive_service = DriveService()
+        
         if self.rag_disabled:
-            self.drive_service = None
             self.knowledge_base = None
+        else:
+            from knowledge_base import KnowledgeBase
+            self.knowledge_base = KnowledgeBase(self.drive_service)
         # 5. Режим Архитектора (Meta-Programming)
         self.owner_id = int(os.getenv("OWNER_TELEGRAM_ID", "284355186"))
         self.persistent_rules_path = "rag/persistent_rules.txt"
@@ -233,8 +197,9 @@ class GeminiService:
         self.tools.append(types.Tool(function_declarations=[save_rule_func, get_logs_func]))
 
         # 1. Загрузка промпта из Google Docs (до инициализации RAG)
-        if self.system_prompt_doc_id and hasattr(self, 'drive_service') and self.drive_service:
-            await self.refresh_system_prompt()
+        if self.system_prompt_doc_id and self.drive_service:
+            # При инициализации проверяем срок жизни (force=False по умолчанию)
+            await self.refresh_system_prompt(force=False)
 
         if self.knowledge_base and not self.rag_disabled:
             await self.knowledge_base.initialize()
@@ -261,12 +226,19 @@ class GeminiService:
                     tools=self.tools
                 ))
 
-    async def refresh_system_prompt(self) -> bool:
-        """Downloads the system prompt from Google Docs and updates self.system_instruction."""
-        if not hasattr(self, 'drive_service') or not self.drive_service or not self.system_prompt_doc_id:
+    async def refresh_system_prompt(self, force: bool = False) -> bool:
+        """Downloads the system prompt from Google Docs with expiration check (1 week)."""
+        if not self.drive_service or not self.system_prompt_doc_id:
             logger.warning("DriveService or Google Doc ID missing, cannot refresh system prompt.")
             return False
             
+        # Проверка срока жизни локального файла (1 неделя = 604800 секунд)
+        if not force and os.path.exists(self.system_prompt_local_path):
+            file_age = time.time() - os.path.getmtime(self.system_prompt_local_path)
+            if file_age < 604800:
+                logger.info(f"System prompt is fresh ({file_age/3600:.1f}h old), skipping download. Use force=True to update.")
+                return True
+
         try:
             logger.info(f"Refreshing system prompt from Google Doc: {self.system_prompt_doc_id}")
             temp_name = f"system_prompt_{int(time.time())}.txt"
@@ -418,6 +390,22 @@ class GeminiService:
             yield "Сервис ИИ временно недоступен."
             return
 
+        # Добавляем вопрос в локальную историю
+        self._add_to_history(user_id, "user", content)
+
+        # Конвертируем историю в формат OpenAI для OpenClaw (пропускаем фейковые 0 и 1 индексы, и последний добавленный элемент)
+        local_history = self._get_or_create_history(user_id)
+        openclaw_history = []
+        for msg in local_history[2:-1]:
+            role = "assistant" if msg.role == "model" else "user"
+            text_parts = [p.text for p in msg.parts if hasattr(p, 'text')]
+            text = " ".join(text_parts)
+            openclaw_history.append({"role": role, "content": text})
+
+        # Если есть external_history из Таблицы
+        if external_history:
+             openclaw_history.append({"role": "user", "content": f"[История прошлых обращений из базы данных]\n{external_history}"})
+
         # --- OPENCLAW REDIRECT (Блок А-3: Брайн в США) ---
         if self.use_openclaw:
             logger.info(f"Redirecting request to OpenClaw for user {user_id}")
@@ -426,7 +414,15 @@ class GeminiService:
                     prompt=content,
                     user_id=user_id,
                     system_instruction=self.system_instruction,
+                    history=openclaw_history,
+                    model=self.model_name
                 )
+                
+                # Добавляем ответ ИИ в историю
+                if response and not response.startswith("Ошибка"):
+                    self._add_to_history(user_id, "model", response)
+                    
+
                 if response:
                     yield response
                     return
