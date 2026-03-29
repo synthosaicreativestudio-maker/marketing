@@ -26,7 +26,6 @@ class GeminiService:
         self.tools = []
         
         self.drive_service = DriveService()
-        self.drive_service.authenticate()
         
         self.memory_archiver = MemoryArchiver(self.drive_service)
         
