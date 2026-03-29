@@ -2,8 +2,7 @@ import os
 import logging
 import asyncio
 from datetime import datetime
-from typing import List
-from google.genai import types
+from typing import List, Dict, Any
 from drive_service import DriveService
 
 logger = logging.getLogger(__name__)
@@ -21,7 +20,7 @@ class MemoryArchiver:
         if not os.path.exists(self.tmp_dir):
             os.makedirs(self.tmp_dir, exist_ok=True)
 
-    async def archive_user_history(self, user_id: int, history: List[types.Content]):
+    async def archive_user_history(self, user_id: int, history: List[Dict[str, Any]]):
         """Archives user conversation to a markdown file and uploads to Drive."""
         if not self.folder_id or not self.drive_service:
             logger.warning("MemoryArchiver: Missing DRIVE_FOLDER_ID or DriveService. Skipping archival.")
@@ -37,33 +36,12 @@ class MemoryArchiver:
             content += f"Last Updated: {timestamp}\n\n"
             content += "## Conversation History\n\n"
             
-            # Skip first 2 messages (system instruction + confirmation if present)
-            start_idx = 0
-            if len(history) >= 2:
-                # Basic check for system override in first message if provided by GeminiService
-                first_msg_text = ""
-                if history[0].parts:
-                    first_msg_text = str(history[0].parts[0])
+            for msg in history:
+                role_raw = msg.get("role", "user")
+                role = "🤖 AI" if role_raw in ("assistant", "model") else "👤 User"
+                text = msg.get("content", "")
                 
-                if "SYSTEM OVERRIDE" in first_msg_text:
-                    start_idx = 2
-                
-            for msg in history[start_idx:]:
-                role = "🤖 AI" if msg.role == "model" else "👤 User"
-                text = ""
-                if msg.parts:
-                    # Extraction of text parts
-                    text_parts = []
-                    for p in msg.parts:
-                        if hasattr(p, 'text') and p.text:
-                            text_parts.append(p.text)
-                        elif hasattr(p, 'function_call'):
-                             text_parts.append(f"[Tool Call: {p.function_call.name}]")
-                        elif hasattr(p, 'function_response'):
-                             text_parts.append(f"[Tool Response: {p.function_response.name}]")
-                    text = "\n".join(text_parts)
-                
-                if text.strip():
+                if text and str(text).strip():
                     content += f"**{role}**: {text}\n\n"
 
             # Write locally

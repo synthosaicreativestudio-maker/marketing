@@ -1,70 +1,45 @@
 import logging
-from typing import Optional
-
+from typing import Optional, AsyncGenerator
 from gemini_service import GeminiService
+from yandex_service import YandexService
 from sheets_gateway import AsyncGoogleSheetsGateway
 
 logger = logging.getLogger(__name__)
 
-
 class AIService:
-    """Унифицированный сервис для работы с AI (только Gemini)."""
-
+    """Facade for AI providers, now primarily routing through OpenClaw Engine via GeminiService."""
+    
     def __init__(self, promotions_gateway: Optional[AsyncGoogleSheetsGateway] = None) -> None:
-        """Инициализация AI сервиса с Gemini."""
-        logger.info("Initializing AIService with Gemini")
-        
-        # Инициализация Gemini сервиса
         self.gemini_service = GeminiService(promotions_gateway=promotions_gateway)
+        self.yandex_service = YandexService()
         
-        # Проверка доступности Gemini
-        if not self.gemini_service.is_enabled():
-            logger.error("GeminiService is not available!")
-        else:
-            logger.info("GeminiService is ready")
+        logger.info(f"AIService активен с провайдером: {self.get_provider_name()}")
 
     def is_enabled(self) -> bool:
-        """Проверяет, доступен ли AI сервис."""
-        return self.gemini_service.is_enabled()
+        # Now always true because OpenClaw Gateway acts as the unified proxy
+        return True
 
     async def ask(self, user_id: int, content: str, external_history: Optional[str] = None) -> Optional[str]:
-        """Отправляет запрос в Gemini и возвращает ответ (Асинхронно)."""
-        if not self.is_enabled():
-            return None
         return await self.gemini_service.ask(user_id, content, external_history=external_history)
 
-    async def ask_stream(self, user_id: int, content: str, external_history: Optional[str] = None):
-        """Прокси для потокового вызова Gemini."""
-        if not self.is_enabled():
-            yield "Сервис ИИ недоступен."
-            return
-        
+    async def ask_stream(self, user_id: int, content: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
         async for chunk in self.gemini_service.ask_stream(user_id, content, external_history=external_history):
             yield chunk
 
-
     def get_provider_name(self) -> str:
-        """Возвращает имя активных провайдеров."""
-        if self.gemini_service.gemini_clients:
-            return f"Gemini({self.gemini_service.gemini_model})"
-        return "None"
+        return "OpenClaw-Gateway"
 
-    async def refresh_knowledge_base(self):
-        """Ручное обновление базы знаний."""
-        if (
-            self.gemini_service
-            and self.gemini_service.knowledge_base
-            and not getattr(self.gemini_service, "rag_disabled", False)
-        ):
-            await self.gemini_service.knowledge_base.refresh_cache(
-                system_instruction=self.gemini_service.system_instruction,
-                tools=self.gemini_service.tools
-            )
-            return True
-        return False
+    async def force_refresh_rag(self) -> bool:
+        # OpenClaw node.js natively handles its own RAG now. 
+        # We just return True for compatibility with older admin dashboard buttons.
+        logger.info("force_refresh_rag ignored as OpenClaw handles Knowledge Base natively.")
+        return True
+
+    def clear_history(self, user_id: int) -> None:
+        if self.gemini_service:
+            self.gemini_service.clear_history(user_id)
 
     async def refresh_system_prompt(self) -> bool:
-        """Ручное обновление системного промпта из Google Docs."""
         if self.gemini_service:
             return await self.gemini_service.refresh_system_prompt()
         return False

@@ -73,13 +73,24 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         await _toggle_config(query, action.replace("admin_toggle_", ""))
 
     elif action == "admin_update_prompt":
-        await query.edit_message_text("📥 Запускаю скрипт обновления системного промпта из Google Документа...")
+        await query.edit_message_text("📥 Обновляю системный промпт для всех уровней ИИ...")
+        log_res = ""
         try:
-            process = await asyncio.create_subprocess_shell("python3 /root/.openclaw/scripts/sync_system_prompt.py || echo 'Need root'", stdout=asyncio.subprocess.PIPE)
+            logger.info("Executing system prompt sync and restarting OpenClaw gateway...")
+            process = await asyncio.create_subprocess_shell("sudo /opt/openclaw/manage_config.sh sync_prompt", stdout=asyncio.subprocess.PIPE)
             stdout, _ = await process.communicate()
-            await query.edit_message_text(f"✅ **Промпт обновлен!**\n\n`{stdout.decode().strip()[:500]}`", parse_mode="Markdown")
+            log_res += "OpenClaw: Sync & Restart OK.\n"
         except Exception as e:
-            await query.edit_message_text(f"❌ Ошибка обновления: {e}")
+            log_res += f"OpenClaw: Error {e}\n"
+            
+        try:
+            # We also restart the bot to ensure fresh connections, since we modified the gateway
+            await asyncio.create_subprocess_shell("sudo /opt/openclaw/manage_config.sh restart_bot")
+            log_res += "Python Core: Restarting bot wrapper...\n"
+        except Exception:
+            pass
+
+        await query.edit_message_text(f"✅ **Промпт синхронизирован! Бот перезагружается.**\n\n`{log_res}`", parse_mode="Markdown")
 
     elif action == "admin_ai_status":
         await query.edit_message_text("📊 Сбор статусов ИИ интеграций...")
