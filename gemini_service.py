@@ -54,7 +54,10 @@ class GeminiService:
         history = self._get_or_create_history(user_id)
         
         # We prepend the dynamic system prompt to every chat request for OpenClaw to process natively
-        messages = [{"role": "system", "content": self.system_prompt or "You are a helpful assistant."}]
+        prompt = self.system_prompt or "You are a helpful assistant."
+        prompt += "\n\nCRITICAL SYSTEM INSTRUCTION: DO NOT use <think>, </think>, or XML tags of any kind. Never start your response with '<think'. Provide your response plainly and directly as natural text."
+        
+        messages = [{"role": "system", "content": prompt}]
         messages.extend(history.copy())
         
         if external_history and external_history.strip():
@@ -86,11 +89,6 @@ class GeminiService:
                     async with client.stream("POST", f"{self.openclaw_url}/v1/chat/completions", headers=headers, json=payload) as response:
                         response.raise_for_status()
                         
-                        stream_buffer = ""
-                        in_think = False
-                        
-                        import re
-                        
                         async for line in response.aiter_lines():
                             if line.startswith("data:"):
                                 line_data = line[5:].strip()
@@ -103,59 +101,15 @@ class GeminiService:
                                         delta = chunk["choices"][0].get("delta", {})
                                         text = delta.get("content", "")
                                         if text:
-                                            stream_buffer += text
+                                            full_reply += text
                                             
-                                            # Strip <think>...</think> from stream using regex to handle malformed tags like <think Я...
-                                            while True:
-                                                if not in_think:
-                                                    match_start = re.search(r"<think", stream_buffer)
-                                                    if match_start:
-                                                        think_start = match_start.start()
-                                                        safe_text = stream_buffer[:think_start]
-                                                        if safe_text:
-                                                            full_reply += safe_text
-                                                            yield safe_text
-                                                        stream_buffer = stream_buffer[think_start + 6:]
-                                                        in_think = True
-                                                        continue
-                                                    
-                                                    # Check if ending with partial start tag
-                                                    partial_len = 0
-                                                    for i in range(1, 7):
-                                                        if stream_buffer.endswith("<think"[:i]):
-                                                            partial_len = i
-                                                    
-                                                    if partial_len > 0:
-                                                        safe_text = stream_buffer[:-partial_len]
-                                                        if safe_text:
-                                                            full_reply += safe_text
-                                                            yield safe_text
-                                                        stream_buffer = stream_buffer[-partial_len:]
-                                                    else:
-                                                        if stream_buffer:
-                                                            full_reply += stream_buffer
-                                                            yield stream_buffer
-                                                        stream_buffer = ""
-                                                else:
-                                                    match_end = re.search(r"(</think>|</$)", stream_buffer)
-                                                    if match_end:
-                                                        end_len = len(match_end.group(0))
-                                                        stream_buffer = stream_buffer[match_end.start() + end_len:]
-                                                        if stream_buffer.startswith(">"):
-                                                            stream_buffer = stream_buffer[1:]
-                                                        in_think = False
-                                                        continue
-                                                    else:
-                                                        # Fully inside think tag or partial close, wait for end
-                                                        stream_buffer = ""
-                                                break
+                                            # Защита от просочившихся тегов <think> (разрешаем моделям думать, но не выводим в чат)
+                                            clean_text = text.replace("<think>", "").replace("</think>", "").replace("<think", "").replace("</", "")
+                                            
+                                            if clean_text:
+                                                yield clean_text
                                 except json.JSONDecodeError:
                                     continue
-                                    
-                        # After loop, yield any safely remaining non-think text
-                        if not in_think and stream_buffer:
-                            full_reply += stream_buffer
-                            yield stream_buffer
                                     
                 if full_reply:
                     break
