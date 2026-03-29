@@ -60,7 +60,19 @@ class GeminiService:
         messages.extend(history.copy())
         
         if external_history and external_history.strip():
-            clean_history = external_history[-3000:]
+            # Находим безопасную границу обрезки (разрыв строки или точка)
+            history_text = external_history.strip()
+            if len(history_text) > 3000:
+                cut_index = history_text.find('\n', len(history_text) - 3000)
+                if cut_index == -1:
+                    cut_index = history_text.find('. ', len(history_text) - 3000)
+                if cut_index != -1:
+                    clean_history = history_text[cut_index:].strip()
+                else:
+                    clean_history = history_text[-3000:]
+            else:
+                clean_history = history_text
+                
             messages.append({"role": "user", "content": f"Краткая история диалога из CRM (справочно):\n{clean_history}"})
             messages.append({"role": "assistant", "content": "Принято, учел контекст."})
             
@@ -102,8 +114,8 @@ class GeminiService:
                                         if text:
                                             full_reply += text
                                             
-                                            # Защита от просочившихся тегов <think> (разрешаем моделям думать, но не выводим в чат)
-                                            clean_text = text.replace("<think>", "").replace("</think>", "").replace("<think", "").replace("</", "")
+                                            # Защита от просочившихся тегов <think> (вырезаем только сами теги)
+                                            clean_text = text.replace("<think>", "").replace("</think>", "")
                                             
                                             if clean_text:
                                                 yield clean_text
