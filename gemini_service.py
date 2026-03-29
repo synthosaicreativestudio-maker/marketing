@@ -30,11 +30,19 @@ class GeminiService:
         
         self.memory_archiver = MemoryArchiver(self.drive_service)
         
+        self.system_prompt = ""
+        # Load local fallback immediately
+        try:
+            with open("system_prompt.txt", "r", encoding="utf-8") as f:
+                 self.system_prompt = f.read()
+        except Exception:
+             pass
+        
         logger.info(f"AI Service routing traffic directly to OpenClaw Node.js: {self.openclaw_url}")
         
     async def initialize(self):
-        """No intensive initialization needed as everything is offloaded to OpenClaw."""
-        pass
+        """Initializes the service and downloads the dynamic system prompt."""
+        await self.refresh_system_prompt(force=True)
         
     async def wait_for_ready(self):
         """Immediately ready in this architecture."""
@@ -46,10 +54,9 @@ class GeminiService:
         
         history = self._get_or_create_history(user_id)
         
-        # In this architecture, we don't send the system prompt here. OpenClaw handles it.
-        # However, we DO send context like external_history (e.g. from Sheets)
-        
-        messages = history.copy()
+        # We prepend the dynamic system prompt to every chat request for OpenClaw to process natively
+        messages = [{"role": "system", "content": self.system_prompt or "You are a helpful assistant."}]
+        messages.extend(history.copy())
         
         if external_history and external_history.strip():
             clean_history = external_history[-3000:]
@@ -80,6 +87,9 @@ class GeminiService:
                     async with client.stream("POST", f"{self.openclaw_url}/v1/chat/completions", headers=headers, json=payload) as response:
                         response.raise_for_status()
                         
+                        stream_buffer = ""
+                        in_think = False
+                        
                         async for line in response.aiter_lines():
                             if line.startswith("data:"):
                                 line_data = line[5:].strip()
@@ -92,10 +102,55 @@ class GeminiService:
                                         delta = chunk["choices"][0].get("delta", {})
                                         text = delta.get("content", "")
                                         if text:
-                                            full_reply += text
-                                            yield text
+                                            stream_buffer += text
+                                            
+                                            # Strip <think>...</think> from stream
+                                            while True:
+                                                if not in_think:
+                                                    think_start = stream_buffer.find("<think>")
+                                                    if think_start != -1:
+                                                        safe_text = stream_buffer[:think_start]
+                                                        if safe_text:
+                                                            full_reply += safe_text
+                                                            yield safe_text
+                                                        stream_buffer = stream_buffer[think_start + 7:]
+                                                        in_think = True
+                                                        continue
+                                                    
+                                                    # Check if ending with partial start tag
+                                                    partial_len = 0
+                                                    for i in range(1, 8):
+                                                        if stream_buffer.endswith("<think>"[:i]):
+                                                            partial_len = i
+                                                    
+                                                    if partial_len > 0:
+                                                        safe_text = stream_buffer[:-partial_len]
+                                                        if safe_text:
+                                                            full_reply += safe_text
+                                                            yield safe_text
+                                                        stream_buffer = stream_buffer[-partial_len:]
+                                                    else:
+                                                        if stream_buffer:
+                                                            full_reply += stream_buffer
+                                                            yield stream_buffer
+                                                        stream_buffer = ""
+                                                else:
+                                                    think_end = stream_buffer.find("</think>")
+                                                    if think_end != -1:
+                                                        stream_buffer = stream_buffer[think_end + 8:]
+                                                        in_think = False
+                                                        continue
+                                                    else:
+                                                        # Fully inside think tag, wait for end
+                                                        stream_buffer = ""
+                                                break
                                 except json.JSONDecodeError:
                                     continue
+                                    
+                        # After loop, yield any safely remaining non-think text
+                        if not in_think and stream_buffer:
+                            full_reply += stream_buffer
+                            yield stream_buffer
                                     
                 if full_reply:
                     break
@@ -155,9 +210,34 @@ class GeminiService:
             del self.user_histories[user_id]
             logger.info(f"Cleared chat history for user {user_id}")
             
-    # --- Stubs for Admin Dashboard Compatibility ---
+    # --- Admin Dashboard Compatibility ---
     
     async def refresh_system_prompt(self, force: bool = False) -> bool:
-        """Stub: The prompt is now strictly managed by OpenClaw Engine directly."""
-        logger.info("refresh_system_prompt ignored as OpenClaw handles prompts.")
-        return True
+        """Downloads the system prompt from Google Docs and applies it for OpenClaw injection."""
+        doc_id = os.getenv("SYSTEM_PROMPT_DOC", "") or os.getenv("SYSTEM_PROMPT_DOC_ID", "")
+        if not doc_id or not self.drive_service:
+            logger.warning("DriveService or SYSTEM_PROMPT_DOC_ID missing, reading local system_prompt.txt")
+            try:
+                with open("system_prompt.txt", "r", encoding="utf-8") as f:
+                    self.system_prompt = f.read()
+            except Exception:
+                if not self.system_prompt:
+                    self.system_prompt = "You are a helpful assistant."
+            return True
+            
+        try:
+            downloaded = await asyncio.to_thread(
+                self.drive_service.download_file,
+                file_id=doc_id,
+                file_name="system_prompt.txt",
+                mime_type="application/vnd.google-apps.document"
+            )
+            if downloaded:
+                with open(downloaded, "r", encoding="utf-8") as f:
+                    self.system_prompt = f.read()
+                logger.info("System prompt successfully refreshed from Google Docs.")
+                return True
+        except Exception as e:
+            logger.error(f"Failed to refresh system prompt: {e}")
+            
+        return False
