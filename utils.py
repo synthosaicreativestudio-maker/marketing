@@ -57,10 +57,11 @@ def sanitize_ai_text_plain(text: str, ensure_emojis: bool = True) -> str:
     if not text:
         return text
 
-    # First, handle AI hallucinations where it wraps its text in <think ... >
+    # First, handle AI hallucinations where it wraps its text in <think ... > or <final ... >
     # This safely deletes the "<think" prefix and closing ">" but KEEPS the text inside!
-    text = re.sub(r'<think\s+(.*?)>', r'\1 ', text)
-    text = text.replace("<think>", "").replace("</think>", "").replace("<think", "")
+    text = re.sub(r'<(think|final|thought)\s+(.*?)>', r'\2 ', text, flags=re.IGNORECASE)
+    # Удаляем сами теги, даже если они приклеились к русскому префиксу (напр. <finalть)
+    text = re.sub(r'</?(think|final|thought)[a-zа-яё]*>?', '', text, flags=re.IGNORECASE)
     
     # Remove remaining HTML tags, but ONLY standard ones (to avoid aggressively deleting text if model hallucinates < )
     text = re.sub(r"</?(b|strong|i|em|a|code|pre|s|u)[^>]*>", "", text, flags=re.IGNORECASE)
