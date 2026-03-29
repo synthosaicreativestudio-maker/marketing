@@ -57,8 +57,13 @@ def sanitize_ai_text_plain(text: str, ensure_emojis: bool = True) -> str:
     if not text:
         return text
 
-    # Remove HTML tags if any
-    text = re.sub(r"<[^>]+>", "", text)
+    # First, handle AI hallucinations where it wraps its text in <think ... >
+    # This safely deletes the "<think" prefix and closing ">" but KEEPS the text inside!
+    text = re.sub(r'<think\s+(.*?)>', r'\1 ', text)
+    text = text.replace("<think>", "").replace("</think>", "").replace("<think", "")
+    
+    # Remove remaining HTML tags, but ONLY standard ones (to avoid aggressively deleting text if model hallucinates < )
+    text = re.sub(r"</?(b|strong|i|em|a|code|pre|s|u)[^>]*>", "", text, flags=re.IGNORECASE)
 
     # Convert markdown links to "Text: URL"
     text = re.sub(r'\[([^\]]+)\]\((https?://[^\s)]+)\)', r'\1: \2', text)
