@@ -1,7 +1,6 @@
 import logging
 from typing import Optional, AsyncGenerator
 from gemini_service import GeminiService
-from yandex_service import YandexService
 from sheets_gateway import AsyncGoogleSheetsGateway
 
 logger = logging.getLogger(__name__)
@@ -11,7 +10,6 @@ class AIService:
     
     def __init__(self, promotions_gateway: Optional[AsyncGoogleSheetsGateway] = None) -> None:
         self.gemini_service = GeminiService(promotions_gateway=promotions_gateway)
-        self.yandex_service = YandexService()
         
         logger.info(f"AIService активен с провайдером: {self.get_provider_name()}")
 
