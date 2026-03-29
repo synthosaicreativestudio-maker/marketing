@@ -89,6 +89,8 @@ class GeminiService:
                         stream_buffer = ""
                         in_think = False
                         
+                        import re
+                        
                         async for line in response.aiter_lines():
                             if line.startswith("data:"):
                                 line_data = line[5:].strip()
@@ -103,23 +105,24 @@ class GeminiService:
                                         if text:
                                             stream_buffer += text
                                             
-                                            # Strip <think>...</think> from stream
+                                            # Strip <think>...</think> from stream using regex to handle malformed tags like <think Я...
                                             while True:
                                                 if not in_think:
-                                                    think_start = stream_buffer.find("<think>")
-                                                    if think_start != -1:
+                                                    match_start = re.search(r"<think", stream_buffer)
+                                                    if match_start:
+                                                        think_start = match_start.start()
                                                         safe_text = stream_buffer[:think_start]
                                                         if safe_text:
                                                             full_reply += safe_text
                                                             yield safe_text
-                                                        stream_buffer = stream_buffer[think_start + 7:]
+                                                        stream_buffer = stream_buffer[think_start + 6:]
                                                         in_think = True
                                                         continue
                                                     
                                                     # Check if ending with partial start tag
                                                     partial_len = 0
-                                                    for i in range(1, 8):
-                                                        if stream_buffer.endswith("<think>"[:i]):
+                                                    for i in range(1, 7):
+                                                        if stream_buffer.endswith("<think"[:i]):
                                                             partial_len = i
                                                     
                                                     if partial_len > 0:
@@ -134,13 +137,16 @@ class GeminiService:
                                                             yield stream_buffer
                                                         stream_buffer = ""
                                                 else:
-                                                    think_end = stream_buffer.find("</think>")
-                                                    if think_end != -1:
-                                                        stream_buffer = stream_buffer[think_end + 8:]
+                                                    match_end = re.search(r"(</think>|</$)", stream_buffer)
+                                                    if match_end:
+                                                        end_len = len(match_end.group(0))
+                                                        stream_buffer = stream_buffer[match_end.start() + end_len:]
+                                                        if stream_buffer.startswith(">"):
+                                                            stream_buffer = stream_buffer[1:]
                                                         in_think = False
                                                         continue
                                                     else:
-                                                        # Fully inside think tag, wait for end
+                                                        # Fully inside think tag or partial close, wait for end
                                                         stream_buffer = ""
                                                 break
                                 except json.JSONDecodeError:
