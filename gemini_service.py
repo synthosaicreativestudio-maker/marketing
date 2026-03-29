@@ -55,7 +55,6 @@ class GeminiService:
         
         # We prepend the dynamic system prompt to every chat request for OpenClaw to process natively
         prompt = self.system_prompt or "You are a helpful assistant."
-        prompt += "\n\nCRITICAL SYSTEM INSTRUCTION: DO NOT use <think>, </think>, or XML tags of any kind. Never start your response with '<think'. Provide your response plainly and directly as natural text."
         
         messages = [{"role": "system", "content": prompt}]
         messages.extend(history.copy())
