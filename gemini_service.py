@@ -108,8 +108,8 @@ class GeminiService:
                         response.raise_for_status()
                         
                         # State machine для фильтрации <think>/<thinking> блоков
-                        # из SSE-потока OpenClaw. Reasoning-модели (Gemini 2.5)
-                        # генерируют внутренние рассуждения в этих тегах.
+                        # из SSE-потока OpenClaw Node.js. OpenClaw agent layer
+                        # добавляет внутренние рассуждения в этих тегах.
                         # Состояния: "normal" | "inside_think"
                         state = "normal"
                         tag_buffer = ""  # буфер для неполных тегов
