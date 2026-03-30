@@ -57,9 +57,11 @@ def sanitize_ai_text_plain(text: str, ensure_emojis: bool = True) -> str:
     if not text:
         return text
 
-    # First, handle AI hallucinations where it wraps its text in <think ... > or <final ... >
-    # Удаляем чистые теги рассуждений, если модель их сгенерировала
-    text = re.sub(r'</?(think|final|thought)>', '', text, flags=re.IGNORECASE)
+    # Удаляем ПОЛНЫЕ блоки рассуждений <think>...</think> и <thinking>...</thinking>
+    # re.DOTALL чтобы точка матчила переносы строк внутри блока
+    text = re.sub(r'<think(?:ing)?[^>]*>.*?</think(?:ing)?\s*>', '', text, flags=re.IGNORECASE | re.DOTALL)
+    # Fallback: удаляем оставшиеся одиночные теги (если блок был неполный)
+    text = re.sub(r'</?(?:think|thinking|final|thought)[^>]*>', '', text, flags=re.IGNORECASE)
     
     # Remove remaining HTML tags, but ONLY standard ones
     text = re.sub(r"</?(b|strong|i|em|a|code|pre|s|u)[^>]*>", "", text, flags=re.IGNORECASE)
