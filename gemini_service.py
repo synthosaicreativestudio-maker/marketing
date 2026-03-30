@@ -83,7 +83,6 @@ class GeminiService:
         
         for attempt in range(MAX_RETRIES):
             try:
-                # We use httpx explicitly since the openai SDK doesn't always play well with custom chunking proxies
                 headers = {
                     "Authorization": f"Bearer {self.openclaw_token}",
                     "Content-Type": "application/json"
@@ -100,6 +99,12 @@ class GeminiService:
                     async with client.stream("POST", f"{self.openclaw_url}/v1/chat/completions", headers=headers, json=payload) as response:
                         response.raise_for_status()
                         
+                        # State machine для корректной обработки <think> блоков,
+                        # которые приходят разбитыми по чанкам SSE-потока.
+                        # Состояния: "normal" | "inside_think" | "maybe_tag"
+                        state = "normal"
+                        tag_buffer = ""  # буфер для неполных тегов вроде "<think" без ">"
+                        
                         async for line in response.aiter_lines():
                             if line.startswith("data:"):
                                 line_data = line[5:].strip()
@@ -111,16 +116,62 @@ class GeminiService:
                                     if "choices" in chunk and len(chunk["choices"]) > 0:
                                         delta = chunk["choices"][0].get("delta", {})
                                         text = delta.get("content", "")
-                                        if text:
-                                            full_reply += text
+                                        if not text:
+                                            continue
+                                        
+                                        full_reply += text
+                                        
+                                        # --- Буферизованный парсинг <think> блоков ---
+                                        clean_parts = []
+                                        buf = tag_buffer + text
+                                        tag_buffer = ""
+                                        i = 0
+                                        
+                                        while i < len(buf):
+                                            if state == "normal":
+                                                lt = buf.find("<", i)
+                                                if lt == -1:
+                                                    clean_parts.append(buf[i:])
+                                                    i = len(buf)
+                                                else:
+                                                    clean_parts.append(buf[i:lt])
+                                                    rest = buf[lt:]
+                                                    if rest.lower().startswith("<think>"):
+                                                        state = "inside_think"
+                                                        i = lt + 7  # len("<think>")
+                                                    elif len(rest) < 7 and "<think>".startswith(rest.lower()):
+                                                        # Неполный тег на конце буфера — ждём следующий чанк
+                                                        tag_buffer = rest
+                                                        i = len(buf)
+                                                    else:
+                                                        # Не наш тег, передаём как обычный текст
+                                                        clean_parts.append("<")
+                                                        i = lt + 1
                                             
-                                            # Защита от просочившихся тегов <think> (вырезаем только сами теги)
-                                            clean_text = text.replace("<think>", "").replace("</think>", "")
-                                            
-                                            if clean_text:
-                                                yield clean_text
+                                            elif state == "inside_think":
+                                                end = buf.lower().find("</think>", i)
+                                                if end == -1:
+                                                    # Ищем неполный закрывающий тег на конце буфера
+                                                    for tail_len in range(min(8, len(buf) - i), 0, -1):
+                                                        tail = buf[len(buf) - tail_len:]
+                                                        if "</think>".startswith(tail.lower()):
+                                                            tag_buffer = tail
+                                                            break
+                                                    # Всё содержимое между тегами — рассуждения, пропускаем
+                                                    i = len(buf)
+                                                else:
+                                                    state = "normal"
+                                                    i = end + 8  # len("</think>")
+                                        
+                                        clean_text = "".join(clean_parts)
+                                        if clean_text:
+                                            yield clean_text
                                 except json.JSONDecodeError:
                                     continue
+                        
+                        # Если в буфере остался неполный тег — это просто текст
+                        if tag_buffer and state == "normal":
+                            yield tag_buffer
                                     
                 if full_reply:
                     break
