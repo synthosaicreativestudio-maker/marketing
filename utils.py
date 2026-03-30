@@ -43,10 +43,13 @@ def sanitize_ai_text(text: str, ensure_emojis: bool = True) -> str:
     if not text:
         return text
 
-    # Сначала конвертируем Markdown в HTML с экранированием
+    # 1. Удаляем все теги рассуждений ДО экранирования HTML
+    text = _strip_reasoning_tags(text)
+
+    # 2. Конвертируем Markdown в HTML с экранированием
     text = _markdown_to_telegram_html(text)
     
-    # Затем форматируем ссылки, которые ИИ мог прислать "голыми"
+    # 3. Форматируем ссылки, которые ИИ мог прислать "голыми"
     text = _format_links_safe(text)
 
     return text
@@ -57,11 +60,8 @@ def sanitize_ai_text_plain(text: str, ensure_emojis: bool = True) -> str:
     if not text:
         return text
 
-    # Удаляем ПОЛНЫЕ блоки рассуждений <think>...</think> и <thinking>...</thinking>
-    # re.DOTALL чтобы точка матчила переносы строк внутри блока
-    text = re.sub(r'<think(?:ing)?[^>]*>.*?</think(?:ing)?\s*>', '', text, flags=re.IGNORECASE | re.DOTALL)
-    # Fallback: удаляем оставшиеся одиночные теги (если блок был неполный)
-    text = re.sub(r'</?(?:think|thinking|final|thought)[^>]*>', '', text, flags=re.IGNORECASE)
+    # 1. Единая очистка reasoning-тегов
+    text = _strip_reasoning_tags(text)
     
     # Remove remaining HTML tags, but ONLY standard ones
     text = re.sub(r"</?(b|strong|i|em|a|code|pre|s|u)[^>]*>", "", text, flags=re.IGNORECASE)
@@ -144,6 +144,36 @@ def _format_links_safe(text: str) -> str:
         return url
 
     return url_re.sub(repl, text)
+
+def _strip_reasoning_tags(text: str) -> str:
+    """Удаляет ВСЕ reasoning-теги и их содержимое из ответа ИИ.
+    
+    Обрабатывает: <think>, <thinking>, <final>, <final_answer>, <thought>, 
+    и их вариации с атрибутами.
+    """
+    if not text:
+        return text
+    
+    # 1. Удаляем ПОЛНЫЕ блоки с содержимым: <think>...</think>, <thinking>...</thinking>,
+    #    <final>...</final>, <final_answer>...</final_answer>, <thought>...</thought>
+    text = re.sub(
+        r'<(?:think(?:ing)?|final(?:_answer)?|thought)[^>]*>.*?</(?:think(?:ing)?|final(?:_answer)?|thought)\s*>',
+        '', text, flags=re.IGNORECASE | re.DOTALL
+    )
+    
+    # 2. Удаляем НЕЗАКРЫТЫЕ блоки (если поток оборвался внутри тега)
+    text = re.sub(
+        r'<(?:think(?:ing)?|final(?:_answer)?|thought)[^>]*>.*$',
+        '', text, flags=re.IGNORECASE | re.DOTALL
+    )
+    
+    # 3. Удаляем одиночные теги (открывающие и закрывающие)
+    text = re.sub(
+        r'</?(?:think(?:ing)?|final(?:_answer)?|thought)\s*[^>]*>',
+        '', text, flags=re.IGNORECASE
+    )
+    
+    return text.strip()
 
 def _normalize_whitespace(text: str) -> str:
     lines = []

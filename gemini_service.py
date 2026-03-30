@@ -82,12 +82,12 @@ class GeminiService:
         full_reply = ""  # Собираем ТОЛЬКО чистый текст (без <think> блоков)
         
         # Регулярки для распознавания открывающих/закрывающих think-тегов
-        # Обрабатывают: <think>, <thinking>, <think >, <thinking type="...">, и т.д.
+        # Обрабатывают: <think>, <thinking>, <final>, <final_answer>, <thought> и т.д.
         import re
-        _OPEN_THINK_RE = re.compile(r'<think(?:ing)?[\s>]', re.IGNORECASE)
-        _CLOSE_THINK_RE = re.compile(r'</think(?:ing)?\s*>', re.IGNORECASE)
+        _OPEN_THINK_RE = re.compile(r'<(?:think(?:ing)?|final(?:_answer)?|thought)[\s>]', re.IGNORECASE)
+        _CLOSE_THINK_RE = re.compile(r'</(?:think(?:ing)?|final(?:_answer)?|thought)\s*>', re.IGNORECASE)
         # Максимальная длина открывающего тега (для буферизации неполных тегов)
-        _MAX_OPEN_TAG_LEN = 12  # len("<thinking >") с запасом
+        _MAX_OPEN_TAG_LEN = 16  # len("<final_answer>") с запасом
         
         for attempt in range(MAX_RETRIES):
             try:
@@ -164,9 +164,14 @@ class GeminiService:
                                                             i = len(buf)
                                                     elif len(rest) < _MAX_OPEN_TAG_LEN:
                                                         # Неполный тег на конце буфера
-                                                        # Проверяем: может ли это быть началом <think или <thinking
+                                                        # Проверяем: может ли это быть началом тега
                                                         potential = rest.lower()
-                                                        if "<think".startswith(potential) or "<thinking".startswith(potential):
+                                                        if (
+                                                            "<think".startswith(potential) or
+                                                            "<thinking".startswith(potential) or
+                                                            "<final".startswith(potential) or
+                                                            "<thought".startswith(potential)
+                                                        ):
                                                             tag_buffer = rest
                                                             i = len(buf)
                                                         else:
@@ -179,17 +184,24 @@ class GeminiService:
                                                         i = lt + 1
                                             
                                             elif state == "inside_think":
-                                                # Ищем закрывающий тег </think> или </thinking>
+                                                # Ищем закрывающий тег </think>, </final> и т.д.
                                                 m_close = _CLOSE_THINK_RE.search(buf, i)
                                                 if m_close:
                                                     state = "normal"
                                                     i = m_close.end()
                                                 else:
                                                     # Ищем неполный закрывающий тег на конце буфера
-                                                    # Максимальная длина </thinking> = 12
-                                                    for tail_len in range(min(12, len(buf) - i), 0, -1):
+                                                    # Максимальная длина 16
+                                                    for tail_len in range(min(16, len(buf) - i), 0, -1):
                                                         tail = buf[len(buf) - tail_len:]
-                                                        if "</think>".startswith(tail.lower()) or "</thinking>".startswith(tail.lower()):
+                                                        tail_lower = tail.lower()
+                                                        if (
+                                                            "</think>".startswith(tail_lower) or
+                                                            "</thinking>".startswith(tail_lower) or
+                                                            "</final>".startswith(tail_lower) or
+                                                            "</final_answer>".startswith(tail_lower) or
+                                                            "</thought>".startswith(tail_lower)
+                                                        ):
                                                             tag_buffer = tail
                                                             break
                                                     # Все рассуждения — пропускаем
@@ -205,7 +217,8 @@ class GeminiService:
                         # Если в буфере остался неполный тег после окончания потока
                         if tag_buffer and state == "normal":
                             # НЕ yield-им буфер если он похож на начало think-тега
-                            if "<think" not in tag_buffer.lower():
+                            tb_lower = tag_buffer.lower()
+                            if "<think" not in tb_lower and "<final" not in tb_lower and "<thought" not in tb_lower:
                                 full_reply += tag_buffer
                                 yield tag_buffer
                             else:
