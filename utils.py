@@ -151,6 +151,37 @@ def _normalize_whitespace(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _is_ai_asking_for_escalation(ai_response: str) -> bool:
+    """
+    Проверяет, предлагает ли ИИ передачу специалисту в своём ответе.
+    """
+    if not ai_response:
+        return False
+
+    response_lower = ai_response.lower()
+
+    escalation_phrases = [
+        'передам вашу задачу специалисту',
+        'передам задачу специалисту',
+        'передам запрос специалисту',
+        'передаю ваш запрос',
+        'передам его специалисту',
+        'зафиксирую запрос и передам',
+        'свяжется с вами',
+        'он свяжется с вами',
+        'передать специалисту',
+        'соединить со специалистом',
+        'связать со специалистом',
+        'передать менеджеру',
+        'передать маркетологу',
+    ]
+
+    for phrase in escalation_phrases:
+        if phrase in response_lower:
+            return True
+
+    return False
+
 
 
 
