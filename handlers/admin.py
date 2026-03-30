@@ -96,7 +96,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text("📊 Сбор статусов ИИ интеграций...")
         cmds = {
             "OpenClaw Gateway": "systemctl is-active openclaw-gateway.service || echo 'inactive'",
-            "Galina Proxy": "systemctl is-active galina_proxy.service || echo 'inactive'",
             "Bot Service": "systemctl is-active marketingbot-bot.service || echo 'inactive'"
         }
         res = ""

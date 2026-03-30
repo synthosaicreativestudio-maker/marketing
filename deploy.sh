@@ -19,7 +19,7 @@ MAX_RELEASES=3
 # Shared files that will be symlinked into each release
 SHARED_FILES=(".env" "credentials.json")
 SHARED_DIRS=("logs")
-SHARED_RUNTIME=("chat_memory.db" "rag_cache.db" "rag_index.json" "rag/persistent_rules.txt")
+SHARED_RUNTIME=("chat_memory.db")
 
 # Colors
 RED='\033[0;31m'
@@ -101,7 +101,7 @@ import sys
 sys.path.insert(0, '.')
 # Test critical imports
 import importlib
-for mod in ['bot', 'gemini_service', 'auth_service', 'knowledge_base']:
+for mod in ['bot', 'gemini_service', 'auth_service']:
     try:
         importlib.import_module(mod)
         print(f'  ✓ {mod}')
