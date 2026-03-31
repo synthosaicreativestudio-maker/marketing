@@ -6,9 +6,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonDefau
 
 logger = logging.getLogger(__name__)
 
-_THINK_TAGS = r'(?:think(?:ing)?|thought)'
-_FINAL_TAGS = r'(?:final(?:_answer)?)'
-
 
 async def alert_admin(bot, message: str, level: str = "ERROR") -> bool:
     """
@@ -151,74 +148,28 @@ def _format_links_safe(text: str) -> str:
 def _strip_reasoning_tags(text: str) -> str:
     """Удаляет ВСЕ reasoning-теги и их содержимое из ответа ИИ.
     
-    Обрабатывает:
-    - <think>, <thinking>, <thought> -> удаляются целиком
-    - <final>, <final_answer> -> теги удаляются, текст внутри сохраняется
-    - обрезанные фрагменты тегов в конце строки -> выкидываются
+    Обрабатывает: <think>, <thinking>, <final>, <final_answer>, <thought>, 
+    и их вариации с атрибутами.
     """
     if not text:
         return text
     
-    # 1. Удаляем ПОЛНЫЕ блоки размышлений: <think>...</think>, <thinking>...</thinking>,
-    #    <thought>...</thought>
+    # 1. Удаляем ПОЛНЫЕ блоки с содержимым: <think>...</think>, <thinking>...</thinking>,
+    #    <final>...</final>, <final_answer>...</final_answer>, <thought>...</thought>
     text = re.sub(
-        rf'<{_THINK_TAGS}[^>]*>.*?</{_THINK_TAGS}\s*>',
+        r'<(?:think(?:ing)?|final(?:_answer)?|thought)[^>]*>.*?</(?:think(?:ing)?|final(?:_answer)?|thought)\s*>',
         '', text, flags=re.IGNORECASE | re.DOTALL
     )
     
-    # 2. Удаляем незакрытые блоки размышлений, если поток оборвался внутри тега
-    #    БЕЗ DOTALL — не ест текст через переводы строк (фикс обрезки начала ответов)
+    # 2. Удаляем НЕЗАКРЫТЫЕ блоки (если поток оборвался внутри тега)
     text = re.sub(
-        rf'<{_THINK_TAGS}[^>]*>.*$',
-        '', text, flags=re.IGNORECASE
+        r'<(?:think(?:ing)?|final(?:_answer)?|thought)[^>]*>.*$',
+        '', text, flags=re.IGNORECASE | re.DOTALL
     )
     
-    # 3. Удаляем финальные блоки, но сохраняем текст внутри
+    # 3. Удаляем одиночные теги (открывающие и закрывающие)
     text = re.sub(
-        rf'<{_FINAL_TAGS}\s*[^>]*>(.*?)</{_FINAL_TAGS}\s*>',
-        r'\1',
-        text,
-        flags=re.IGNORECASE | re.DOTALL
-    )
-    
-    # 4. Удаляем одиночные финальные теги, если блок пришёл без закрытия
-    text = re.sub(
-        rf'</?{_FINAL_TAGS}\s*[^>]*>',
-        '',
-        text,
-        flags=re.IGNORECASE
-    )
-    
-    # 5. Удаляем хвосты обрезанных тегов в конце строки:
-    #    "<final", "</final", "<think", "</think" и т.д.
-    text = re.sub(
-        rf'<{_THINK_TAGS}[^>]*$',
-        '',
-        text,
-        flags=re.IGNORECASE
-    )
-    text = re.sub(
-        rf'</{_THINK_TAGS}[^>]*$',
-        '',
-        text,
-        flags=re.IGNORECASE
-    )
-    text = re.sub(
-        rf'<{_FINAL_TAGS}[^>]*$',
-        '',
-        text,
-        flags=re.IGNORECASE
-    )
-    text = re.sub(
-        rf'</{_FINAL_TAGS}[^>]*$',
-        '',
-        text,
-        flags=re.IGNORECASE
-    )
-    
-    # 6. Удаляем любые оставшиеся одиночные теги размышлений
-    text = re.sub(
-        rf'</?{_THINK_TAGS}\s*[^>]*>',
+        r'</?(?:think(?:ing)?|final(?:_answer)?|thought)\s*[^>]*>',
         '', text, flags=re.IGNORECASE
     )
     
