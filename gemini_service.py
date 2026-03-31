@@ -3,15 +3,29 @@ import asyncio
 import time
 import logging
 import json
+import re
 import httpx
-from typing import Dict, List, Optional, AsyncGenerator
+from typing import Any, Dict, List, Optional, AsyncGenerator
 
 from sheets_gateway import AsyncGoogleSheetsGateway
 from structured_logging import log_llm_metrics
 from drive_service import DriveService
 from memory_archiver import MemoryArchiver
+from utils import sanitize_ai_text_plain
 
 logger = logging.getLogger(__name__)
+
+_OPENCLAW_TAG_FRAGMENT_RE = re.compile(
+    r'^\s*</?(?:think(?:ing)?|thought|final(?:_answer)?)\s*>?\s*$',
+    re.IGNORECASE,
+)
+
+# Inline-очистка: вырезает теги из чанка, СОХРАНЯЯ полезный текст рядом.
+# Решает проблему когда Gemini Flash Lite шлёт "<think" как первый токен стрима.
+_OPENCLAW_INLINE_TAG_RE = re.compile(
+    r'</?(?:think(?:ing)?|thought|final(?:_answer)?)(?:\s*)>?',
+    re.IGNORECASE,
+)
 
 class GeminiService:
     """Service to interact with the OpenClaw AI Engine (acting as the Core Brain)."""
@@ -20,7 +34,19 @@ class GeminiService:
         self.promotions_gateway = promotions_gateway
         self.user_histories: Dict[int, List[Dict[str, str]]] = {}
         self.openclaw_url = os.getenv("OPENCLAW_URL", "http://127.0.0.1:18789")
-        self.openclaw_token = os.getenv("OPENCLAW_TOKEN", "default-token")
+        self.openclaw_token = (
+            os.getenv("OPENCLAW_GATEWAY_TOKEN")
+            or os.getenv("OPENCLAW_TOKEN")
+            or "default-token"
+        )
+        self._http_timeout = httpx.Timeout(connect=10.0, read=90.0, write=30.0, pool=10.0)
+        self._http_limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
+        self._http_client = httpx.AsyncClient(
+            timeout=self._http_timeout,
+            limits=self._http_limits,
+            trust_env=False,
+            headers={"Accept": "text/event-stream"},
+        )
         
         # Tools (removed from Google SDK format, let OpenClaw handle its own native tools)
         self.tools = []
@@ -47,49 +73,29 @@ class GeminiService:
         """Immediately ready in this architecture."""
         return True
 
-    async def ask_stream(self, user_id: int, content: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
+    async def ask_stream(
+        self,
+        user_id: int,
+        content: str,
+        external_history: Optional[str] = None,
+        system_context: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
         """Main entrypoint for chat generation via OpenClaw."""
         llm_start_time = time.perf_counter()
         
-        history = self._get_or_create_history(user_id)
-        
-        # We prepend the dynamic system prompt to every chat request for OpenClaw to process natively
-        prompt = self.system_prompt or "You are a helpful assistant."
-        
-        messages = [{"role": "system", "content": prompt}]
-        messages.extend(history.copy())
-        
-        if external_history and external_history.strip():
-            # Находим безопасную границу обрезки (разрыв строки или точка)
-            history_text = external_history.strip()
-            if len(history_text) > 3000:
-                cut_index = history_text.find('\n', len(history_text) - 3000)
-                if cut_index == -1:
-                    cut_index = history_text.find('. ', len(history_text) - 3000)
-                if cut_index != -1:
-                    clean_history = history_text[cut_index:].strip()
-                else:
-                    clean_history = history_text[-3000:]
-            else:
-                clean_history = history_text
-                
-            messages.append({"role": "user", "content": f"Краткая история диалога из CRM (справочно):\n{clean_history}"})
-            messages.append({"role": "assistant", "content": "Принято, учел контекст."})
-            
-        messages.append({"role": "user", "content": content})
+        messages = self._build_messages(
+            user_id=user_id,
+            content=content,
+            external_history=external_history,
+            system_context=system_context,
+        )
         
         MAX_RETRIES = 2
-        full_reply = ""  # Собираем ТОЛЬКО чистый текст (без <think> блоков)
-        
-        # Регулярки для распознавания открывающих/закрывающих think-тегов
-        # Обрабатывают: <think>, <thinking>, <final>, <final_answer>, <thought> и т.д.
-        import re
-        _OPEN_THINK_RE = re.compile(r'<(?:think(?:ing)?|final(?:_answer)?|thought)[\s>]', re.IGNORECASE)
-        _CLOSE_THINK_RE = re.compile(r'</(?:think(?:ing)?|final(?:_answer)?|thought)\s*>', re.IGNORECASE)
-        # Максимальная длина открывающего тега (для буферизации неполных тегов)
-        _MAX_OPEN_TAG_LEN = 16  # len("<final_answer>") с запасом
+        final_reply = ""
         
         for attempt in range(MAX_RETRIES):
+            attempt_reply = ""
+            yielded_any = False
             try:
                 headers = {
                     "Authorization": f"Bearer {self.openclaw_token}",
@@ -103,141 +109,65 @@ class GeminiService:
                     "temperature": 0.7
                 }
                 
-                async with httpx.AsyncClient(timeout=90.0) as client:
-                    async with client.stream("POST", f"{self.openclaw_url}/v1/chat/completions", headers=headers, json=payload) as response:
-                        response.raise_for_status()
+                async with self._http_client.stream(
+                    "POST",
+                    f"{self.openclaw_url}/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                ) as response:
+                    response.raise_for_status()
+                    
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+
+                        line_data = line[5:].strip()
+                        if line_data == "[DONE]":
+                            break
                         
-                        # State machine для фильтрации <think>/<thinking> блоков
-                        # из SSE-потока OpenClaw Node.js. OpenClaw agent layer
-                        # добавляет внутренние рассуждения в этих тегах.
-                        # Состояния: "normal" | "inside_think"
-                        state = "normal"
-                        tag_buffer = ""  # буфер для неполных тегов
-                        
-                        async for line in response.aiter_lines():
-                            if line.startswith("data:"):
-                                line_data = line[5:].strip()
-                                if line_data == "[DONE]":
-                                    break
-                                    
-                                try:
-                                    chunk = json.loads(line_data)
-                                    if "choices" in chunk and len(chunk["choices"]) > 0:
-                                        delta = chunk["choices"][0].get("delta", {})
-                                        
-                                        # Пропускаем reasoning_content (OpenAI-совместимый формат)
-                                        # Берём ТОЛЬКО content — финальный ответ
-                                        if delta.get("reasoning_content"):
-                                            continue
-                                        
-                                        text = delta.get("content", "")
-                                        if not text:
-                                            continue
-                                        
-                                        # --- Буферизованный парсинг <think>/<thinking> блоков ---
-                                        clean_parts = []
-                                        buf = tag_buffer + text
-                                        tag_buffer = ""
-                                        i = 0
-                                        
-                                        while i < len(buf):
-                                            if state == "normal":
-                                                lt = buf.find("<", i)
-                                                if lt == -1:
-                                                    clean_parts.append(buf[i:])
-                                                    i = len(buf)
-                                                else:
-                                                    clean_parts.append(buf[i:lt])
-                                                    rest = buf[lt:]
-                                                    
-                                                    # Проверяем полный открывающий тег
-                                                    m = _OPEN_THINK_RE.match(rest)
-                                                    if m:
-                                                        # Ищем конец открывающего тега ">"
-                                                        gt_pos = rest.find(">")
-                                                        if gt_pos != -1:
-                                                            state = "inside_think"
-                                                            i = lt + gt_pos + 1
-                                                        else:
-                                                            # Тег не закрыт — буферизуем
-                                                            tag_buffer = rest
-                                                            i = len(buf)
-                                                    elif len(rest) < _MAX_OPEN_TAG_LEN:
-                                                        # Неполный тег на конце буфера
-                                                        # Проверяем: может ли это быть началом тега
-                                                        potential = rest.lower()
-                                                        if (
-                                                            "<think".startswith(potential) or
-                                                            "<thinking".startswith(potential) or
-                                                            "<final".startswith(potential) or
-                                                            "<thought".startswith(potential)
-                                                        ):
-                                                            tag_buffer = rest
-                                                            i = len(buf)
-                                                        else:
-                                                            # Не наш тег, передаём как обычный текст
-                                                            clean_parts.append("<")
-                                                            i = lt + 1
-                                                    else:
-                                                        # Не наш тег, передаём как обычный текст
-                                                        clean_parts.append("<")
-                                                        i = lt + 1
-                                            
-                                            elif state == "inside_think":
-                                                # Ищем закрывающий тег </think>, </final> и т.д.
-                                                m_close = _CLOSE_THINK_RE.search(buf, i)
-                                                if m_close:
-                                                    state = "normal"
-                                                    i = m_close.end()
-                                                else:
-                                                    # Ищем неполный закрывающий тег на конце буфера
-                                                    # Максимальная длина 16
-                                                    for tail_len in range(min(16, len(buf) - i), 0, -1):
-                                                        tail = buf[len(buf) - tail_len:]
-                                                        tail_lower = tail.lower()
-                                                        if (
-                                                            "</think>".startswith(tail_lower) or
-                                                            "</thinking>".startswith(tail_lower) or
-                                                            "</final>".startswith(tail_lower) or
-                                                            "</final_answer>".startswith(tail_lower) or
-                                                            "</thought>".startswith(tail_lower)
-                                                        ):
-                                                            tag_buffer = tail
-                                                            break
-                                                    # Все рассуждения — пропускаем
-                                                    i = len(buf)
-                                        
-                                        clean_text = "".join(clean_parts)
-                                        if clean_text:
-                                            full_reply += clean_text  # Собираем ЧИСТЫЙ текст
-                                            yield clean_text
-                                except json.JSONDecodeError:
-                                    continue
-                        
-                        # Если в буфере остался неполный тег после окончания потока
-                        if tag_buffer and state == "normal":
-                            # НЕ yield-им буфер если он похож на начало think-тега
-                            tb_lower = tag_buffer.lower()
-                            if "<think" not in tb_lower and "<final" not in tb_lower and "<thought" not in tb_lower:
-                                full_reply += tag_buffer
-                                yield tag_buffer
-                            else:
-                                logger.warning(f"Dropped trailing think-like tag buffer: {tag_buffer!r}")
-                                    
-                if full_reply:
+                        try:
+                            chunk = json.loads(line_data)
+                        except json.JSONDecodeError:
+                            continue
+
+                        text = self._extract_openclaw_text(chunk)
+                        if not text:
+                            continue
+
+                        # Вырезаем reasoning-теги из чанка, сохраняя полезный текст.
+                        # Gemini Flash Lite отправляет "<think" как первый токен —
+                        # раньше весь чанк дропался, теряя начало ответа.
+                        cleaned = _OPENCLAW_INLINE_TAG_RE.sub('', text)
+                        if not cleaned or not cleaned.strip():
+                            logger.debug("Filtered OpenClaw tag from chunk: %r → empty", text)
+                            continue
+
+                        attempt_reply += cleaned
+                        yielded_any = True
+                        yield cleaned
+
+                if attempt_reply.strip():
+                    final_reply = attempt_reply
                     break
                     
             except Exception as e:
                 logger.error(f"Error communicating with OpenClaw Engine: {e}")
+                if yielded_any:
+                    # Уже отправили куски пользователю, повторная попытка только создаст дубли.
+                    raise
                 if attempt < MAX_RETRIES - 1:
                     await asyncio.sleep(2)
                 else:
                     raise e
+        
+        if not final_reply.strip():
+            final_reply = attempt_reply
                     
-        # Update our simple linear memory — теперь full_reply содержит ТОЛЬКО чистый текст
-        if full_reply:
+        # Update our simple linear memory — сохраняем только очищенный текст для истории
+        clean_reply = sanitize_ai_text_plain(final_reply, ensure_emojis=True).strip()
+        if clean_reply:
             self._add_to_history(user_id, "user", content)
-            self._add_to_history(user_id, "assistant", full_reply)
+            self._add_to_history(user_id, "assistant", clean_reply)
             
             # Log metrics
             llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
@@ -254,13 +184,69 @@ class GeminiService:
                      user_id, 
                      self.user_histories.get(user_id, [])
                  ))
+        else:
+            logger.warning(
+                "OpenClaw returned empty user-facing reply after sanitization "
+                f"(raw_len={len(final_reply)})"
+            )
+            llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
+            log_llm_metrics(
+                user_id=user_id,
+                model="openclaw-engine",
+                duration_ms=llm_duration_ms,
+                success=False
+            )
 
-    async def ask(self, user_id: int, content: str, external_history: Optional[str] = None) -> Optional[str]:
-        """Отправляет запрос и возвращает итоговую строку."""
-        full_reply_parts = []
-        async for part in self.ask_stream(user_id, content, external_history):
-            full_reply_parts.append(part)
-        return "".join(full_reply_parts) if full_reply_parts else None
+    async def ask(
+        self,
+        user_id: int,
+        content: str,
+        external_history: Optional[str] = None,
+        system_context: Optional[str] = None,
+    ) -> Optional[str]:
+        """Отправляет запрос без стрима и возвращает итоговую строку."""
+        messages = self._build_messages(
+            user_id=user_id,
+            content=content,
+            external_history=external_history,
+            system_context=system_context,
+        )
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.openclaw_token}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": "openclaw",
+                "messages": messages,
+                "stream": False,
+                "temperature": 0.7,
+            }
+
+            response = await self._http_client.post(
+                f"{self.openclaw_url}/v1/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            raw_reply = self._extract_openclaw_text(data)
+            clean_reply = sanitize_ai_text_plain(raw_reply, ensure_emojis=True).strip()
+
+            if clean_reply:
+                self._add_to_history(user_id, "user", content)
+                self._add_to_history(user_id, "assistant", clean_reply)
+                return clean_reply
+
+            logger.warning(
+                "OpenClaw non-stream reply was empty after sanitization "
+                f"(raw_len={len(raw_reply)})"
+            )
+            return None
+        except Exception as e:
+            logger.error(f"Error communicating with OpenClaw Engine (non-stream): {e}")
+            return None
 
     # --- History Management ---
 
@@ -268,6 +254,123 @@ class GeminiService:
         if user_id not in self.user_histories:
             self.user_histories[user_id] = []
         return self.user_histories[user_id]
+
+    def _build_messages(
+        self,
+        user_id: int,
+        content: str,
+        external_history: Optional[str] = None,
+        system_context: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
+        history = self._get_or_create_history(user_id)
+
+        # We prepend the dynamic system prompt to every chat request for OpenClaw to process natively
+        prompt = self.system_prompt or "You are a helpful assistant."
+
+        messages = [{"role": "system", "content": prompt}]
+        if system_context and system_context.strip():
+            messages.append({"role": "system", "content": system_context.strip()})
+
+        if external_history and external_history.strip():
+            # Находим безопасную границу обрезки (разрыв строки или точка)
+            history_text = external_history.strip()
+            if len(history_text) > 3000:
+                cut_index = history_text.find('\n', len(history_text) - 3000)
+                if cut_index == -1:
+                    cut_index = history_text.find('. ', len(history_text) - 3000)
+                if cut_index != -1:
+                    clean_history = history_text[cut_index:].strip()
+                else:
+                    clean_history = history_text[-3000:]
+            else:
+                clean_history = history_text
+            messages.append({
+                "role": "system",
+                "content": f"Краткая история диалога из CRM (справочно, не цитировать дословно):\n{clean_history}",
+            })
+
+        messages.extend(history.copy())
+        messages.append({"role": "user", "content": content})
+        return messages
+
+    def _normalize_text_value(self, value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            parts: List[str] = []
+            for item in value:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                if isinstance(item, dict):
+                    for key in ("text", "content", "value"):
+                        piece = item.get(key)
+                        if isinstance(piece, str) and piece:
+                            parts.append(piece)
+                            break
+            return "".join(parts)
+        if isinstance(value, dict):
+            for key in ("text", "content", "value"):
+                piece = value.get(key)
+                if isinstance(piece, str) and piece:
+                    return piece
+        return str(value)
+
+    def _extract_openclaw_text(self, payload: Any) -> str:
+        if not isinstance(payload, dict):
+            return ""
+
+        candidates: List[str] = []
+
+        choices = payload.get("choices")
+        if isinstance(choices, list) and choices:
+            choice = choices[0] if isinstance(choices[0], dict) else {}
+
+            delta = choice.get("delta")
+            if isinstance(delta, dict):
+                for key in ("content", "text", "response", "output"):
+                    piece = self._normalize_text_value(delta.get(key))
+                    if piece:
+                        candidates.append(piece)
+
+            message = choice.get("message")
+            if isinstance(message, dict):
+                for key in ("content", "text", "response", "output"):
+                    piece = self._normalize_text_value(message.get(key))
+                    if piece:
+                        candidates.append(piece)
+
+            for key in ("content", "text", "response", "output"):
+                piece = self._normalize_text_value(choice.get(key))
+                if piece:
+                    candidates.append(piece)
+
+        for key in ("content", "text", "response", "output", "message"):
+            piece = self._normalize_text_value(payload.get(key))
+            if piece:
+                candidates.append(piece)
+
+        text = "".join(candidates).strip()
+        if not text and logger.isEnabledFor(logging.DEBUG):
+            payload_keys = list(payload.keys())[:20]
+            logger.debug(f"OpenClaw chunk without text. payload_keys={payload_keys}")
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                choice0 = choices[0]
+                logger.debug(f"OpenClaw choice keys={list(choice0.keys())[:20]}")
+                delta = choice0.get("delta")
+                if isinstance(delta, dict):
+                    logger.debug(f"OpenClaw delta keys={list(delta.keys())[:20]}")
+                message = choice0.get("message")
+                if isinstance(message, dict):
+                    logger.debug(f"OpenClaw message keys={list(message.keys())[:20]}")
+        return text
+
+    def _is_openclaw_tag_fragment(self, text: str) -> bool:
+        if not text:
+            return False
+        return bool(_OPENCLAW_TAG_FRAGMENT_RE.match(text))
 
     def _add_to_history(self, user_id: int, role: str, content: str) -> None:
         history = self._get_or_create_history(user_id)
@@ -281,6 +384,11 @@ class GeminiService:
         if user_id in self.user_histories:
             del self.user_histories[user_id]
             logger.info(f"Cleared chat history for user {user_id}")
+
+    async def close(self) -> None:
+        """Закрывает сетевые ресурсы сервиса."""
+        if self._http_client and not self._http_client.is_closed:
+            await self._http_client.aclose()
             
     # --- Admin Dashboard Compatibility ---
     
