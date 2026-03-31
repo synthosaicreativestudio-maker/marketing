@@ -134,18 +134,12 @@ class GeminiService:
                         if not text:
                             continue
 
-                        # ДИАГНОСТИКА: логируем первый чанк и чанки с тегами
-                        if not yielded_any:
-                            logger.info("SSE first chunk [user=%s]: %r", user_id, text[:200])
-                        if '<' in text:
-                            logger.info("SSE chunk with '<' [user=%s]: %r", user_id, text[:300])
-
                         # Вырезаем reasoning-теги из чанка, сохраняя полезный текст.
                         # Gemini Flash Lite отправляет "<think" как первый токен —
                         # раньше весь чанк дропался, теряя начало ответа.
                         cleaned = _OPENCLAW_INLINE_TAG_RE.sub('', text)
                         if not cleaned or not cleaned.strip():
-                            logger.info("Filtered tag chunk [user=%s]: raw=%r → empty", user_id, text[:200])
+                            logger.debug("Filtered OpenClaw tag from chunk: %r → empty", text)
                             continue
 
                         attempt_reply += cleaned
