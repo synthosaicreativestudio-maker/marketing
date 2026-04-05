@@ -2,8 +2,6 @@ import os
 import asyncio
 import time
 import logging
-import json
-import httpx
 from typing import Dict, List, Optional, AsyncGenerator
 
 from sheets_gateway import AsyncGoogleSheetsGateway
@@ -13,54 +11,103 @@ from memory_archiver import MemoryArchiver
 
 logger = logging.getLogger(__name__)
 
+# Google GenAI SDK — ленивый импорт (установится через requirements.txt)
+_genai = None
+def _get_genai():
+    global _genai
+    if _genai is None:
+        import google.genai as genai
+        _genai = genai
+    return _genai
+
+
 class GeminiService:
-    """Service to interact with the OpenClaw AI Engine (acting as the Core Brain)."""
+    """Service to interact with Gemini API directly (no OpenClaw dependency)."""
     
     def __init__(self, promotions_gateway: Optional[AsyncGoogleSheetsGateway] = None) -> None:
         self.promotions_gateway = promotions_gateway
         self.user_histories: Dict[int, List[Dict[str, str]]] = {}
-        self.openclaw_url = os.getenv("OPENCLAW_URL", "http://127.0.0.1:18789")
-        self.openclaw_token = os.getenv("OPENCLAW_TOKEN", "default-token")
+        self.system_prompt_path = os.getenv("SYSTEM_PROMPT_FILE", "system_prompt.txt")
+        self.system_prompt_cache_path = os.getenv(
+            "SYSTEM_PROMPT_CACHE_FILE",
+            os.path.join("logs", "system_prompt_cache.txt"),
+        )
+        self.system_prompt_refresh_hours = int(
+            os.getenv("SYSTEM_PROMPT_REFRESH_HOURS", "168") or 168
+        )
         
-        # Tools (removed from Google SDK format, let OpenClaw handle its own native tools)
-        self.tools = []
+        # Gemini API конфигурация
+        self.api_key = os.getenv("GEMINI_API_KEY", os.getenv("PROXYAPI_KEY", ""))
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite")
+        self.proxy_base_url = os.getenv("PROXYAPI_BASE_URL", "")  # US proxy для обхода блокировок
+        
+        self.client = None
+        self._init_client()
         
         self.drive_service = DriveService()
-        
         self.memory_archiver = MemoryArchiver(self.drive_service)
         
         self.system_prompt = ""
-        # Load local fallback immediately
-        try:
-            with open("system_prompt.txt", "r", encoding="utf-8") as f:
-                 self.system_prompt = f.read()
-        except Exception:
-             pass
+        self.system_prompt = self._load_prompt_from_disk()
         
-        logger.info(f"AI Service routing traffic directly to OpenClaw Node.js: {self.openclaw_url}")
+        logger.info(
+            f"GeminiService initialized: model={self.model_name}, "
+            f"direct_api={bool(self.api_key)}, proxy={self.proxy_base_url or 'none'}"
+        )
+
+    def is_enabled(self) -> bool:
+        return self.client is not None
+
+    def _init_client(self):
+        """Инициализирует Gemini клиент."""
+        if not self.api_key:
+            logger.warning("GEMINI_API_KEY не найден — AI сервис будет недоступен")
+            return
+            
+        try:
+            genai = _get_genai()
+            from google.genai import types
+            
+            http_options = None
+            if self.proxy_base_url:
+                proxy_url = self.proxy_base_url.rstrip("/")
+                # socks5/socks5h: используем как исходящий proxy transport.
+                if proxy_url.startswith(("socks5://", "socks5h://")):
+                    http_options = types.HttpOptions(
+                        client_args={"proxy": proxy_url},
+                        async_client_args={"proxy": proxy_url},
+                    )
+                else:
+                    # http/https URL без socks трактуем как reverse-proxy endpoint
+                    # для Gemini API (см. docs/GEMINI_PROXY_AMERICAN_SERVER.md).
+                    http_options = types.HttpOptions(base_url=proxy_url)
+
+            self.client = genai.Client(
+                api_key=self.api_key,
+                http_options=http_options,
+            )
+                
+        except Exception as e:
+            logger.error(f"Ошибка инициализации Gemini клиента: {e}")
+            self.client = None
         
     async def initialize(self):
         """Initializes the service and downloads the dynamic system prompt."""
-        await self.refresh_system_prompt(force=True)
+        await self.refresh_system_prompt(force=False)
         
     async def wait_for_ready(self):
-        """Immediately ready in this architecture."""
-        return True
+        """Проверяет доступность клиента."""
+        return self.client is not None
 
-    async def ask_stream(self, user_id: int, content: str, external_history: Optional[str] = None) -> AsyncGenerator[str, None]:
-        """Main entrypoint for chat generation via OpenClaw."""
-        llm_start_time = time.perf_counter()
+    def _build_gemini_contents(self, user_id: int, content: str, external_history: Optional[str]) -> list:
+        """Формирует список contents для Gemini API из истории."""
+        from google.genai import types
         
         history = self._get_or_create_history(user_id)
+        contents = []
         
-        # We prepend the dynamic system prompt to every chat request for OpenClaw to process natively
-        prompt = self.system_prompt or "You are a helpful assistant."
-        
-        messages = [{"role": "system", "content": prompt}]
-        messages.extend(history.copy())
-        
+        # Добавляем внешнюю историю из CRM (если есть)
         if external_history and external_history.strip():
-            # Находим безопасную границу обрезки (разрыв строки или точка)
             history_text = external_history.strip()
             if len(history_text) > 3000:
                 cut_index = history_text.find('\n', len(history_text) - 3000)
@@ -73,194 +120,217 @@ class GeminiService:
             else:
                 clean_history = history_text
                 
-            messages.append({"role": "user", "content": f"Краткая история диалога из CRM (справочно):\n{clean_history}"})
-            messages.append({"role": "assistant", "content": "Принято, учел контекст."})
-            
-        messages.append({"role": "user", "content": content})
+            # Краткая история для контекста
+            contents.append(types.Content(
+                role="user",
+                parts=[types.Part(text=f"Краткая история диалога из CRM (справочно):\n{clean_history}")]
+            ))
+            contents.append(types.Content(
+                role="model",
+                parts=[types.Part(text="Принято, учла контекст.")]
+            ))
         
-        MAX_RETRIES = 2
-        full_reply = ""  # Собираем ТОЛЬКО чистый текст (без <think> блоков)
+        # Добавляем историю чата
+        for msg in history:
+            role = msg.get("role", "user")
+            text = msg.get("content", "")
+            if role == "user":
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part(text=text)]
+                ))
+            elif role == "assistant":
+                contents.append(types.Content(
+                    role="model",
+                    parts=[types.Part(text=text)]
+                ))
         
-        # Регулярки для распознавания открывающих/закрывающих think-тегов
-        # Обрабатывают: <think>, <thinking>, <final>, <final_answer>, <thought> и т.д.
-        import re
-        _OPEN_THINK_RE = re.compile(r'<(?:think(?:ing)?|final(?:_answer)?|thought)[\s>]', re.IGNORECASE)
-        _CLOSE_THINK_RE = re.compile(r'</(?:think(?:ing)?|final(?:_answer)?|thought)\s*>', re.IGNORECASE)
-        # Максимальная длина открывающего тега (для буферизации неполных тегов)
-        _MAX_OPEN_TAG_LEN = 16  # len("<final_answer>") с запасом
+        # Текущее сообщение пользователя
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=content)]
+        ))
         
-        for attempt in range(MAX_RETRIES):
-            try:
-                headers = {
-                    "Authorization": f"Bearer {self.openclaw_token}",
-                    "Content-Type": "application/json"
-                }
-                
-                payload = {
-                    "model": "openclaw",
-                    "messages": messages,
-                    "stream": True,
-                    "temperature": 0.7
-                }
-                
-                async with httpx.AsyncClient(timeout=90.0) as client:
-                    async with client.stream("POST", f"{self.openclaw_url}/v1/chat/completions", headers=headers, json=payload) as response:
-                        response.raise_for_status()
-                        
-                        # State machine для фильтрации <think>/<thinking> блоков
-                        # из SSE-потока OpenClaw Node.js. OpenClaw agent layer
-                        # добавляет внутренние рассуждения в этих тегах.
-                        # Состояния: "normal" | "inside_think"
-                        state = "normal"
-                        tag_buffer = ""  # буфер для неполных тегов
-                        
-                        async for line in response.aiter_lines():
-                            if line.startswith("data:"):
-                                line_data = line[5:].strip()
-                                if line_data == "[DONE]":
-                                    break
-                                    
-                                try:
-                                    chunk = json.loads(line_data)
-                                    if "choices" in chunk and len(chunk["choices"]) > 0:
-                                        delta = chunk["choices"][0].get("delta", {})
-                                        
-                                        # Пропускаем reasoning_content (OpenAI-совместимый формат)
-                                        # Берём ТОЛЬКО content — финальный ответ
-                                        if delta.get("reasoning_content"):
-                                            continue
-                                        
-                                        text = delta.get("content", "")
-                                        if not text:
-                                            continue
-                                        
-                                        # --- Буферизованный парсинг <think>/<thinking> блоков ---
-                                        clean_parts = []
-                                        buf = tag_buffer + text
-                                        tag_buffer = ""
-                                        i = 0
-                                        
-                                        while i < len(buf):
-                                            if state == "normal":
-                                                lt = buf.find("<", i)
-                                                if lt == -1:
-                                                    clean_parts.append(buf[i:])
-                                                    i = len(buf)
-                                                else:
-                                                    clean_parts.append(buf[i:lt])
-                                                    rest = buf[lt:]
-                                                    
-                                                    # Проверяем полный открывающий тег
-                                                    m = _OPEN_THINK_RE.match(rest)
-                                                    if m:
-                                                        # Ищем конец открывающего тега ">"
-                                                        gt_pos = rest.find(">")
-                                                        if gt_pos != -1:
-                                                            state = "inside_think"
-                                                            i = lt + gt_pos + 1
-                                                        else:
-                                                            # Тег не закрыт — буферизуем
-                                                            tag_buffer = rest
-                                                            i = len(buf)
-                                                    elif len(rest) < _MAX_OPEN_TAG_LEN:
-                                                        # Неполный тег на конце буфера
-                                                        # Проверяем: может ли это быть началом тега
-                                                        potential = rest.lower()
-                                                        if (
-                                                            "<think".startswith(potential) or
-                                                            "<thinking".startswith(potential) or
-                                                            "<final".startswith(potential) or
-                                                            "<thought".startswith(potential)
-                                                        ):
-                                                            tag_buffer = rest
-                                                            i = len(buf)
-                                                        else:
-                                                            # Не наш тег, передаём как обычный текст
-                                                            clean_parts.append("<")
-                                                            i = lt + 1
-                                                    else:
-                                                        # Не наш тег, передаём как обычный текст
-                                                        clean_parts.append("<")
-                                                        i = lt + 1
-                                            
-                                            elif state == "inside_think":
-                                                # Ищем закрывающий тег </think>, </final> и т.д.
-                                                m_close = _CLOSE_THINK_RE.search(buf, i)
-                                                if m_close:
-                                                    state = "normal"
-                                                    i = m_close.end()
-                                                else:
-                                                    # Ищем неполный закрывающий тег на конце буфера
-                                                    # Максимальная длина 16
-                                                    for tail_len in range(min(16, len(buf) - i), 0, -1):
-                                                        tail = buf[len(buf) - tail_len:]
-                                                        tail_lower = tail.lower()
-                                                        if (
-                                                            "</think>".startswith(tail_lower) or
-                                                            "</thinking>".startswith(tail_lower) or
-                                                            "</final>".startswith(tail_lower) or
-                                                            "</final_answer>".startswith(tail_lower) or
-                                                            "</thought>".startswith(tail_lower)
-                                                        ):
-                                                            tag_buffer = tail
-                                                            break
-                                                    # Все рассуждения — пропускаем
-                                                    i = len(buf)
-                                        
-                                        clean_text = "".join(clean_parts)
-                                        if clean_text:
-                                            full_reply += clean_text  # Собираем ЧИСТЫЙ текст
-                                            yield clean_text
-                                except json.JSONDecodeError:
-                                    continue
-                        
-                        # Если в буфере остался неполный тег после окончания потока
-                        if tag_buffer and state == "normal":
-                            # НЕ yield-им буфер если он похож на начало think-тега
-                            tb_lower = tag_buffer.lower()
-                            if "<think" not in tb_lower and "<final" not in tb_lower and "<thought" not in tb_lower:
-                                full_reply += tag_buffer
-                                yield tag_buffer
-                            else:
-                                logger.warning(f"Dropped trailing think-like tag buffer: {tag_buffer!r}")
-                                    
-                if full_reply:
-                    break
-                    
-            except Exception as e:
-                logger.error(f"Error communicating with OpenClaw Engine: {e}")
-                if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(2)
-                else:
-                    raise e
-                    
-        # Update our simple linear memory — теперь full_reply содержит ТОЛЬКО чистый текст
-        if full_reply:
-            self._add_to_history(user_id, "user", content)
-            self._add_to_history(user_id, "assistant", full_reply)
-            
-            # Log metrics
-            llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
-            log_llm_metrics(
-                user_id=user_id,
-                model="openclaw-engine",
-                duration_ms=llm_duration_ms,
-                success=True
-            )
-            
-            # Archive asynchronously
-            if self.memory_archiver:
-                 asyncio.create_task(self.memory_archiver.archive_user_history(
-                     user_id, 
-                     self.user_histories.get(user_id, [])
-                 ))
+        return contents
 
-    async def ask(self, user_id: int, content: str, external_history: Optional[str] = None) -> Optional[str]:
-        """Отправляет запрос и возвращает итоговую строку."""
-        full_reply_parts = []
-        async for part in self.ask_stream(user_id, content, external_history):
-            full_reply_parts.append(part)
-        return "".join(full_reply_parts) if full_reply_parts else None
+    # ------------------------------------------------------------------
+    # Retry helpers (transient WARP/proxy failures)
+    # ------------------------------------------------------------------
+    _MAX_RETRIES = 3
+    _RETRY_DELAYS = (3, 6, 12)  # seconds between attempts
+
+    @staticmethod
+    def _is_transient(exc: Exception) -> bool:
+        """Return True if the error looks like a transient proxy/network glitch."""
+        msg = str(exc).lower()
+        transient_markers = (
+            "connection",
+            "connect",
+            "timeout",
+            "timed out",
+            "reset by peer",
+            "broken pipe",
+            "eof",
+            "socks",
+            "proxy",
+            "503",
+            "unavailable",
+            "temporarily",
+        )
+        return any(m in msg for m in transient_markers)
+
+    async def ask_stream(self, user_id: int, content: str, external_history: Optional[str] = None, system_context: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Main entrypoint for chat generation via Gemini API with streaming.
+
+        Includes automatic retry (up to 3 attempts) for transient proxy failures
+        so that short WARP tunnel drops don't immediately surface as errors.
+        """
+        llm_start_time = time.perf_counter()
+
+        if not self.client:
+            logger.error("Gemini клиент не инициализирован")
+            yield "__ERROR__ Gemini API недоступен"
+            return
+
+        from google.genai import types
+
+        # Собираем системный промпт
+        full_system = self.system_prompt or "You are a helpful assistant."
+        if system_context:
+            full_system += "\n\n" + system_context
+
+        # Формируем contents из истории
+        contents = self._build_gemini_contents(user_id, content, external_history)
+
+        # Настройки генерации
+        config = types.GenerateContentConfig(
+            temperature=0.7,
+            top_p=0.95,
+            max_output_tokens=2048,
+            system_instruction=full_system,
+        )
+
+        for attempt in range(1, self._MAX_RETRIES + 1):
+            try:
+                # Streaming вызов
+                full_reply = ""
+                stream = await self.client.aio.models.generate_content_stream(
+                    model=self.model_name,
+                    contents=contents,
+                    config=config,
+                )
+                async for chunk in stream:
+                    if chunk.text:
+                        full_reply += chunk.text
+                        yield chunk.text
+
+                # Update history
+                if full_reply:
+                    self._add_to_history(user_id, "user", content)
+                    self._add_to_history(user_id, "assistant", full_reply)
+
+                    llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
+                    log_llm_metrics(
+                        user_id=user_id,
+                        model=self.model_name,
+                        duration_ms=llm_duration_ms,
+                        success=True,
+                    )
+
+                    if self.memory_archiver:
+                        asyncio.create_task(
+                            self.memory_archiver.archive_user_history(
+                                user_id,
+                                self.user_histories.get(user_id, []),
+                            )
+                        )
+                else:
+                    llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
+                    log_llm_metrics(
+                        user_id=user_id,
+                        model=self.model_name,
+                        duration_ms=llm_duration_ms,
+                        success=False,
+                    )
+                return  # success — exit retry loop
+
+            except Exception as e:
+                if attempt < self._MAX_RETRIES and self._is_transient(e):
+                    delay = self._RETRY_DELAYS[attempt - 1]
+                    logger.warning(
+                        "Gemini stream attempt %d/%d failed (transient): %s. "
+                        "Retrying in %ds…",
+                        attempt,
+                        self._MAX_RETRIES,
+                        e,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                # Non-transient or last attempt — propagate
+                logger.error("Ошибка Gemini API stream: %s", e)
+                llm_duration_ms = (time.perf_counter() - llm_start_time) * 1000
+                log_llm_metrics(
+                    user_id=user_id,
+                    model=self.model_name,
+                    duration_ms=llm_duration_ms,
+                    success=False,
+                )
+                raise
+
+    async def ask(self, user_id: int, content: str, external_history: Optional[str] = None, system_context: Optional[str] = None) -> Optional[str]:
+        """Отправляет запрос (не-streaming) с retry для WARP."""
+        if not self.client:
+            logger.error("Gemini клиент не инициализирован")
+            return None
+
+        from google.genai import types
+
+        full_system = self.system_prompt or "You are a helpful assistant."
+        if system_context:
+            full_system += "\n\n" + system_context
+
+        contents = self._build_gemini_contents(user_id, content, external_history)
+
+        config = types.GenerateContentConfig(
+            temperature=0.7,
+            top_p=0.95,
+            max_output_tokens=2048,
+            system_instruction=full_system,
+        )
+
+        for attempt in range(1, self._MAX_RETRIES + 1):
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model=self.model_name,
+                    contents=contents,
+                    config=config,
+                )
+
+                full_reply = response.text if response.text else ""
+
+                if full_reply:
+                    self._add_to_history(user_id, "user", content)
+                    self._add_to_history(user_id, "assistant", full_reply)
+
+                return full_reply if full_reply else None
+
+            except Exception as e:
+                if attempt < self._MAX_RETRIES and self._is_transient(e):
+                    delay = self._RETRY_DELAYS[attempt - 1]
+                    logger.warning(
+                        "Gemini ask attempt %d/%d failed (transient): %s. "
+                        "Retrying in %ds…",
+                        attempt,
+                        self._MAX_RETRIES,
+                        e,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.error("Ошибка Gemini API (non-stream): %s", e)
+                return None
+        return None
 
     # --- History Management ---
 
@@ -285,16 +355,27 @@ class GeminiService:
     # --- Admin Dashboard Compatibility ---
     
     async def refresh_system_prompt(self, force: bool = False) -> bool:
-        """Downloads the system prompt from Google Docs and applies it for OpenClaw injection."""
-        doc_id = os.getenv("SYSTEM_PROMPT_DOC", "") or os.getenv("SYSTEM_PROMPT_DOC_ID", "")
+        """Downloads the system prompt from Google Docs and applies it."""
+        if not force:
+            cached_prompt = self._load_cached_prompt_if_fresh()
+            if cached_prompt:
+                self.system_prompt = cached_prompt
+                logger.info(
+                    "System prompt loaded from cache (ttl=%sh).",
+                    self.system_prompt_refresh_hours,
+                )
+                return True
+
+        doc_id = (
+            os.getenv("SYSTEM_PROMPT_DOC", "")
+            or os.getenv("SYSTEM_PROMPT_DOC_ID", "")
+            or os.getenv("SYSTEM_PROMPT_GOOGLE_DOC_ID", "")
+        )
         if not doc_id or not self.drive_service:
-            logger.warning("DriveService or SYSTEM_PROMPT_DOC_ID missing, reading local system_prompt.txt")
-            try:
-                with open("system_prompt.txt", "r", encoding="utf-8") as f:
-                    self.system_prompt = f.read()
-            except Exception:
-                if not self.system_prompt:
-                    self.system_prompt = "You are a helpful assistant."
+            logger.warning("DriveService or system prompt doc ID missing, using local prompt cache.")
+            self.system_prompt = self._load_prompt_from_disk(
+                fallback=self.system_prompt or "You are a helpful assistant."
+            )
             return True
             
         try:
@@ -307,9 +388,53 @@ class GeminiService:
             if downloaded:
                 with open(downloaded, "r", encoding="utf-8") as f:
                     self.system_prompt = f.read()
+                self._write_prompt_cache(self.system_prompt)
                 logger.info("System prompt successfully refreshed from Google Docs.")
                 return True
         except Exception as e:
             logger.error(f"Failed to refresh system prompt: {e}")
-            
+
+        fallback_prompt = self._load_prompt_from_disk(fallback=self.system_prompt)
+        if fallback_prompt:
+            self.system_prompt = fallback_prompt
+            logger.warning("Using cached/local system prompt after refresh failure.")
+            return True
+
         return False
+
+    async def close(self) -> None:
+        """Закрывает HTTP-клиент."""
+        if self.client and hasattr(self.client, '_session') and self.client._session:
+            await self.client._session.close()
+
+    def _load_prompt_from_disk(self, fallback: str = "") -> str:
+        for path in (self.system_prompt_cache_path, self.system_prompt_path):
+            try:
+                with open(path, "r", encoding="utf-8") as file_obj:
+                    return file_obj.read()
+            except Exception:
+                continue
+        return fallback
+
+    def _load_cached_prompt_if_fresh(self) -> Optional[str]:
+        try:
+            if not os.path.exists(self.system_prompt_cache_path):
+                return None
+            age_seconds = time.time() - os.path.getmtime(self.system_prompt_cache_path)
+            if age_seconds > self.system_prompt_refresh_hours * 3600:
+                return None
+            with open(self.system_prompt_cache_path, "r", encoding="utf-8") as file_obj:
+                return file_obj.read()
+        except Exception as exc:
+            logger.debug("Failed to read prompt cache: %s", exc, exc_info=True)
+            return None
+
+    def _write_prompt_cache(self, content: str) -> None:
+        try:
+            cache_dir = os.path.dirname(self.system_prompt_cache_path)
+            if cache_dir:
+                os.makedirs(cache_dir, exist_ok=True)
+            with open(self.system_prompt_cache_path, "w", encoding="utf-8") as file_obj:
+                file_obj.write(content)
+        except Exception as exc:
+            logger.error("Failed to write prompt cache: %s", exc)
