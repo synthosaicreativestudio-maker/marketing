@@ -3,7 +3,6 @@ import os
 from typing import AsyncGenerator, Optional
 
 from gemini_service import GeminiService
-from openclaw_legacy_service import OpenClawLegacyService
 from sheets_gateway import AsyncGoogleSheetsGateway
 
 logger = logging.getLogger(__name__)
@@ -15,6 +14,7 @@ class AIService:
     def __init__(self, promotions_gateway: Optional[AsyncGoogleSheetsGateway] = None) -> None:
         raw_backend = os.getenv("AI_BACKEND", "direct_gemini").strip().lower()
         if raw_backend in {"openclaw", "openclaw_legacy", "legacy_openclaw"}:
+            from openclaw_legacy_service import OpenClawLegacyService
             self.backend_name = "openclaw_legacy"
             self.provider_name = "OpenClaw-Legacy"
             self.service = OpenClawLegacyService(promotions_gateway=promotions_gateway)
