@@ -355,7 +355,11 @@ class GeminiService:
     # --- Admin Dashboard Compatibility ---
     
     async def refresh_system_prompt(self, force: bool = False) -> bool:
-        """Downloads the system prompt from Google Docs and applies it."""
+        """Downloads system prompt from Google Docs via public HTTP export.
+
+        Uses the public export URL (no Service Account required) which avoids
+        the Drive API HTTP-500 / storageQuotaExceeded errors.
+        """
         if not force:
             cached_prompt = self._load_cached_prompt_if_fresh()
             if cached_prompt:
@@ -366,7 +370,6 @@ class GeminiService:
                 )
                 return True
 
-        # Fallback ID: https://docs.google.com/document/d/1FdNz5lmS-1AWADsF6UjLGatjH705A5yeTzc8rSsRrHc/edit
         _DEFAULT_PROMPT_DOC_ID = "1FdNz5lmS-1AWADsF6UjLGatjH705A5yeTzc8rSsRrHc"
         doc_id = (
             os.getenv("SYSTEM_PROMPT_DOC", "")
@@ -374,36 +377,55 @@ class GeminiService:
             or os.getenv("SYSTEM_PROMPT_GOOGLE_DOC_ID", "")
             or _DEFAULT_PROMPT_DOC_ID
         )
-        if not doc_id or not self.drive_service:
-            logger.warning("DriveService or system prompt doc ID missing, using local prompt cache.")
-            self.system_prompt = self._load_prompt_from_disk(
-                fallback=self.system_prompt or "You are a helpful assistant."
-            )
-            return True
-            
-        try:
-            downloaded = await asyncio.to_thread(
-                self.drive_service.download_file,
-                file_id=doc_id,
-                file_name="system_prompt.txt",
-                mime_type="application/vnd.google-apps.document"
-            )
-            if downloaded:
-                with open(downloaded, "r", encoding="utf-8") as f:
-                    self.system_prompt = f.read()
-                self._write_prompt_cache(self.system_prompt)
-                logger.info("System prompt successfully refreshed from Google Docs.")
-                return True
-        except Exception as e:
-            logger.error(f"Failed to refresh system prompt: {e}")
 
+        if doc_id:
+            downloaded_text = await self._fetch_gdoc_via_http(doc_id)
+            if downloaded_text:
+                self.system_prompt = downloaded_text
+                self._write_prompt_cache(downloaded_text)
+                logger.info("System prompt successfully refreshed via public HTTP export.")
+                return True
+
+        # Fallback: local cache / file on disk
         fallback_prompt = self._load_prompt_from_disk(fallback=self.system_prompt)
         if fallback_prompt:
             self.system_prompt = fallback_prompt
-            logger.warning("Using cached/local system prompt after refresh failure.")
+            logger.warning("Using cached/local system prompt after HTTP refresh failure.")
             return True
 
         return False
+
+    async def _fetch_gdoc_via_http(self, doc_id: str) -> str:
+        """Exports a Google Doc as plain text via the public export URL.
+
+        Does not require a Service Account — the document must be shared
+        with «Anyone with the link can view».
+        """
+        import httpx
+
+        export_url = (
+            f"https://docs.google.com/document/d/{doc_id}/export?format=txt"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                response = await client.get(export_url)
+            if response.status_code == 200:
+                text = response.text.strip()
+                if text:
+                    logger.info(
+                        "Fetched system prompt via HTTP export (%d chars).", len(text)
+                    )
+                    return text
+                logger.warning("HTTP export returned empty body for doc_id=%s", doc_id)
+            else:
+                logger.error(
+                    "HTTP export failed: status=%d for doc_id=%s",
+                    response.status_code,
+                    doc_id,
+                )
+        except Exception as exc:
+            logger.error("HTTP export exception for doc_id=%s: %s", doc_id, exc)
+        return ""
 
     async def close(self) -> None:
         """Закрывает HTTP-клиент."""
