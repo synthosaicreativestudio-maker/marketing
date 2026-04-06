@@ -302,9 +302,10 @@ def _run_bot_main():
         if ai_service and ai_service.is_enabled():
             try:
                 task_tracker.create_tracked_task(ai_service.initialize(), "ai_init")
+                backend = ai_service.get_backend_name() if hasattr(ai_service, 'get_backend_name') else "unknown"
                 logger.info(
                     "AI backend initialization triggered in background (%s)",
-                    ai_service.get_backend_name(),
+                    backend,
                 )
             except Exception as e:
                 logger.error(f"Failed to trigger AI backend initialization: {e}")
