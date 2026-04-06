@@ -366,10 +366,13 @@ class GeminiService:
                 )
                 return True
 
+        # Fallback ID: https://docs.google.com/document/d/1FdNz5lmS-1AWADsF6UjLGatjH705A5yeTzc8rSsRrHc/edit
+        _DEFAULT_PROMPT_DOC_ID = "1FdNz5lmS-1AWADsF6UjLGatjH705A5yeTzc8rSsRrHc"
         doc_id = (
             os.getenv("SYSTEM_PROMPT_DOC", "")
             or os.getenv("SYSTEM_PROMPT_DOC_ID", "")
             or os.getenv("SYSTEM_PROMPT_GOOGLE_DOC_ID", "")
+            or _DEFAULT_PROMPT_DOC_ID
         )
         if not doc_id or not self.drive_service:
             logger.warning("DriveService or system prompt doc ID missing, using local prompt cache.")

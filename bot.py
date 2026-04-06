@@ -165,14 +165,18 @@ def _run_bot_main():
         # Создаем заглушку с пустым gateway
         auth_service = AuthService(gateway=auth_gateway)
 
-    # Инициализация AI сервиса (OpenAI или Gemini)
+    # Инициализация AI сервиса
     try:
-        logger.info("Инициализация AIService с поддержкой инструментов...")
+        logger.info("Инициализация AIService...")
         ai_service = AIService(promotions_gateway=promotions_gateway)
         if not ai_service.is_enabled():
             logger.warning("AIService отключен: ни один провайдер не доступен")
         else:
-            logger.info(f"AIService активен с провайдером: {ai_service.get_provider_name()}")
+            logger.info(
+                "AIService активен: backend=%s, provider=%s",
+                ai_service.get_backend_name(),
+                ai_service.get_provider_name(),
+            )
     except Exception as e:
         logger.error(f"Ошибка инициализации AIService: {e}", exc_info=True)
         ai_service = AIService()  # Создаем с отключенным сервисом
@@ -294,14 +298,46 @@ def _run_bot_main():
             )
             logger.info("Watchdog heartbeat middleware зарегистрирован")
         
-        # Initialize RAG (Knowledge Base)
-        # Launching as a background task to avoid blocking polling start
-        if ai_service.gemini_service and hasattr(ai_service.gemini_service, 'initialize'):
+        # Инициализация активного AI backend в фоне
+        if ai_service and ai_service.is_enabled():
             try:
-                task_tracker.create_tracked_task(ai_service.gemini_service.initialize(), "kb_init")
-                logger.info("Knowledge Base initialization triggered in background")
+                task_tracker.create_tracked_task(ai_service.initialize(), "ai_init")
+                logger.info(
+                    "AI backend initialization triggered in background (%s)",
+                    ai_service.get_backend_name(),
+                )
             except Exception as e:
-                logger.error(f"Failed to trigger Knowledge Base initialization: {e}")
+                logger.error(f"Failed to trigger AI backend initialization: {e}")
+
+            # Периодическое обновление системного промпта из Google Docs
+            prompt_refresh_hours = int(
+                os.getenv("SYSTEM_PROMPT_REFRESH_HOURS", "168") or 168
+            )
+            prompt_refresh_seconds = prompt_refresh_hours * 3600
+
+            async def periodic_prompt_refresh():
+                """Автообновление системного промпта из Google Docs (по умолчанию раз в неделю)."""
+                while True:
+                    await asyncio.sleep(prompt_refresh_seconds)
+                    try:
+                        success = await ai_service.refresh_system_prompt(force=True)
+                        if success:
+                            logger.info(
+                                "✅ Системный промпт автоматически обновлён из Google Docs"
+                            )
+                        else:
+                            logger.warning(
+                                "⚠️ Не удалось автообновить системный промпт"
+                            )
+                    except Exception as e:
+                        logger.error(f"Ошибка автообновления промпта: {e}")
+
+            task_tracker.create_tracked_task(
+                periodic_prompt_refresh(), "prompt_auto_refresh"
+            )
+            logger.info(
+                "Автообновление промпта запущено (каждые %d ч)", prompt_refresh_hours
+            )
         
         # Фоновый heartbeat для Watchdog (чтобы не убивал бота когда нет сообщений)
         if watchdog:
@@ -484,6 +520,14 @@ def _run_bot_main():
                 logger.info("PollingWatchdog остановлен")
             except Exception as e:
                 logger.error(f"Ошибка остановки PollingWatchdog: {e}")
+
+        # Закрытие AI-клиента и других сетевых ресурсов
+        if ai_service:
+            try:
+                await ai_service.close()
+                logger.info("AIService resources closed")
+            except Exception as e:
+                logger.error(f"Ошибка закрытия AIService: {e}")
 
     # Регистрация хуков
     application.post_init = post_init
